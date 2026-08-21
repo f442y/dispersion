@@ -1,0 +1,35 @@
+name: CI Build & Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    name: Java 25 Test Matrix (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25 (Azul Zulu)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'zulu'
+          cache: 'maven'
+
+      - name: Build & Verify with Maven
+        run: ./mvnw clean verify
+        if: runner.os != 'Windows'
+
+      - name: Build & Verify with Maven (Windows)
+        run: .\mvnw.cmd clean verify
+        if: runner.os == 'Windows'

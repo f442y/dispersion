@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>dispersion-bom</artifactId>
+    <packaging>pom</packaging>
+
+    <name>Dispersion :: BOM</name>
+    <description>Dispersion Bill of Materials (BOM) for dependency management</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>
