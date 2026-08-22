@@ -18,6 +18,11 @@ import java.util.function.Supplier;
 
 /**
  * Fluent builder for creating Set/Batch Orchestration state machines with independent streaming and barrier states.
+ *
+ * @param <BATCH_CONTEXT> The batch-level context type
+ * @param <ITEM_CONTEXT>  The item-level context type
+ * @param <STATE_KEY>     The state key enum type
+ * @param <OUTPUT>        The output type
  */
 public class BatchOrchestrationStateMachineBuilder<
         BATCH_CONTEXT extends StateMachineContext,

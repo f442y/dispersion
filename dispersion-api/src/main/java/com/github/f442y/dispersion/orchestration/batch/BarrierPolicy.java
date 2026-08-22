@@ -1,17 +1,17 @@
 package com.github.f442y.dispersion.orchestration.batch;
 
 /**
- * Strategy defining when a barrier synchronization state in a batch orchestration releases arrived items.
+ * Synchronization policy for barrier states in a Set/Batch Orchestration.
  */
 public enum BarrierPolicy {
 
     /**
-     * Barrier releases automatically when all items in the batch arrive at this state.
+     * Barrier is released only after ALL active items in the batch collection have reached the barrier state.
      */
     ALL_ITEMS_ARRIVED,
 
     /**
-     * Barrier holds arrived items until an explicit batch-level signal is delivered.
+     * Barrier is held until an explicit batch-level external signal or command is received.
      */
     SIGNAL_TRIGGERED
 }

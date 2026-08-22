@@ -5,7 +5,7 @@ import org.jspecify.annotations.NonNull;
 /**
  * Marker interface for all state identifier keys within a Finite State Machine.
  * <p>
- * Typically implemented by an {@link Enum} constant representing discrete states.
+ * Typically implemented by an {@link Enum} constant representing discrete states in the graph.
  */
 public interface StateKey {
 

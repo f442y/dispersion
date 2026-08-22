@@ -11,16 +11,14 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Thread-safe in-memory implementation of {@link CheckpointStore} using {@link ConcurrentHashMap}
- * with secondary indexing for correlation keys.
+ * Thread-safe in-memory implementation of {@link CheckpointStore} with secondary correlation index.
  *
  * @param <CONTEXT>   The context type
  * @param <STATE_KEY> The state key enum type
  */
 public class InMemoryCheckpointStore<
         CONTEXT extends StateMachineContext,
-        STATE_KEY extends Enum<STATE_KEY> & StateKey>
-        implements CheckpointStore<CONTEXT, STATE_KEY> {
+        STATE_KEY extends Enum<STATE_KEY> & StateKey> implements CheckpointStore<CONTEXT, STATE_KEY> {
 
     private final Map<UUID, OrchestrationCheckpoint<CONTEXT, STATE_KEY>> store = new ConcurrentHashMap<>();
     private final Map<String, UUID> correlationIndex = new ConcurrentHashMap<>();
@@ -29,7 +27,7 @@ public class InMemoryCheckpointStore<
     public void save(@NonNull OrchestrationCheckpoint<CONTEXT, STATE_KEY> checkpoint) {
         Objects.requireNonNull(checkpoint, "checkpoint must not be null");
         store.put(checkpoint.machineId(), checkpoint);
-        if (checkpoint.correlationKey() != null) {
+        if (checkpoint.correlationKey() != null && !checkpoint.correlationKey().isBlank()) {
             correlationIndex.put(checkpoint.correlationKey(), checkpoint.machineId());
         }
     }
@@ -45,11 +43,11 @@ public class InMemoryCheckpointStore<
     @Override
     public Optional<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> findByCorrelationKey(@NonNull String correlationKey) {
         Objects.requireNonNull(correlationKey, "correlationKey must not be null");
-        UUID id = correlationIndex.get(correlationKey);
-        if (id == null) {
+        UUID machineId = correlationIndex.get(correlationKey);
+        if (machineId == null) {
             return Optional.empty();
         }
-        return Optional.ofNullable(store.get(id));
+        return Optional.ofNullable(store.get(machineId));
     }
 
     @Override
@@ -61,19 +59,11 @@ public class InMemoryCheckpointStore<
         }
     }
 
-    /**
-     * Clears all entries from the store.
-     */
     public void clear() {
         store.clear();
         correlationIndex.clear();
     }
 
-    /**
-     * Returns the current number of checkpoints in the store.
-     *
-     * @return The count of stored checkpoints
-     */
     public int size() {
         return store.size();
     }

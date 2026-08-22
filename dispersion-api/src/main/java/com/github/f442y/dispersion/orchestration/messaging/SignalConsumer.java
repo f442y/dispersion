@@ -1,16 +1,21 @@
 package com.github.f442y.dispersion.orchestration.messaging;
 
-import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import org.jspecify.annotations.NonNull;
 
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Inbound listener contract for receiving {@link SignalMessage} instances from a message broker.
+ * Inbound message consumer SPI for receiving signals from message brokers and routing them into state machines.
  */
 @FunctionalInterface
 public interface SignalConsumer {
 
+    /**
+     * Processes an incoming signal message delivered from a message broker.
+     *
+     * @param message The received signal message
+     * @return CompletableFuture completing when the message processing turn resolves
+     */
     @NonNull
-    CompletableFuture<OrchestrationTurnResult<?, ?, ?>> onMessage(@NonNull SignalMessage message);
+    CompletableFuture<?> onMessage(@NonNull SignalMessage message);
 }

@@ -7,7 +7,7 @@ import org.jspecify.annotations.NonNull;
 import java.util.UUID;
 
 /**
- * Represents an active, uniquely identifiable Finite State Machine instance.
+ * Universal contract representing an active, uniquely identifiable Finite State Machine instance.
  *
  * @param <CONTEXT>   The concrete type of {@link StateMachineContext} managed by the state machine
  * @param <STATE_KEY> The enum type representing state identifiers in the state machine

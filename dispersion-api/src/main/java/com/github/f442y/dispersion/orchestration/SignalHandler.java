@@ -2,25 +2,26 @@ package com.github.f442y.dispersion.orchestration;
 
 import com.github.f442y.dispersion.context.StateMachineContext;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 /**
- * Functional interface responsible for merging an incoming external signal or event payload
- * into the state machine context upon workflow rehydration.
+ * Functional interface responsible for merging an incoming external signal or command payload
+ * into a suspended orchestration context upon wake-up.
  *
- * @param <CONTEXT> The orchestration state machine context type
- * @param <SIGNAL>  The incoming signal payload type
+ * @param <CONTEXT> The context type
+ * @param <SIGNAL>  The signal or command payload type
  */
 @FunctionalInterface
 public interface SignalHandler<CONTEXT extends StateMachineContext, SIGNAL> {
 
     /**
-     * Merges the incoming signal payload into the rehydrated state machine context.
+     * Integrates the delivered signal payload into the state machine context.
      *
-     * @param context The current context of the rehydrated state machine
-     * @param signal  The external signal payload
-     * @return The updated context
-     * @throws Exception If an error occurs while processing the signal
+     * @param context       The suspended state machine context
+     * @param signalPayload The external signal or command payload
+     * @return The updated context ready to resume execution
+     * @throws Exception If signal processing fails
      */
     @NonNull
-    CONTEXT handleSignal(@NonNull CONTEXT context, @NonNull SIGNAL signal) throws Exception;
+    CONTEXT handleSignal(@NonNull CONTEXT context, @Nullable SIGNAL signalPayload) throws Exception;
 }

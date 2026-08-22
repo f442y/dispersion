@@ -4,13 +4,12 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Contract representing an incoming external command or signal intended to advance
- * or instruct a suspended Orchestration State Machine.
+ * Marker and contract interface for external signal commands delivered into an orchestration.
  */
 public interface SignalCommand {
 
     /**
-     * Returns the name identifier of this signal command. Defaults to the class's simple name.
+     * Returns the signal identifier name, defaulting to the simple class name of the command.
      *
      * @return The signal name
      */
@@ -20,9 +19,10 @@ public interface SignalCommand {
     }
 
     /**
-     * Returns the domain correlation key (e.g. orderId, accountId) used to locate the target workflow instance.
+     * Optional domain correlation key (e.g. orderId, transactionId) used to route this command
+     * to the matching suspended orchestration instance.
      *
-     * @return The correlation key, or {@code null} if targeted by machine UUID directly
+     * @return The correlation key, or {@code null} if addressed by machine ID
      */
     @Nullable
     default String correlationKey() {

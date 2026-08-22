@@ -4,69 +4,30 @@ import com.github.f442y.dispersion.context.StateMachineContext;
 import org.jspecify.annotations.NonNull;
 
 /**
- * Reversible Command encapsulating a forward business operation ({@link #execute(StateMachineContext)})
- * paired with an undo compensation ({@link #undo(StateMachineContext)}) for automated Saga rollbacks.
+ * Reversible command combining both forward business execution ({@link #execute(StateMachineContext)})
+ * and compensating rollback logic ({@link #compensate(StateMachineContext)}) within a single self-contained unit.
  *
- * @param <CONTEXT> The concrete type of {@link StateMachineContext} managed by the state machine
+ * @param <CONTEXT> The context type
  */
-@FunctionalInterface
 public interface SagaCommand<CONTEXT extends StateMachineContext> {
 
     /**
-     * Executes the forward business logic, mutating and returning the updated context.
+     * Executes the forward business logic of this command.
      *
      * @param context The current state machine context
      * @return The updated context
-     * @throws Exception If business or integration execution fails
+     * @throws Exception If execution fails
      */
     @NonNull
     CONTEXT execute(@NonNull CONTEXT context) throws Exception;
 
     /**
-     * Reverses or compensates the effects of {@link #execute(StateMachineContext)} upon downstream failure.
-     * Default implementation performs no compensation action (no-op).
+     * Executes compensating rollback logic to undo the forward execution of this command.
      *
-     * @param context The context at the point of compensation
+     * @param context The current state machine context
      * @return The compensated context
+     * @throws Exception If compensation fails
      */
     @NonNull
-    default CONTEXT undo(@NonNull CONTEXT context) {
-        return context;
-    }
-
-    /**
-     * Factory method creating a {@link SagaCommand} from explicit action and undo lambdas.
-     *
-     * @param <C>        The context type
-     * @param forwardFn  Forward execution function
-     * @param rollbackFn Undo compensation function
-     * @return A new {@link SagaCommand} instance
-     */
-    @NonNull
-    static <C extends StateMachineContext> SagaCommand<C> of(
-            @NonNull ActionFunction<C> forwardFn,
-            @NonNull RollbackFunction<C> rollbackFn
-    ) {
-        return new SagaCommand<>() {
-            @Override
-            public @NonNull C execute(@NonNull C context) throws Exception {
-                return forwardFn.execute(context);
-            }
-
-            @Override
-            public @NonNull C undo(@NonNull C context) {
-                return rollbackFn.undo(context);
-            }
-        };
-    }
-
-    @FunctionalInterface
-    interface ActionFunction<C extends StateMachineContext> {
-        @NonNull C execute(@NonNull C context) throws Exception;
-    }
-
-    @FunctionalInterface
-    interface RollbackFunction<C extends StateMachineContext> {
-        @NonNull C undo(@NonNull C context);
-    }
+    CONTEXT compensate(@NonNull CONTEXT context) throws Exception;
 }

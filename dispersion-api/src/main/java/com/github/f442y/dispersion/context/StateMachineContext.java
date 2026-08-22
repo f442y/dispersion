@@ -1,10 +1,11 @@
 package com.github.f442y.dispersion.context;
 
 /**
- * Marker interface representing a thread-confined contextual data model passed through states
- * during the execution lifecycle of a state machine.
- *
- * @author Faizaan Ahmed
- * @see StateMachineContextFactory
+ * Marker interface for state machine execution contexts.
+ * <p>
+ * State machine contexts hold domain data, variables, and accumulated state during execution.
+ * Because state machines are thread-confined on dedicated virtual threads, context implementations
+ * do not require internal synchronization.
  */
-public interface StateMachineContext {}
+public interface StateMachineContext {
+}

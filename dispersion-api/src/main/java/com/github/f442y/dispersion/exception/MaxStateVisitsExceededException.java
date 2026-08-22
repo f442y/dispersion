@@ -1,47 +1,26 @@
 package com.github.f442y.dispersion.exception;
 
-import com.github.f442y.dispersion.state.StateKey;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Objects;
-
 /**
- * Exception thrown when a specific state within a state machine execution is entered more times
- * than allowed by its configured maximum visit threshold and no fallback state is configured.
+ * Thrown when a state exceeds its configured maximum visit count without a fallback destination state.
  */
 public final class MaxStateVisitsExceededException extends StateMachineException {
 
-    @NonNull
-    private final StateKey stateKey;
+    private final String stateName;
     private final int maxVisits;
 
-    public MaxStateVisitsExceededException(
-            @NonNull StateKey stateKey,
-            int maxVisits
-    ) {
-        super(String.format(
-                "State '%s' exceeded its maximum visit threshold of %d",
-                Objects.requireNonNull(stateKey, "stateKey must not be null").name(), maxVisits
-        ));
-        this.stateKey = stateKey;
+    public MaxStateVisitsExceededException(@NonNull String stateName, int maxVisits) {
+        super("State [" + stateName + "] exceeded maximum permitted visit count of " + maxVisits + " without a fallback state");
+        this.stateName = stateName;
         this.maxVisits = maxVisits;
     }
 
-    /**
-     * Returns the state identifier that exceeded its visit threshold.
-     *
-     * @return The {@link StateKey} instance
-     */
     @NonNull
-    public StateKey getStateKey() {
-        return stateKey;
+    public String getStateName() {
+        return stateName;
     }
 
-    /**
-     * Returns the configured maximum visit limit for this state.
-     *
-     * @return The maximum allowed visits
-     */
     public int getMaxVisits() {
         return maxVisits;
     }

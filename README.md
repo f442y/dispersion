@@ -1,30 +1,39 @@
 # Dispersion 🌀
 
-[![Java 25](https://img.shields.io/badge/Java-25-orange.svg?style=flat-square&logo=openjdk)](https://openjdk.org/projects/jdk/25/)
+[![Java 25](https://img.shields.io/badge/Java-25+-orange.svg?style=flat-square&logo=openjdk)](https://openjdk.org/projects/jdk/25/)
 [![Virtual Threads](https://img.shields.io/badge/Virtual%20Threads-Project%20Loom-blue.svg?style=flat-square)](https://openjdk.org/jeps/444)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg?style=flat-square)](https://opensource.org/licenses/Apache-2.0)
-[![CI Build](https://img.shields.io/badge/CI-passing-brightgreen.svg?style=flat-square&logo=githubactions)](https://github.com/f442y/dispersion/actions)
+[![CI Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg?style=flat-square&logo=githubactions)](https://github.com/f442y/dispersion/actions)
+[![Null Safety: JSpecify](https://img.shields.io/badge/Null%20Safety-JSpecify-purple.svg?style=flat-square)](https://jspecify.dev/)
 
-> **High-Throughput Finite State Machine and Saga Orchestration Engine designed natively for Java 25 Virtual Threads.**
+> **High-Throughput Finite State Machine and Distributed Saga Orchestration Engine natively engineered for Java 25+ Virtual Threads.**
 
 ---
 
 ## 📖 Table of Contents
 
 - [Overview](#-overview)
-- [Two-Tiered State Machine Architecture](#-two-tiered-state-machine-architecture)
-- [Key Features](#-key-features)
+- [Two-Tiered Architecture (Micro vs Macro)](#-two-tiered-architecture-micro-vs-macro)
+- [Fundamental Building Blocks & Definitions](#-fundamental-building-blocks--definitions)
 - [Installation & Dependency Management](#-installation--dependency-management)
-- [Quickstart & Design Patterns](#-quickstart--design-patterns)
-  - [1. Atomic (Micro) State Machine](#1-atomic-micro-state-machine)
-  - [2. Macro Orchestration with Automated Saga Rollbacks](#2-macro-orchestration-with-automated-saga-rollbacks)
-  - [3. Turn-Based Durable Execution & Checkpoint Persistence](#3-turn-based-durable-execution--checkpoint-persistence)
-  - [4. Command Pattern: Sealed Signals, Reversible Sagas & Deduplication](#4-command-pattern-sealed-signals-reversible-sagas--deduplication)
-  - [5. Broker-Agnostic Messaging (Kafka, RabbitMQ, SQS, In-Memory)](#5-broker-agnostic-messaging-kafka-rabbitmq-sqs-in-memory)
-  - [6. Set / Batch Orchestration & Dynamic Barrier Synchronization](#6-set--batch-orchestration--dynamic-barrier-synchronization)
-  - [7. Concurrent Parallel Fork-Join Branches](#7-concurrent-parallel-fork-join-branches)
-- [Resilience, Loop Prevention & Circuit Breakers](#-resilience-loop-prevention--circuit-breakers)
-- [Concurrency & Admission Control](#-concurrency--admission-control)
+- [Step-by-Step Examples & Design Patterns](#-step-by-step-examples--design-patterns)
+  - [1. The Simplest State Machine: Coffee Machine FSM](#1-the-simplest-state-machine-coffee-machine-fsm)
+  - [2. Dynamic Decision Branching: User Onboarding](#2-dynamic-decision-branching-user-onboarding)
+  - [3. Turn-Based Macro Orchestration: Human Approval & Webhook Signals](#3-turn-based-macro-orchestration-human-approval--webhook-signals)
+  - [4. Distributed Saga with Automated LIFO Rollback: E-Commerce Checkout](#4-distributed-saga-with-automated-lifo-rollback-e-commerce-checkout)
+  - [5. Concurrent Parallel Fork-Join with Fast-Fail Sibling Compensation](#5-concurrent-parallel-fork-join-with-fast-fail-sibling-compensation)
+  - [6. Resilient Child Machines: Exponential Retries & Context Recovery](#6-resilient-child-machines-exponential-retries--context-recovery)
+  - [7. Idempotent Command Processing & Network Deduplication](#7-idempotent-command-processing--network-deduplication)
+  - [8. Broker-Agnostic Messaging: Outbound Publishing & Inbound Subscriptions](#8-broker-agnostic-messaging-outbound-publishing--inbound-subscriptions)
+  - [9. Batch Orchestration & Dynamic Synchronization Barriers](#9-batch-orchestration--dynamic-synchronization-barriers)
+- [Java 25+ Language Features in Action](#-java-25-language-features-in-action)
+  - [Exhaustive Pattern Matching on Sealed Exceptions](#exhaustive-pattern-matching-on-sealed-exceptions)
+  - [Record Pattern Deconstruction](#record-pattern-deconstruction)
+- [Resilience, Loop Prevention & Admission Control](#-resilience-loop-prevention--admission-control)
+  - [State Visit Limits & Fallback Recovery](#state-visit-limits--fallback-recovery)
+  - [Global Circuit Breakers](#global-circuit-breakers)
+  - [Virtual Thread Admission Control & Backpressure](#virtual-thread-admission-control--backpressure)
+  - [Mermaid Diagram Export](#mermaid-diagram-export)
 - [Module Structure](#-module-structure)
 - [Building & Testing](#-building--testing)
 - [License](#-license)
@@ -33,74 +42,75 @@
 
 ## 🌟 Overview
 
-**Dispersion** is an ultra-lightweight, high-performance workflow execution engine crafted from the ground up for modern Java. By leveraging **Java 25 Virtual Threads** (`Thread.ofVirtual()`), Dispersion enables hundreds of thousands of concurrent state machine workflows with near-zero memory footprint and no thread-pool exhaustion.
+**Dispersion** is an ultra-lightweight, zero-synchronization workflow and state machine engine engineered from the ground up for modern Java. By combining **Java 25 Virtual Threads** (`Thread.ofVirtual()`), sealed type hierarchies, records, and pattern matching, Dispersion enables hundreds of thousands of concurrent state machine workflows with sub-millisecond dispatch times, minimal memory footprint, and zero thread-pool exhaustion.
+
+Unlike heavyweight workflow orchestrators that require external database daemons or complex proxy runtimes, Dispersion gives you two purpose-built tiers:
+1. **Atomic (Micro) FSMs**: Thread-confined, zero-sync state pipelines executing on single virtual threads.
+2. **Orchestration (Macro) FSMs**: Turn-based, durable, suspendable workflows with pluggable checkpoint persistence, automated LIFO Saga rollbacks, concurrent parallel branches, and broker-agnostic messaging.
 
 ```mermaid
 graph TD
-    subgraph "Macro Orchestration State Machine (Durable / Turn-Based)"
-        ORCH_START([Start]) --> V1[Validate Order]
+    subgraph Macro["Tier 2: Macro Orchestration State Machine (Durable / Turn-Based)"]
+        START([Start Turn]) --> V1[Validate Order]
         V1 --> PARALLEL{Fork-Join Parallel}
         
         subgraph "Virtual Thread Concurrent Branches"
-            PARALLEL --> B1[Reserve Stock]
+            PARALLEL --> B1[Reserve Inventory]
             PARALLEL --> B2[Fraud Analysis]
-            PARALLEL --> B3[Tax Calculation]
+            PARALLEL --> B3[Calculate Tax]
         end
         
         B1 & B2 & B3 --> JOIN{Join}
         JOIN --> CHILD_FSM[Atomic Micro-FSM]
         
-        subgraph "Atomic Micro-FSM (Thread-Confined)"
-            CHILD_FSM --> A1[Tokenize] --> A2[Authorize] --> A3[Capture]
+        subgraph Micro["Tier 1: Atomic Micro-FSM (Thread-Confined)"]
+            CHILD_FSM --> A1[Tokenize Card] --> A2[Authorize] --> A3[Capture]
         end
         
         CHILD_FSM --> PUB[Publish Outbound Request]
         PUB --> WAIT_SIG{Wait for Inbound Signal}
-        WAIT_SIG -.->|Suspend & Dehydrate| STORE[(Checkpoint Store)]
-        STORE -.->|Signal from Broker: Rehydrate| FULFILL[Fulfill Order]
+        WAIT_SIG -.->|Suspend & Persist| STORE[(Checkpoint Store)]
+        STORE -.->|Signal Arrives: Rehydrate| FULFILL[Fulfill Order]
         
-        FULFILL -->|Success| ORCH_END([Complete])
-        FULFILL -->|Failure| SAGA[LIFO Saga Compensation Rollback]
+        FULFILL -->|Success| ORCH_END([Completed])
+        FULFILL -->|Failure| SAGA[Automated LIFO Saga Rollback]
     end
 ```
 
 ---
 
-## 🏛️ Two-Tiered State Machine Architecture
+## 🏛️ Two-Tiered Architecture (Micro vs Macro)
 
-Dispersion separates workflow execution into two purpose-built tiers:
-
-| Dimension | Atomic (Micro) State Machine | Orchestration (Macro) State Machine |
+| Dimension | Tier 1: Atomic (Micro) State Machine | Tier 2: Orchestration (Macro) State Machine |
 | :--- | :--- | :--- |
 | **Execution Scope** | Single virtual thread, thread-confined | Turn-based, asynchronous, durable coordinator |
 | **State Mutations** | Direct, zero-synchronization context | Checkpointed snapshots & persistent rehydration |
 | **Concurrency & Lifecycle** | High-throughput sequential graph steps | Long-lived, suspendable via external signals (`waitForSignal`), parallel fork-join, **batch streaming & barriers** |
-| **Messaging & Transport** | In-memory only | **Broker-Agnostic** (Kafka, RabbitMQ, SQS, Redis, In-Memory) |
-| **Failure Recovery** | Fast fail, cycle loop-breakers, fallback states | Virtual thread retry policies + **Automated LIFO Saga Rollbacks** across turns |
-| **Primary Use Cases** | State transitions, validation pipelines, low-latency parsing | Distributed transactions, multi-service workflows, durable microservice Sagas, batch pipelines |
+| **Messaging & Transport** | In-memory only | **Broker-Agnostic SPI** (Kafka, RabbitMQ, SQS, Redis, In-Memory) |
+| **Failure Recovery** | Fast-fail, cycle loop-breakers, fallback states | Virtual-thread retries + **Automated LIFO Saga Rollbacks** across turns |
+| **Primary Use Cases** | Low-latency state parsing, protocol decoding, single-unit business rules | Distributed transactions, multi-service Sagas, async approval workflows, batch item pipelines |
 
 ---
 
-## ⚡ Key Features
+## 📚 Fundamental Building Blocks & Definitions
 
-- **🚀 Java 25 Virtual Thread Native**: Dispatches individual executions on lightweight virtual threads using `Executors.newThreadPerTaskExecutor()`.
-- **🔒 Zero-Contention Context**: Business actions within micro-machines mutate state without synchronization locks.
-- **🛡️ Automated LIFO Saga Rollbacks**: If a macro workflow fails at any step, all previously completed steps automatically roll back in reverse order, even across multi-turn rehydrations.
-- **⏳ Turn-Based Durable Execution**: Workflows suspend at external signal boundaries, persist snapshots to a pluggable `CheckpointStore`, release virtual threads and memory, and rehydrate on demand.
-- **📦 Set & Batch Orchestration with Dynamic Barriers**: Manage collections of item contexts on Virtual Threads where individual units stream independently based on item-level signals, and synchronize at dynamic barriers (`ALL_ITEMS_ARRIVED`, `SIGNAL_TRIGGERED`).
-- **🎯 First-Class Command Pattern**:
-  - `SignalCommand`: Strongly typed external events (supports sealed interfaces and pattern matching).
-  - `SagaCommand`: Self-contained reversible steps combining `execute(ctx)` and `undo(ctx)`.
-  - `CommandEnvelope`: Transparent deduplication and idempotency tracking.
-- **🔌 Broker-Agnostic Messaging SPI**: Ingest and publish signals across any transport (Apache Kafka, RabbitMQ, AWS SQS, Google Pub/Sub, Redis Streams, or In-Memory) via `SignalPublisher`, `SignalConsumer`, and `SignalReceiver`.
-- **🔀 Concurrent Parallel Fork-Join**: Run independent sub-tasks concurrently on virtual threads; if any branch fails, sibling branches are compensated automatically.
-- **🔄 Safe Retry with Clean Context Recovery**: Reconstruct fresh, unpolluted input payloads when retrying failed steps on fresh virtual threads via `ContextRecoverer`.
-- **🛑 Loop Protection & Circuit Breakers**:
-  - `maxVisits(count, fallback)`: Prevents infinite retry loops per state.
-  - `maxTransitions(count)`: Global circuit breaker protecting against graph cycles.
-  - Runtime edge validation: Guarantees state transitions strictly follow declared directed graph edges.
-- **🚥 Admission Control & Backpressure**: Configurable strategies (`BLOCK`, `REJECT_IMMEDIATELY`, `WAIT_WITH_TIMEOUT`) to prevent resource exhaustion under burst traffic.
-- **📊 Mermaid Diagram Export**: Output state graphs directly to Mermaid format using `stateMap.toMermaid()`.
+Before writing state machines, here is a breakdown of Dispersion's core concepts:
+
+| Concept | What It Is | Why It Exists & What It Does |
+| :--- | :--- | :--- |
+| **`StateKey`** | An interface implemented by an `enum` representing state nodes in your graph. | Prevents error-prone "magic strings". Enforces compile-time type safety so state machines can only transition to declared enum constants. |
+| **`StateMachineContext`** | A mutable POJO/DTO holding the domain data accumulated during execution. | Is thread-confined to a single virtual thread during any given turn, allowing fast lock-free field mutations without synchronization overhead. |
+| **`Action<CONTEXT>`** | A functional interface `(context) -> context` executed when entering a state. | Encapsulates single-responsibility business logic (e.g. validating input, calculating fees, updating database rows). |
+| **`Transition<CONTEXT, STATE_KEY>`** | A routing function `(context) -> nextStateKey`. | Evaluates context data at runtime to decide which state to execute next (supports static routing or dynamic conditional branches). |
+| **`InputFunction<C, I>`** | `(context, input) -> context` applied before the initial state executes. | Maps external inputs (e.g. HTTP request payloads, IDs) into the internal state machine context. |
+| **`OutputFunction<C, O>`** | `(context) -> output` executed after reaching a terminal end state. | Extracts or constructs a clean domain response returned to the caller, isolating internal context state. |
+| **`CompensationAction<C>`** | `(context) -> context` executed during Saga rollback via `.compensate(...)`. | The compensating counter-action for a state (e.g. refunding a payment or releasing reserved stock) invoked automatically in LIFO order if a downstream step fails. |
+| **`SagaCommand<C>`** | A combined interface uniting `execute(context)` and `compensate(context)`. | Lets you write clean, self-contained reversible domain operations in a single class. |
+| **`SignalCommand`** | An interface for external command payloads with `correlationKey()`. | Enables direct routing of incoming webhooks/events to suspended state machines matching the key. |
+| **`CommandEnvelope<T>`** | A record wrapper containing `(commandId, timestamp, command)`. | Provides transparent deduplication. If a remote system re-sends a command due to network retries, Dispersion processes it **exactly once**. |
+| **`CheckpointStore`** | SPI for persisting state snapshots (`OrchestrationCheckpoint`). | Allows long-running workflows to pause, release virtual threads and memory, and resume hours or days later. |
+| **`SignalPublisher` / `SignalConsumer`** | Broker-agnostic messaging contracts. | Decouples workflows from messaging infrastructure (Kafka, AWS SQS, RabbitMQ, or In-Memory). |
+| **`BarrierPolicy`** | `ALL_ITEMS_ARRIVED` or `SIGNAL_TRIGGERED`. | Synchronizes batches of streaming items before allowing them to cross into downstream states together. |
 
 ---
 
@@ -132,13 +142,13 @@ Add the required modules to your application:
 
 ```xml
 <dependencies>
-    <!-- Core runtime engine -->
+    <!-- Core runtime engine (Virtual Threads, Executors, Builders, Sagas) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-core</artifactId>
     </dependency>
 
-    <!-- (Optional) API interfaces only (for contract-only libraries) -->
+    <!-- (Optional) API interfaces only (for clean domain / contract modules) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-api</artifactId>
@@ -146,13 +156,25 @@ Add the required modules to your application:
 </dependencies>
 ```
 
+### Gradle Setup
+
+```groovy
+// build.gradle
+dependencies {
+    implementation platform('com.github.f442y.dispersion:dispersion-bom:DEVELOP-SNAPSHOT')
+    implementation 'com.github.f442y.dispersion:dispersion-core'
+}
+```
+
 ---
 
-## 🚀 Quickstart & Design Patterns
+## 🚀 Step-by-Step Examples & Design Patterns
 
-### 1. Atomic (Micro) State Machine
+---
 
-Define state keys by implementing `StateKey`, create a context class implementing `StateMachineContext`, and assemble the graph using the fluent builder:
+### 1. The Simplest State Machine: Coffee Machine FSM
+
+Let's build a simple, complete state machine that grinds beans, heats water, brews coffee, and returns a cup of coffee.
 
 ```java
 import com.github.f442y.dispersion.atomic.AtomicStateMachineBuilder;
@@ -160,427 +182,606 @@ import com.github.f442y.dispersion.atomic.AtomicStateMachineExecutor;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.state.StateKey;
 
-// 1. Define State Enum
-public enum PaymentState implements StateKey {
-    INITIALIZE, AUTHORIZE, CAPTURE, SETTLED
+// Step 1: Define the states of our machine as an Enum implementing StateKey
+public enum CoffeeState implements StateKey {
+    GRIND_BEANS,
+    HEAT_WATER,
+    BREW,
+    SERVED
 }
 
-// 2. Define Context
-public class PaymentContext implements StateMachineContext {
-    public String paymentId;
-    public int amount;
-    public boolean authorized;
+// Step 2: Define the Context object that holds data as we move through states
+public class CoffeeContext implements StateMachineContext {
+    public String roastType;     // e.g. "Dark Roast"
+    public int waterTempCelsius; // e.g. 95
+    public String coffeeOutput;  // Final brewed cup description
 }
 
-// 3. Build State Machine
-var stateMachine = AtomicStateMachineBuilder.<PaymentContext, PaymentState, Integer, String>create(PaymentState.class)
-    .context(PaymentContext::new)
-    .initialState(PaymentState.INITIALIZE)
-    .input((ctx, amount) -> {
-        ctx.amount = amount;
+// Step 3: Build the state machine topology with the fluent builder
+var coffeeMachineConfig = AtomicStateMachineBuilder
+    // <ContextType, StateEnumType, InputPayloadType, OutputReturnType>
+    .<CoffeeContext, CoffeeState, String, String>create(CoffeeState.class)
+    // Factory that provides a clean context instance for each new execution
+    .context(CoffeeContext::new)
+    // The entry point state where execution begins
+    .initialState(CoffeeState.GRIND_BEANS)
+    // Input mapping: takes external input (roast type) and initializes context
+    .input((ctx, roast) -> {
+        ctx.roastType = (roast != null) ? roast : "Medium Roast";
         return ctx;
     })
-    .state(PaymentState.INITIALIZE)
+    // State 1: Grind Beans
+    .state(CoffeeState.GRIND_BEANS)
         .action(ctx -> {
-            ctx.paymentId = "PAY-" + System.currentTimeMillis();
+            System.out.println("Grinding " + ctx.roastType + " beans...");
             return ctx;
         })
-        .transition(PaymentState.AUTHORIZE)
-    .state(PaymentState.AUTHORIZE)
+        .transition(CoffeeState.HEAT_WATER) // Move to HEAT_WATER next
+    // State 2: Heat Water
+    .state(CoffeeState.HEAT_WATER)
         .action(ctx -> {
-            ctx.authorized = true;
+            ctx.waterTempCelsius = 93;
+            System.out.println("Water heated to " + ctx.waterTempCelsius + "°C");
             return ctx;
         })
-        .transition(PaymentState.CAPTURE)
-    .state(PaymentState.CAPTURE)
-        .action(ctx -> ctx)
-        .transition(PaymentState.SETTLED)
-    .endStates(PaymentState.SETTLED)
-    .output(ctx -> "Payment " + ctx.paymentId + " settled: $" + (ctx.amount / 100.0))
+        .transition(CoffeeState.BREW) // Move to BREW next
+    // State 3: Brew Coffee
+    .state(CoffeeState.BREW)
+        .action(ctx -> {
+            ctx.coffeeOutput = "Freshly brewed hot cup of " + ctx.roastType + "!";
+            System.out.println("Brewing finished.");
+            return ctx;
+        })
+        .transition(CoffeeState.SERVED) // Move to SERVED next
+    // Mark SERVED as the terminal (end) state
+    .endStates(CoffeeState.SERVED)
+    // Output mapping: extracts the final result returned to caller
+    .output(ctx -> ctx.coffeeOutput)
     .build();
 
-// 4. Execute on Virtual Threads
-try (var executor = new AtomicStateMachineExecutor<>("payment-engine", stateMachine)) {
-    // Synchronous execution
-    String result = executor.dispatchSync(5000);
-    System.out.println(result); // Payment PAY-... settled: $50.0
-
-    // Asynchronous Virtual Thread execution
-    var future = executor.dispatchAsync(7500);
-    System.out.println(future.get());
+// Step 4: Execute synchronously on a dedicated Virtual Thread
+try (var executor = new AtomicStateMachineExecutor<>("coffee-machine", coffeeMachineConfig)) {
+    String cupOfCoffee = executor.dispatchSync("French Dark Roast");
+    System.out.println("Result: " + cupOfCoffee);
+    // Output: Freshly brewed hot cup of French Dark Roast!
 }
 ```
 
 ---
 
-### 2. Macro Orchestration with Automated Saga Rollbacks
+### 2. Dynamic Decision Branching: User Onboarding
 
-Coordinate multi-service workflows with automatic reverse-order compensation upon failure:
+In real applications, workflows need to branch dynamically based on conditions (e.g. VIP users skip KYC verification, or high-risk signups require identity approval).
+
+Dispersion uses `.transitionsTo(Set.of(...), ctx -> condition ? StateA : StateB)` to enforce both **runtime edge validation** and **graph topology integrity**.
+
+```mermaid
+graph LR
+    START([START]) --> REG[REGISTER_USER]
+    REG --> CHECK{Is VIP User?}
+    CHECK -->|Yes| VIP[VIP_FAST_TRACK]
+    CHECK -->|No| KYC[VERIFY_IDENTITY]
+    KYC --> ACTIVATE[ACTIVATE_ACCOUNT]
+    VIP --> ACTIVATE
+    ACTIVATE --> DONE([ACCOUNT_READY])
+```
 
 ```java
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.RetryPolicy;
+import com.github.f442y.dispersion.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.state.StateKey;
-import java.time.Duration;
+import java.util.Set;
 
-public enum OrderState implements StateKey {
-    VALIDATE, RESERVE_STOCK, CHARGE_CARD, FULFILL, COMPLETED, FAILED
+public enum OnboardingState implements StateKey {
+    REGISTER_USER,
+    VERIFY_IDENTITY,
+    VIP_FAST_TRACK,
+    ACTIVATE_ACCOUNT,
+    ACCOUNT_READY
 }
 
-var orderOrchestrator = OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderRequest, String>create("OrderSaga", OrderState.class)
-    .context(OrderContext::new)
-    .initialState(OrderState.VALIDATE)
-    // Step 1: Validation
-    .state(OrderState.VALIDATE)
-        .action(ctx -> ctx.validate())
-        .transition(OrderState.RESERVE_STOCK)
-    // Step 2: Inventory Reservation with Saga Compensation
-    .state(OrderState.RESERVE_STOCK)
-        .action(ctx -> ctx.reserveInventory())
-        .compensate(ctx -> ctx.releaseInventory()) // Automatically executed if downstream steps fail
-        .transition(OrderState.CHARGE_CARD)
-    // Step 3: Payment with Virtual Thread Retry & Refund Compensation
-    .state(OrderState.CHARGE_CARD)
-        .action(ctx -> ctx.chargeCustomer())
-        .retry(RetryPolicy.exponential(3, Duration.ofMillis(100), 2.0, Duration.ofSeconds(1)))
-        .compensate(ctx -> ctx.refundCustomer())
-        .transition(OrderState.FULFILL)
-    // Step 4: Fulfillment
-    .state(OrderState.FULFILL)
-        .action(ctx -> ctx.shipOrder())
-        .transition(OrderState.COMPLETED)
-    .endStates(OrderState.COMPLETED, OrderState.FAILED)
-    .output(ctx -> "Order completed: " + ctx.orderId)
-    .buildExecutor();
+public class OnboardingContext implements StateMachineContext {
+    public String userId;
+    public boolean isVip;
+    public boolean identityVerified;
+    public String status;
+}
 
-// Run the Saga
-String outcome = orderOrchestrator.dispatchSync(new OrderRequest("ORD-101", 12900));
+public record OnboardingRequest(String userId, boolean isVip) {}
+
+var onboardingConfig = AtomicStateMachineBuilder
+    .<OnboardingContext, OnboardingState, OnboardingRequest, String>create(OnboardingState.class)
+    .context(OnboardingContext::new)
+    .initialState(OnboardingState.REGISTER_USER)
+    .input((ctx, req) -> {
+        ctx.userId = req.userId();
+        ctx.isVip = req.isVip();
+        return ctx;
+    })
+    .state(OnboardingState.REGISTER_USER)
+        .action(ctx -> {
+            System.out.println("Registering user: " + ctx.userId);
+            return ctx;
+        })
+        // Dynamic Branching: VIPs skip manual identity verification!
+        .transitionsTo(
+            Set.of(OnboardingState.VIP_FAST_TRACK, OnboardingState.VERIFY_IDENTITY),
+            ctx -> ctx.isVip ? OnboardingState.VIP_FAST_TRACK : OnboardingState.VERIFY_IDENTITY
+        )
+    .state(OnboardingState.VERIFY_IDENTITY)
+        .action(ctx -> {
+            ctx.identityVerified = true;
+            System.out.println("Performing standard KYC verification...");
+            return ctx;
+        })
+        .transition(OnboardingState.ACTIVATE_ACCOUNT)
+    .state(OnboardingState.VIP_FAST_TRACK)
+        .action(ctx -> {
+            ctx.identityVerified = true; // Auto-verified for VIPs
+            System.out.println("Applying VIP instant verification bypass.");
+            return ctx;
+        })
+        .transition(OnboardingState.ACTIVATE_ACCOUNT)
+    .state(OnboardingState.ACTIVATE_ACCOUNT)
+        .action(ctx -> {
+            ctx.status = "ACTIVE";
+            return ctx;
+        })
+        .transition(OnboardingState.ACCOUNT_READY)
+    .endStates(OnboardingState.ACCOUNT_READY)
+    .output(ctx -> "User " + ctx.userId + " is now " + ctx.status)
+    .buildExecutor("user-onboarding");
 ```
 
 ---
 
-### 3. Turn-Based Durable Execution & Checkpoint Persistence
+### 3. Turn-Based Macro Orchestration: Human Approval & Webhook Signals
 
-Long-running workflows can suspend execution waiting for external events (e.g. payment webhooks, async signals, human approvals). The workflow state is saved to a `CheckpointStore` and the virtual thread terminates. When the signal arrives, the workflow is rehydrated on a fresh virtual thread and proceeds:
+Real-world business processes often span minutes, hours, or days (e.g. waiting for a payment webhook or manager approval).
+
+With **Orchestration State Machines**, the workflow executes until hitting a `.waitForSignal(...)` state, snapshots its state to a `CheckpointStore`, and **releases its virtual thread**. When the external signal arrives, Dispersion rehydrates the exact state machine by its **correlation key** and resumes execution.
 
 ```java
 import com.github.f442y.dispersion.orchestration.InMemoryCheckpointStore;
 import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 
-public record PaymentWebhookPayload(String transactionId, int amount) {}
+public enum LoanState implements StateKey {
+    SUBMIT_APPLICATION,
+    AWAIT_MANAGER_APPROVAL,
+    DISBURSE_FUNDS,
+    LOAN_COMPLETED
+}
 
-var longLivedOrchestrator = OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderRequest, String>create("DurableOrderSaga", OrderState.class)
-    .context(OrderContext::new)
-    .initialState(OrderState.VALIDATE)
-    .correlationKey(ctx -> ctx.orderId) // Extract domain lookup key
-    .checkpointStore(new InMemoryCheckpointStore<>()) // Or pluggable JDBC / Redis store
-    // Step 1: Synchronous preparation
-    .state(OrderState.VALIDATE)
-        .action(ctx -> ctx.validate())
-        .transition(OrderState.RESERVE_STOCK)
-    // Step 2: Compensable reservation
-    .state(OrderState.RESERVE_STOCK)
-        .action(ctx -> ctx.reserveInventory())
-        .compensate(ctx -> ctx.releaseInventory())
-        .transition(OrderState.AWAIT_PAYMENT)
-    // Step 3: Suspend & Wait for external signal (Virtual thread terminates; memory is freed!)
-    .state(OrderState.AWAIT_PAYMENT)
-        .waitForSignal("PAYMENT_CONFIRMED", PaymentWebhookPayload.class, (ctx, signal) -> {
-            ctx.transactionId = signal.transactionId();
-            ctx.paidAmount = signal.amount();
+public class LoanContext implements StateMachineContext {
+    public String loanId;
+    public int amount;
+    public String approvedBy;
+    public boolean disbursed;
+}
+
+// Inbound signal payload received from manager approval webhook/UI
+public record LoanApprovalSignal(String loanId, String managerName, boolean approved) {}
+
+// Checkpoint store persists the state snapshot while the workflow is suspended
+var checkpointStore = new InMemoryCheckpointStore<LoanContext, LoanState>();
+
+var loanExecutor = OrchestrationStateMachineBuilder
+    .<LoanContext, LoanState, LoanContext, String>create("LoanWorkflow", LoanState.class)
+    .context(LoanContext::new)
+    .initialState(LoanState.SUBMIT_APPLICATION)
+    .checkpointStore(checkpointStore)
+    // The correlation key allows incoming signals to locate this suspended instance
+    .correlationKey(ctx -> ctx.loanId)
+    .input((ctx, input) -> {
+        ctx.loanId = input.loanId;
+        ctx.amount = input.amount;
+        return ctx;
+    })
+    .state(LoanState.SUBMIT_APPLICATION)
+        .action(ctx -> {
+            System.out.println("Loan application submitted: " + ctx.loanId + " for $" + ctx.amount);
             return ctx;
         })
-        .transition(OrderState.FULFILL)
-    // Step 4: Resumes on a fresh virtual thread once signal is delivered
-    .state(OrderState.FULFILL)
-        .action(ctx -> ctx.shipOrder())
-        .transition(OrderState.COMPLETED)
-    .endStates(OrderState.COMPLETED, OrderState.FAILED)
-    .output(ctx -> "Order " + ctx.orderId + " completed via TX " + ctx.transactionId)
+        .transition(LoanState.AWAIT_MANAGER_APPROVAL)
+    // 🛑 SUSPENSION POINT: Workflow pauses here, saves checkpoint, and yields thread
+    .state(LoanState.AWAIT_MANAGER_APPROVAL)
+        .waitForSignal("LoanApproval", LoanApprovalSignal.class, (ctx, signal) -> {
+            System.out.println("Received approval signal from: " + signal.managerName());
+            ctx.approvedBy = signal.managerName();
+            return ctx;
+        })
+        .transition(LoanState.DISBURSE_FUNDS)
+    .state(LoanState.DISBURSE_FUNDS)
+        .action(ctx -> {
+            ctx.disbursed = true;
+            System.out.println("Disbursing $" + ctx.amount + " approved by " + ctx.approvedBy);
+            return ctx;
+        })
+        .transition(LoanState.LOAN_COMPLETED)
+    .endStates(LoanState.LOAN_COMPLETED)
+    .output(ctx -> "Loan " + ctx.loanId + " disbursed ($" + ctx.amount + ")")
     .buildExecutor();
 
-// 1. Initial Dispatch: Runs Steps 1-2, then suspends at Step 3
-OrchestrationTurnResult<OrderContext, OrderState, String> turn1 = 
-    longLivedOrchestrator.dispatchTurnSync(null, new OrderRequest("ORD-9001", 12900));
+// --- TURN 1: Initial submission ---
+LoanContext loan = new LoanContext();
+loan.loanId = "LOAN-1002";
+loan.amount = 50000;
 
-System.out.println(turn1.status()); // SUSPENDED
-System.out.println(turn1.expectedSignal()); // PAYMENT_CONFIRMED
+OrchestrationTurnResult<LoanContext, LoanState, String> turn1 = loanExecutor.dispatchTurnSync(null, loan);
+System.out.println("Is Suspended? " + turn1.isSuspended()); // true
+System.out.println("Current State: " + turn1.currentStateKey()); // AWAIT_MANAGER_APPROVAL
 
-// 2. Later (hours or days later): Webhook hits your system
-var resumeFuture = longLivedOrchestrator.sendSignalByCorrelationKey(
-    "ORD-9001", 
-    "PAYMENT_CONFIRMED", 
-    new PaymentWebhookPayload("TX-99881", 12900)
-);
+// --- TURN 2: External Manager Approves via Webhook hours later ---
+OrchestrationTurnResult<LoanContext, LoanState, String> turn2 = loanExecutor.sendSignalByCorrelationKey(
+    "LOAN-1002",
+    "LoanApproval",
+    new LoanApprovalSignal("LOAN-1002", "Sarah Connor", true)
+).get();
 
-// Workflow rehydrates, runs Step 4, and completes!
-OrchestrationTurnResult<OrderContext, OrderState, String> finalTurn = resumeFuture.get();
-System.out.println(finalTurn.output()); // Order ORD-9001 completed via TX TX-99881
+System.out.println("Is Completed? " + turn2.isCompleted()); // true
+System.out.println("Result: " + turn2.output()); // Loan LOAN-1002 disbursed ($50000)
 ```
 
 ---
 
-### 4. Command Pattern: Sealed Signals, Reversible Sagas & Deduplication
+### 4. Distributed Saga with Automated LIFO Rollback: E-Commerce Checkout
 
-Dispersion provides first-class support for the **Command Pattern**:
+In distributed architectures, multiple remote services are modified (e.g. inventory reserved, payment charged, shipping scheduled). If a step fails, previous steps must be undone in **reverse chronological (LIFO) order**.
 
-1. **Reversible Saga Commands (`SagaCommand<C>`)**: Encapsulates `execute(ctx)` and `undo(ctx)` into a single cohesive, reusable unit.
-2. **Type-Safe Signal Commands (`SignalCommand`)**: Replaces magic strings with concrete records / sealed hierarchies.
-3. **Idempotency Wrappers (`CommandEnvelope<C>`)**: Prevents duplicate webhook / message queue deliveries from re-executing steps.
+Dispersion automates this completely with `.compensate(...)`:
+
+```mermaid
+graph TD
+    S1[1. RESERVE_INVENTORY] -->|Compensate: Release Stock| S1_UNDO[Undo Stock]
+    S2[2. CHARGE_PAYMENT] -->|Compensate: Refund Card| S2_UNDO[Undo Payment]
+    S3[3. BOOK_COURIER - FAILS!] --> ROLLBACK{Trigger LIFO Saga Rollback}
+    
+    ROLLBACK --> S2_UNDO
+    S2_UNDO --> S1_UNDO
+```
+
+```java
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
+
+public enum CheckoutState implements StateKey {
+    RESERVE_INVENTORY,
+    CHARGE_PAYMENT,
+    SCHEDULE_DELIVERY,
+    COMPLETED
+}
+
+public class CheckoutContext implements StateMachineContext {
+    public String orderId;
+    public boolean stockReserved;
+    public boolean paymentCharged;
+    public boolean deliveryBooked;
+}
+
+var checkoutExecutor = OrchestrationStateMachineBuilder
+    .<CheckoutContext, CheckoutState, String, String>create("CheckoutSaga", CheckoutState.class)
+    .context(CheckoutContext::new)
+    .initialState(CheckoutState.RESERVE_INVENTORY)
+    .input((ctx, id) -> { ctx.orderId = id; return ctx; })
+    
+    // Step 1: Reserve Inventory
+    .state(CheckoutState.RESERVE_INVENTORY)
+        .action(ctx -> {
+            ctx.stockReserved = true;
+            System.out.println("Step 1: Inventory reserved.");
+            return ctx;
+        })
+        .compensate(ctx -> {
+            ctx.stockReserved = false;
+            System.out.println("ROLLBACK: Releasing reserved inventory.");
+            return ctx;
+        })
+        .transition(CheckoutState.CHARGE_PAYMENT)
+        
+    // Step 2: Charge Payment
+    .state(CheckoutState.CHARGE_PAYMENT)
+        .action(ctx -> {
+            ctx.paymentCharged = true;
+            System.out.println("Step 2: Credit card charged.");
+            return ctx;
+        })
+        .compensate(ctx -> {
+            ctx.paymentCharged = false;
+            System.out.println("COMPENSATION: Refunding credit card charge.");
+            return ctx;
+        })
+        .transition(CheckoutState.SCHEDULE_DELIVERY)
+        
+    // Step 3: Schedule Delivery (Simulate unexpected failure)
+    .state(CheckoutState.SCHEDULE_DELIVERY)
+        .action(ctx -> {
+            System.out.println("Step 3: Attempting to book delivery courier...");
+            throw new IllegalStateException("Courier service unavailable in delivery zone!");
+        })
+        .transition(CheckoutState.COMPLETED)
+        
+    .endStates(CheckoutState.COMPLETED)
+    .buildExecutor();
+
+try {
+    checkoutExecutor.dispatchSync("ORD-8822");
+} catch (Exception e) {
+    System.out.println("Checkout failed: " + e.getMessage());
+    // Console output automatically shows:
+    // Step 1: Inventory reserved.
+    // Step 2: Credit card charged.
+    // Step 3: Attempting to book delivery courier...
+    // COMPENSATION: Refunding credit card charge. (LIFO Step 2 Compensation)
+    // COMPENSATION: Releasing reserved inventory.   (LIFO Step 1 Compensation)
+}
+```
+
+---
+
+### 5. Concurrent Parallel Fork-Join with Fast-Fail Sibling Compensation
+
+Run multiple independent tasks concurrently on Virtual Threads. If any branch fails, sibling branches are automatically cancelled and completed branches are rolled back:
+
+```java
+.state(OrderState.PARALLEL_ENRICHMENT)
+    .parallel()
+        // Branch A: Reserve stock concurrently
+        .branch("reserve-stock",
+            ctx -> {
+                ctx.stockReserved = true;
+                return ctx;
+            },
+            ctx -> {
+                ctx.stockReserved = false; // Compensation if sibling fails
+                return ctx;
+            }
+        )
+        // Branch B: Run fraud check concurrently
+        .branch("fraud-check",
+            ctx -> {
+                ctx.fraudScore = 12; // Low risk
+                return ctx;
+            },
+            ctx -> {
+                // Fraud check rollback if needed
+                return ctx;
+            }
+        )
+        // Branch C: Calculate geo-taxes concurrently
+        .branch("tax-calculation",
+            ctx -> {
+                ctx.taxRate = 0.0825;
+                return ctx;
+            }
+        )
+    .transition(OrderState.FINALIZE_ORDER)
+```
+
+---
+
+### 6. Resilient Child Machines: Exponential Retries & Context Recovery
+
+When calling unstable external APIs or atomic child machines, configure exponential backoff retries. Use `ContextRecoverer` to sanitize or regenerate fresh idempotency tokens on retry attempts:
+
+```java
+import com.github.f442y.dispersion.orchestration.RetryPolicy;
+import java.time.Duration;
+
+.state(OrderState.CHARGE_PAYMENT)
+    // Embed child micro-state machine
+    .atomicMachine(paymentMicroStateMachine)
+    .input(ctx -> ctx.paymentRequest)
+    .output((ctx, authCode) -> {
+        ctx.authorizationCode = authCode;
+        return ctx;
+    })
+    // Exponential retry: 3 attempts, initial delay 100ms, multiplier 2.0x
+    .retry(RetryPolicy.exponentialBackoff(3, Duration.ofMillis(100), 2.0))
+    // Context Recoverer: sanitizes payload and generates new idempotency key on each retry
+    .recoverer((ctx, lastError, attempt) -> {
+        System.out.println("Retrying payment, attempt: " + attempt + " due to: " + lastError.getMessage());
+        return new PaymentRequest(ctx.orderId, ctx.amount, "IDEMP-" + ctx.orderId + "-ATTEMPT-" + attempt);
+    })
+    .transition(OrderState.FULFILLMENT)
+```
+
+---
+
+### 7. Idempotent Command Processing & Network Deduplication
+
+Under unstable network conditions, message queues and webhooks frequently deliver the same message multiple times.
+
+Dispersion's `CommandEnvelope<T>` guarantees **exactly-once execution**:
 
 ```java
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
-import com.github.f442y.dispersion.orchestration.command.SagaCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 
-// 1. Define Reversible Saga Step
-public record ReserveInventoryCommand(String sku, int quantity) implements SagaCommand<OrderContext> {
+// 1. Define domain command implementing SignalCommand
+public record ApproveOrderCommand(String orderId, String managerId) implements SignalCommand {
     @Override
-    public OrderContext execute(OrderContext ctx) {
-        ctx.reserveInventory(sku, quantity);
-        return ctx;
-    }
-
-    @Override
-    public OrderContext undo(OrderContext ctx) {
-        ctx.releaseInventory(sku, quantity); // Automatic Saga Rollback
-        return ctx;
+    public String correlationKey() {
+        return orderId;
     }
 }
 
-// 2. Define Strongly Typed Signal Commands
-public sealed interface OrderSignalCommand extends SignalCommand permits ConfirmPayment, CancelOrder {
-    @Override String correlationKey();
-}
+// 2. Wrap in an idempotent CommandEnvelope with a unique command UUID
+UUID uniqueCommandId = UUID.randomUUID();
+CommandEnvelope<ApproveOrderCommand> envelope = new CommandEnvelope<>(
+    uniqueCommandId,
+    Instant.now(),
+    new ApproveOrderCommand("ORD-9090", "manager-bob")
+);
 
-public record ConfirmPayment(String orderId, String transactionId, int amount) implements OrderSignalCommand {
-    @Override public String correlationKey() { return orderId; }
-}
-
-public record CancelOrder(String orderId, String reason) implements OrderSignalCommand {
-    @Override public String correlationKey() { return orderId; }
-}
-
-// 3. Assemble State Machine with Commands
-var executor = OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderRequest, String>create("CommandSaga", OrderState.class)
-    .context(OrderContext::new)
-    .initialState(OrderState.VALIDATE)
-    .correlationKey(ctx -> ctx.orderId)
-    .checkpointStore(new InMemoryCheckpointStore<>())
-    .state(OrderState.VALIDATE)
-        .action(ctx -> ctx.validate())
-        .transition(OrderState.RESERVE_STOCK)
-    // Register SagaCommand (forward action + compensation in one)
-    .state(OrderState.RESERVE_STOCK)
-        .command(new ReserveInventoryCommand("SKU-99", 2))
-        .transition(OrderState.AWAIT_PAYMENT)
-    // Wait for strongly typed Command
-    .state(OrderState.AWAIT_PAYMENT)
-        .waitForCommand(ConfirmPayment.class, (ctx, cmd) -> {
-            ctx.transactionId = cmd.transactionId();
-            return ctx;
-        })
-        .transition(OrderState.FULFILL)
-    .state(OrderState.FULFILL)
-        .action(ctx -> ctx.ship())
-        .transition(OrderState.COMPLETED)
-    .endStates(OrderState.COMPLETED, OrderState.FAILED)
-    .buildExecutor();
-
-// 4. Dispatch initial turn
-executor.dispatchTurnSync(null, new OrderRequest("ORD-101", 5000));
-
-// 5. Deliver typed command (or wrap in CommandEnvelope for deduplication)
-var envelope = CommandEnvelope.of(new ConfirmPayment("ORD-101", "TX-9988", 5000));
-var resultFuture = executor.handleCommand(envelope);
-
-// Duplicate envelope delivery with the same commandId is safely ignored!
-executor.handleCommand(envelope);
+// 3. Even if this envelope is delivered 10 times concurrently over the network,
+// Dispersion executes the turn on the 1st delivery and deduplicates the remaining 9!
+executor.handleCommand(envelope).get();
 ```
 
 ---
 
-### 5. Broker-Agnostic Messaging (Kafka, RabbitMQ, SQS, In-Memory)
+### 8. Broker-Agnostic Messaging: Outbound Publishing & Inbound Subscriptions
 
-Dispersion completely decouples state machines from message transport protocols via the **Broker-Agnostic Messaging SPI**:
-
-* **`SignalPublisher`**: Publish outbound signals or commands to any broker (Kafka topic, RabbitMQ exchange, SQS queue, In-Memory).
-* **`SignalReceiver`**: Adapt incoming broker messages (`SignalMessage`) into orchestration turns on Virtual Threads.
-* **`InMemorySignalBroker`**: Built-in Virtual-Thread-native broker for testing and single-node deployments.
+Connect state machines directly to message brokers (Apache Kafka, AWS SQS, RabbitMQ, or in-memory virtual thread channels):
 
 ```java
 import com.github.f442y.dispersion.orchestration.messaging.InMemorySignalBroker;
-import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
-import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 import com.github.f442y.dispersion.orchestration.messaging.SignalReceiver;
 
-// 1. Initialize any message broker adapter (or InMemorySignalBroker)
-SignalPublisher broker = new InMemorySignalBroker(); // Or your Kafka / SQS producer adapter
+// 1. In-Memory broker on Virtual Threads (or swap with Kafka / SQS adapter)
+InMemorySignalBroker broker = new InMemorySignalBroker();
 
-// 2. Build workflow with outbound publish steps & inbound wait steps
-var executor = OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderRequest, String>create("BrokerSaga", OrderState.class)
-    .context(OrderContext::new)
-    .initialState(OrderState.VALIDATE)
-    .correlationKey(ctx -> ctx.orderId)
-    // Step 1: Outbound publish to message broker destination "warehouse-commands"
-    .state(OrderState.VALIDATE)
-        .publish(broker, "warehouse-commands", ctx -> new RequestInventoryCommand(ctx.orderId, "SKU-99"))
-        .transition(OrderState.AWAIT_PICKED_EVENT)
-    // Step 2: Suspend waiting for inbound broker event
-    .state(OrderState.AWAIT_PICKED_EVENT)
-        .waitForCommand(InventoryPickedCommand.class, (ctx, cmd) -> {
-            ctx.warehouseId = cmd.warehouseId();
+// 2. Build state machine with outbound publication and inbound command wait
+var executor = OrchestrationStateMachineBuilder
+    .<ShippingContext, ShippingState, Void, String>create("ShippingWorkflow", ShippingState.class)
+    .context(ShippingContext::new)
+    .initialState(ShippingState.INIT)
+    .checkpointStore(store)
+    .correlationKey(ctx -> ctx.shipmentId)
+    .state(ShippingState.INIT)
+        // Publishes outbound message to broker destination "warehouse-dispatch-requests"
+        .publish(broker, "warehouse-dispatch-requests", ctx -> new DispatchRequest(ctx.shipmentId))
+        .transition(ShippingState.AWAIT_PICKED)
+    .state(ShippingState.AWAIT_PICKED)
+        // Waits for inbound command from warehouse
+        .waitForCommand(PackagePickedCommand.class, (ctx, cmd) -> {
+            ctx.picked = true;
             return ctx;
         })
-        .transition(OrderState.COMPLETED)
-    .endStates(OrderState.COMPLETED, OrderState.FAILED)
+        .transition(ShippingState.COMPLETED)
+    .endStates(ShippingState.COMPLETED)
     .buildExecutor();
 
-// 3. Bind broker consumer (Kafka listener / SQS poller) to Dispersion
+// 3. Connect broker subscription to the state machine via SignalReceiver
 SignalReceiver receiver = SignalReceiver.forExecutor(executor);
-
-// 4. Inbound broker listener feeds raw messages or commands into receiver:
-// (Works with Kafka consumer records, RabbitMQ payloads, SQS messages, or In-Memory)
-receiver.onMessage(new SignalMessage(
-    "warehouse-events", 
-    "InventoryPickedCommand", 
-    "ORD-101", 
-    UUID.randomUUID(), 
-    Instant.now(), 
-    Map.of("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), 
-    new InventoryPickedCommand("ORD-101", "WH-NORTH-01")
-));
+broker.subscribe("warehouse-events", receiver);
 ```
 
 ---
 
-### 6. Set / Batch Orchestration & Dynamic Barrier Synchronization
+### 9. Batch Orchestration & Dynamic Synchronization Barriers
 
-Orchestrations can seamlessly execute both **singular items** and **batches of items** on Virtual Threads where:
-1. **Singular & Batch Flexibility**: Execute a single unit (`dispatchSync(singleItem)`) or a collection (`dispatchBatchSync(items)`).
-2. **Itemized Streaming**: Units flow independently. An external signal (`ItemSignalCommand`) targeted at a single item (`itemKey`) wakes up and advances that specific item immediately.
-3. **Barrier Convergence**: Items arriving at a barrier pause until **all** items in the set arrive (`BarrierPolicy.ALL_ITEMS_ARRIVED`) or an explicit batch release signal arrives (`BarrierPolicy.SIGNAL_TRIGGERED`).
+Process collections of items where individual items stream independently on Virtual Threads and synchronize at dynamic barriers:
 
 ```java
 import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStateMachineBuilder;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
-import com.github.f442y.dispersion.orchestration.command.ItemSignalCommand;
 
-// 1. Define Item-Level Signal Command
-public record ApproveDocumentCommand(String batchId, String documentId, String note) implements ItemSignalCommand {
-    @Override public String batchKey() { return batchId; }
-    @Override public String itemKey() { return documentId; }
+public enum BatchState implements StateKey {
+    INSPECT_ITEM,
+    HOLD_AT_BATCH_BARRIER,
+    DISPATCH_PALLET,
+    COMPLETED
 }
 
-// 2. Build Unified Batch / Singular Orchestrator
-var batchExecutor = BatchOrchestrationStateMachineBuilder.<BatchContext, DocumentContext, DocState, String>create("DocPipeline", DocState.class)
+var batchExecutor = BatchOrchestrationStateMachineBuilder
+    .<BatchContext, ItemContext, BatchState, String>create("PalletBatch", BatchState.class)
     .batchContext(BatchContext::new)
     .batchKey(ctx -> ctx.batchId)
-    .itemKey(ctx -> ctx.documentId)
-    .initialState(DocState.UPLOAD)
-    // Step 1: Independent OCR on Virtual Thread per item
-    .itemState(DocState.UPLOAD)
-        .action(ctx -> ctx.extractOcr())
-        .transition(DocState.AWAIT_HUMAN_REVIEW)
-    // Step 2: Itemized Signal Wait (each document waits independently)
-    .itemState(DocState.AWAIT_HUMAN_REVIEW)
-        .waitForCommand(ApproveDocumentCommand.class, (ctx, cmd) -> {
-            ctx.approved = true;
-            ctx.reviewerNote = cmd.note();
-            return ctx;
+    .itemKey(item -> item.itemId)
+    .initialState(BatchState.INSPECT_ITEM)
+    // Step 1: Items stream and inspect independently
+    .itemState(BatchState.INSPECT_ITEM)
+        .action(item -> {
+            item.inspected = true;
+            return item;
         })
-        .transition(DocState.AGGREGATION_BARRIER)
-    // Step 3: Dynamic Barrier (holds items until 100% of batch documents arrive)
-    .itemState(DocState.AGGREGATION_BARRIER)
+        .transition(BatchState.HOLD_AT_BATCH_BARRIER)
+    // Step 2: BARRIER - Items wait until ALL items in the batch arrive here
+    .itemState(BatchState.HOLD_AT_BATCH_BARRIER)
         .barrier(BarrierPolicy.ALL_ITEMS_ARRIVED)
-        .transition(DocState.ARCHIVE)
-    .itemState(DocState.ARCHIVE)
-        .action(ctx -> ctx.archive())
-        .transition(DocState.COMPLETED)
-    .endStates(DocState.COMPLETED)
-    .output(ctx -> "Batch " + ctx.batchId + " completed")
+        .transition(BatchState.DISPATCH_PALLET)
+    // Step 3: All items unlock simultaneously and dispatch together
+    .itemState(BatchState.DISPATCH_PALLET)
+        .action(item -> {
+            item.dispatched = true;
+            return item;
+        })
+        .transition(BatchState.COMPLETED)
+    .endStates(BatchState.COMPLETED)
     .buildExecutor();
 
-// --- BATCH DISPATCH ---
-batchExecutor.dispatchBatchSync(batchCtx, List.of(docA, docB, docC));
-// Delivering signal for Doc A advances Doc A immediately to the barrier, while Doc B & C stay in review!
-batchExecutor.handleCommand(new ApproveDocumentCommand("BATCH-100", "DOC-A", "LGTM"));
-
-// --- SINGULAR ITEM DISPATCH ---
-batchExecutor.dispatchSync(soloDoc);
-batchExecutor.handleCommand(new ApproveDocumentCommand("SOLO-1", "DOC-SOLO", "Approved instantly"));
+// Dispatch 500 items concurrently on Virtual Threads
+batchExecutor.dispatchBatchSync(itemsList);
 ```
 
 ---
 
-### 7. Concurrent Parallel Fork-Join Branches
+## ☕ Java 25+ Language Features in Action
 
-Run multiple independent tasks simultaneously on virtual threads; if any branch fails, completed branches are rolled back:
+### Exhaustive Pattern Matching on Sealed Exceptions
+
+`StateMachineException` is a sealed class permitting specific error subtypes, enabling compile-time exhaustive switch pattern matching without `default:` branches:
 
 ```java
-.state(OrderState.PARALLEL_CHECKS)
-    .parallel()
-        .branch("stockCheck", 
-            ctx -> ctx.checkStock(), 
-            ctx -> ctx.releaseStockReservation())
-        .branch("fraudCheck", 
-            ctx -> ctx.runFraudScore(), 
-            null)
-        .branch("taxCalculation", 
-            ctx -> ctx.calculateTaxes(), 
-            null)
-        .compensate(ctx -> ctx.rollbackParallelStage())
-    .transition(OrderState.PAYMENT)
+try {
+    executor.dispatchSync(input);
+} catch (StateMachineException ex) {
+    String diagnostic = switch (ex) {
+        case ActionException ae -> "Action failed in state [" + ae.getStateName() + "]: " + ae.getCause().getMessage();
+        case TransitionException te -> "Invalid transition from [" + te.getSourceStateName() + "] to [" + te.getTargetStateName() + "]";
+        case BackpressureException be -> "Admission backpressure: " + be.getMessage();
+        case MaxTransitionsExceededException mte -> "Global transition limit reached: " + mte.getMaxTransitions();
+        case MaxStateVisitsExceededException msve -> "Max visits exceeded for state [" + msve.getStateName() + "]";
+        case CompensationException ce -> "Saga rollback error in state [" + ce.getStateName() + "]";
+    };
+    log.error(diagnostic, ex);
+}
+```
+
+### Record Pattern Deconstruction
+
+```java
+if (envelope instanceof CommandEnvelope(UUID id, Instant timestamp, PaymentApprovedCommand(String paymentId, int amount, String authCode))) {
+    System.out.printf("Command [%s] processed payment %s for $%d with auth %s%n", id, paymentId, amount / 100, authCode);
+}
 ```
 
 ---
 
-## 🛡️ Resilience, Loop Prevention & Circuit Breakers
+## 🛡️ Resilience, Loop Prevention & Admission Control
 
-Dispersion enforces strict runtime guarantees to eliminate runaway execution:
+### State Visit Limits & Fallback Recovery
 
-1. **Per-State Visit Limits & Fallbacks**:
-   ```java
-   .state(PaymentState.VERIFY_OTP)
-       .maxVisits(3, PaymentState.OTP_LIMIT_EXCEEDED) // Divert to fallback after 3 visits
-       .transition(ctx -> ctx.isOtpValid() ? PaymentState.SUCCESS : PaymentState.VERIFY_OTP)
-   ```
-
-2. **Global Transition Circuit Breaker**:
-   ```java
-   .maxTransitions(500) // Halts execution if more than 500 transitions occur in a single run
-   ```
-
-3. **Runtime Adjacency Enforcement**:
-   ```java
-   .state(OrderState.SUBMITTED)
-       .transitionsTo(Set.of(OrderState.PAID, OrderState.CANCELLED), ctx -> ctx.resolveNext())
-       // Throws TransitionException if resolveNext() attempts an undeclared edge
-   ```
-
----
-
-## 🚥 Concurrency & Admission Control
-
-Dispersion protects systems under high load using admission controllers:
+Prevent infinite loops caused by cyclic transitions or transient retries:
 
 ```java
-import com.github.f442y.dispersion.executor.AdmissionController;
-import com.github.f442y.dispersion.executor.BackpressureStrategy;
-import java.time.Duration;
+.state(PaymentState.CONTACT_GATEWAY)
+    .action(ctx -> callGateway(ctx))
+    // If this state is visited more than 3 times, divert execution to fallback state!
+    .maxVisits(3, PaymentState.FALLBACK_OFFLINE_QUEUE)
+    .transition(PaymentState.SETTLED)
+```
 
-// Allow up to 5,000 concurrent workflows; reject bursts with REJECT_IMMEDIATELY
-AdmissionController admission = new AdmissionController(5_000, BackpressureStrategy.REJECT_IMMEDIATELY);
+### Global Circuit Breakers
 
-// Or wait with timeout:
-AdmissionController timeoutAdmission = new AdmissionController(
-    2_500, 
-    BackpressureStrategy.WAIT_WITH_TIMEOUT, 
-    Duration.ofMillis(250)
+```java
+// Trips circuit breaker and aborts if any execution performs more than 50 total transitions
+.maxTransitions(50)
+```
+
+### Virtual Thread Admission Control & Backpressure
+
+Prevent memory saturation during massive traffic spikes:
+
+```java
+// Buffer up to 10,000 concurrent virtual threads; reject immediately if capacity is exceeded
+AdmissionController admission = AdmissionController.rejectImmediately(10_000);
+
+var executor = new BufferedStateMachineExecutor<>(
+    "buffered-executor",
+    machineConfig,
+    admission
 );
+```
 
-var executor = new AtomicStateMachineExecutor<>("high-throughput-fsm", stateMachine, admission);
+### Mermaid Diagram Export
+
+Export state maps to Mermaid syntax for documentation:
+
+```java
+String mermaid = machineConfig.getStateMap().toMermaid();
+System.out.println(mermaid);
 ```
 
 ---
@@ -589,10 +790,10 @@ var executor = new AtomicStateMachineExecutor<>("high-throughput-fsm", stateMach
 
 ```
 dispersion/
-├── dispersion-bom/          # Bill of Materials POM for dependency management
-├── dispersion-api/          # Core interfaces, state definitions, exceptions, and models
-├── dispersion-core/         # Virtual Thread execution engine, builders, and Saga coordination
-└── dispersion-examples/     # Runnable showcase tests and production design patterns
+├── dispersion-bom/          # Centralized Bill of Materials POM
+├── dispersion-api/          # Interfaces, Sealed Exceptions, Records, SPIs
+├── dispersion-core/         # Execution Engines, Virtual Thread Executors, Sagas
+└── dispersion-examples/     # Real-world Distributed Saga Reference Implementations
 ```
 
 ---
@@ -600,21 +801,21 @@ dispersion/
 ## 🛠️ Building & Testing
 
 ### Prerequisites
-- **JDK 25** (e.g. Azul Zulu JDK 25 or OpenJDK 25)
-- Apache Maven 3.9+ (or use the included `./mvnw`)
+- **JDK 25+** (e.g. OpenJDK 25 / Azul Zulu 25)
+- **Maven 3.9+** (or use the included `./mvnw`)
 
-### Commands
+### Build & Run Test Suite
 
 ```bash
-# Build and run all unit & integration tests
-./mvnw clean verify
+# Build all modules
+./mvnw clean compile
 
-# On Windows PowerShell
-.\mvnw.cmd clean verify
+# Run complete test suite across all modules
+./mvnw clean test
 ```
 
 ---
 
 ## 📄 License
 
-Dispersion is open-source software licensed under the [Apache License, Version 2.0](LICENSE).
+Dispersion is open-source software licensed under the [Apache License, Version 2.0](https://opensource.org/licenses/Apache-2.0).

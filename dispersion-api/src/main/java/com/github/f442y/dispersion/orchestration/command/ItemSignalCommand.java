@@ -3,18 +3,22 @@ package com.github.f442y.dispersion.orchestration.command;
 import org.jspecify.annotations.NonNull;
 
 /**
- * Signal command targeting a specific item unit inside a batch orchestration.
+ * Signal command targeting a specific item within a Set/Batch Orchestration.
  */
 public interface ItemSignalCommand extends SignalCommand {
 
     /**
-     * The parent batch correlation key (e.g. orderId, batchJobId).
+     * Domain key identifying the batch collection.
+     *
+     * @return The batch key
      */
     @NonNull
     String batchKey();
 
     /**
-     * The individual unit identifier within the batch (e.g. lineItemId, sku, documentId).
+     * Domain key identifying the specific item within the batch.
+     *
+     * @return The item key
      */
     @NonNull
     String itemKey();

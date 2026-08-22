@@ -14,7 +14,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Checkpoint snapshot capturing the batch orchestration state, item-level states, and barrier arrivals.
+ * Immutable durable snapshot of a Set/Batch Orchestration across all managed item contexts.
+ *
+ * @param <BATCH_CONTEXT> The batch-level context type
+ * @param <ITEM_CONTEXT>  The item-level context type
+ * @param <STATE_KEY>     The state key enum type
  */
 public record BatchOrchestrationCheckpoint<
         BATCH_CONTEXT extends StateMachineContext,
@@ -44,6 +48,6 @@ public record BatchOrchestrationCheckpoint<
         Objects.requireNonNull(batchContext, "batchContext must not be null");
         arrivedBarrierItemKeys = (arrivedBarrierItemKeys != null) ? Set.copyOf(arrivedBarrierItemKeys) : Collections.emptySet();
         processedCommandIds = (processedCommandIds != null) ? Set.copyOf(processedCommandIds) : Collections.emptySet();
-        Objects.requireNonNull(timestamp, "timestamp must not be null");
+        timestamp = (timestamp != null) ? timestamp : Instant.now();
     }
 }

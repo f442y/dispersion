@@ -1,17 +1,17 @@
 package com.github.f442y.dispersion.orchestration.batch;
 
 /**
- * Failure handling strategy for batch orchestrations when one or more items encounter unhandled errors.
+ * Failure handling policy when an individual item encounters an unhandled failure in a batch.
  */
 public enum BatchFailurePolicy {
 
     /**
-     * Any item failure aborts the entire batch and triggers automated Saga compensation rollbacks.
+     * Immediately terminates the entire batch orchestration and unwinds all completed items.
      */
     FAIL_FAST,
 
     /**
-     * Failed items are isolated, allowing healthy items to cross barriers and finish.
+     * Marks the failed item as failed and continues processing remaining items in the batch.
      */
     ISOLATE_FAILED_ITEMS
 }

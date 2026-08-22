@@ -8,10 +8,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Service Provider Interface (SPI) for persisting and retrieving {@link OrchestrationCheckpoint} snapshots
- * across dehydration, suspension, and rehydration lifecycles.
+ * Pluggable storage SPI for persisting and rehydrating orchestration checkpoints across turn boundaries.
  *
- * @param <CONTEXT>   The concrete context type
+ * @param <CONTEXT>   The context type
  * @param <STATE_KEY> The state key enum type
  */
 public interface CheckpointStore<
@@ -19,34 +18,34 @@ public interface CheckpointStore<
         STATE_KEY extends Enum<STATE_KEY> & StateKey> {
 
     /**
-     * Persists or updates the specified orchestration checkpoint snapshot.
+     * Persists or updates the given orchestration checkpoint.
      *
      * @param checkpoint The checkpoint snapshot to save
      */
     void save(@NonNull OrchestrationCheckpoint<CONTEXT, STATE_KEY> checkpoint);
 
     /**
-     * Retrieves an orchestration checkpoint snapshot by its unique machine UUID.
+     * Finds a persisted checkpoint by the unique machine ID.
      *
      * @param machineId The state machine UUID
-     * @return Optional containing the checkpoint if found; otherwise empty
+     * @return Optional containing the checkpoint if found
      */
     @NonNull
     Optional<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> findById(@NonNull UUID machineId);
 
     /**
-     * Retrieves an orchestration checkpoint snapshot by its business correlation key.
+     * Finds a persisted checkpoint by a domain correlation key.
      *
-     * @param correlationKey The correlation identifier (e.g. order ID, payment ID)
-     * @return Optional containing the checkpoint if found; otherwise empty
+     * @param correlationKey The domain correlation key
+     * @return Optional containing the checkpoint if found
      */
     @NonNull
     Optional<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> findByCorrelationKey(@NonNull String correlationKey);
 
     /**
-     * Deletes a checkpoint snapshot from storage upon terminal workflow completion.
+     * Deletes the checkpoint corresponding to the given machine ID.
      *
-     * @param machineId The unique machine UUID to remove
+     * @param machineId The state machine UUID to delete
      */
     void delete(@NonNull UUID machineId);
 }

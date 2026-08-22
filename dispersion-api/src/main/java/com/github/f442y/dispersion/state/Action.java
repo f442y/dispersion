@@ -4,8 +4,7 @@ import com.github.f442y.dispersion.context.StateMachineContext;
 import org.jspecify.annotations.NonNull;
 
 /**
- * Functional interface representing an isolated, transactional unit of business logic
- * executed within a state machine state.
+ * Functional interface representing an isolated unit of business execution logic within a state machine state.
  * <p>
  * Actions operate directly on a thread-confined {@link StateMachineContext}. Since each state machine
  * instance executes on its own dedicated virtual thread, actions do not require thread synchronization

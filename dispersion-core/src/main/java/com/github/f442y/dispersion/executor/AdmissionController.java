@@ -10,130 +10,97 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Manages concurrent task admission and applies backpressure control to prevent
- * overwhelming system resources under high burst loads.
+ * Concurrency admission coordinator managing permit allocation and backpressure strategies
+ * for state machine executors on Java Virtual Threads.
  */
 public class AdmissionController {
 
-    @NonNull
+    private final int maxConcurrent;
+    private final BackpressureStrategy strategy;
+    private final Duration defaultTimeout;
     private final Semaphore semaphore;
 
-    @NonNull
-    private final BackpressureStrategy strategy;
-
-    @NonNull
-    private final Duration defaultTimeout;
-
-    /**
-     * Creates an {@link AdmissionController} with the default {@link BackpressureStrategy#BLOCK} strategy.
-     *
-     * @param maxConcurrentTasks Maximum number of concurrent tasks allowed
-     */
-    public AdmissionController(int maxConcurrentTasks) {
-        this(maxConcurrentTasks, BackpressureStrategy.BLOCK, Duration.ofSeconds(30));
+    public AdmissionController(int maxConcurrent) {
+        this(maxConcurrent, BackpressureStrategy.BLOCK, Duration.ofSeconds(30));
     }
 
-    /**
-     * Creates an {@link AdmissionController} with a custom backpressure strategy.
-     *
-     * @param maxConcurrentTasks Maximum number of concurrent tasks allowed
-     * @param strategy           Backpressure handling strategy
-     */
-    public AdmissionController(int maxConcurrentTasks, @NonNull BackpressureStrategy strategy) {
-        this(maxConcurrentTasks, strategy, Duration.ofSeconds(30));
+    public AdmissionController(int maxConcurrent, @NonNull BackpressureStrategy strategy) {
+        this(maxConcurrent, strategy, Duration.ofSeconds(30));
     }
 
-    /**
-     * Creates an {@link AdmissionController} with a custom backpressure strategy and timeout.
-     *
-     * @param maxConcurrentTasks Maximum number of concurrent tasks allowed
-     * @param strategy           Backpressure handling strategy
-     * @param defaultTimeout     Default timeout when using {@link BackpressureStrategy#WAIT_WITH_TIMEOUT}
-     */
     public AdmissionController(
-            int maxConcurrentTasks,
+            int maxConcurrent,
             @NonNull BackpressureStrategy strategy,
-            @NonNull Duration defaultTimeout
+            @Nullable Duration defaultTimeout
     ) {
-        if (maxConcurrentTasks <= 0) {
-            throw new IllegalArgumentException("maxConcurrentTasks must be greater than 0, got: " + maxConcurrentTasks);
+        if (maxConcurrent < 1) {
+            throw new IllegalArgumentException("maxConcurrent must be >= 1, but was: " + maxConcurrent);
         }
-        this.semaphore = new Semaphore(maxConcurrentTasks);
+        this.maxConcurrent = maxConcurrent;
         this.strategy = Objects.requireNonNull(strategy, "strategy must not be null");
-        this.defaultTimeout = Objects.requireNonNull(defaultTimeout, "defaultTimeout must not be null");
+        this.defaultTimeout = (defaultTimeout != null) ? defaultTimeout : Duration.ofSeconds(30);
+        this.semaphore = new Semaphore(maxConcurrent, true);
     }
 
     /**
-     * Acquires an admission permit according to the configured {@link BackpressureStrategy}.
+     * Attempts to acquire an execution permit according to the configured {@link BackpressureStrategy}.
      *
-     * @throws InterruptedException If the calling thread is interrupted while waiting
-     * @throws BackpressureException If the request is rejected due to saturated capacity
+     * @throws InterruptedException If the thread is interrupted while waiting
+     * @throws BackpressureException If permit acquisition fails or times out
      */
-    public void acquirePermit() throws InterruptedException, BackpressureException {
-        acquirePermit(null);
-    }
-
-    /**
-     * Acquires an admission permit with an optional custom timeout.
-     *
-     * @param overrideTimeout Custom timeout duration (used with {@link BackpressureStrategy#WAIT_WITH_TIMEOUT})
-     * @throws InterruptedException If the calling thread is interrupted while waiting
-     * @throws BackpressureException If the request is rejected due to saturated capacity or timeout
-     */
-    public void acquirePermit(@Nullable Duration overrideTimeout) throws InterruptedException, BackpressureException {
+    public void acquire() throws InterruptedException, BackpressureException {
         switch (strategy) {
             case BLOCK -> semaphore.acquire();
             case REJECT_IMMEDIATELY -> {
                 if (!semaphore.tryAcquire()) {
-                    throw new BackpressureException("State machine admission rejected: executor capacity is fully saturated (REJECT_IMMEDIATELY)");
+                    throw new BackpressureException(
+                            "Admission rejected: executor capacity saturated (" + maxConcurrent + " active tasks)"
+                    );
                 }
             }
-            case WAIT_WITH_TIMEOUT -> {
-                Duration timeout = (overrideTimeout != null) ? overrideTimeout : defaultTimeout;
-                boolean acquired = semaphore.tryAcquire(timeout.toMillis(), TimeUnit.MILLISECONDS);
-                if (!acquired) {
-                    throw new BackpressureException(String.format(
-                            "State machine admission rejected: timed out waiting %d ms for an available permit",
-                            timeout.toMillis()
-                    ));
-                }
-            }
+            case WAIT_WITH_TIMEOUT -> acquire(defaultTimeout);
         }
     }
 
     /**
-     * Releases an admission permit back to the semaphore pool.
+     * Attempts to acquire an execution permit with a specific timeout duration.
+     *
+     * @param timeout The maximum duration to wait for a permit
+     * @throws InterruptedException If interrupted while waiting
+     * @throws BackpressureException If permit could not be acquired within the timeout
      */
-    public void releasePermit() {
+    public void acquire(@NonNull Duration timeout) throws InterruptedException, BackpressureException {
+        Objects.requireNonNull(timeout, "timeout must not be null");
+        boolean acquired = semaphore.tryAcquire(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        if (!acquired) {
+            throw new BackpressureException(
+                    "Admission timed out waiting for permit after " + timeout.toMillis() + "ms"
+            );
+        }
+    }
+
+    /**
+     * Releases a previously acquired execution permit back to the admission pool.
+     */
+    public void release() {
         semaphore.release();
     }
 
-    /**
-     * Returns the current number of available permits.
-     *
-     * @return Available permits
-     */
-    public int availablePermits() {
-        return semaphore.availablePermits();
+    public int maxConcurrent() {
+        return maxConcurrent;
     }
 
-    /**
-     * Returns the configured {@link BackpressureStrategy}.
-     *
-     * @return The active strategy
-     */
     @NonNull
-    public BackpressureStrategy getStrategy() {
+    public BackpressureStrategy strategy() {
         return strategy;
     }
 
-    /**
-     * Returns the configured default timeout duration.
-     *
-     * @return The default timeout
-     */
     @NonNull
-    public Duration getDefaultTimeout() {
+    public Duration defaultTimeout() {
         return defaultTimeout;
+    }
+
+    public int availablePermits() {
+        return semaphore.availablePermits();
     }
 }

@@ -8,73 +8,33 @@ import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 
 /**
- * Represents an independent parallel branch of execution within an orchestration state.
- * Multiple branches execute concurrently on Java Virtual Threads.
+ * Definition of a single concurrent branch within a parallel fork-join orchestration state.
  *
- * @param <ORCHESTRATION_CONTEXT> The orchestration context type
+ * @param <CONTEXT> The parent context type
  */
-public interface ParallelBranch<ORCHESTRATION_CONTEXT extends StateMachineContext> {
+public record ParallelBranch<CONTEXT extends StateMachineContext>(
+        @NonNull String name,
+        @NonNull Action<CONTEXT> action,
+        @Nullable CompensationAction<CONTEXT> compensationAction
+) {
 
-    /**
-     * Returns the name identifier of this parallel branch.
-     *
-     * @return The branch name
-     */
-    @NonNull
-    String name();
+    public ParallelBranch {
+        Objects.requireNonNull(name, "name must not be null");
+        Objects.requireNonNull(action, "action must not be null");
+    }
 
-    /**
-     * Executes this parallel branch against the given orchestration context.
-     *
-     * @param context The current orchestration context
-     * @return The updated orchestration context
-     * @throws Exception If an error occurs
-     */
-    @NonNull
-    ORCHESTRATION_CONTEXT execute(@NonNull ORCHESTRATION_CONTEXT context) throws Exception;
+    public static <C extends StateMachineContext> ParallelBranch<C> of(
+            @NonNull String name,
+            @NonNull Action<C> action
+    ) {
+        return new ParallelBranch<>(name, action, null);
+    }
 
-    /**
-     * Returns the branch-level compensation action executed if a sibling branch
-     * fails during concurrent execution.
-     *
-     * @return The {@link CompensationAction} instance
-     */
-    @NonNull
-    CompensationAction<ORCHESTRATION_CONTEXT> compensationAction();
-
-    /**
-     * Creates a parallel branch wrapping a direct business action.
-     *
-     * @param <C>                The orchestration context type
-     * @param name               The branch name
-     * @param action             The business action
-     * @param compensationAction Optional branch compensation
-     * @return A new {@link ParallelBranch} instance
-     */
-    @NonNull
-    static <C extends StateMachineContext> ParallelBranch<C> of(
+    public static <C extends StateMachineContext> ParallelBranch<C> of(
             @NonNull String name,
             @NonNull Action<C> action,
             @Nullable CompensationAction<C> compensationAction
     ) {
-        Objects.requireNonNull(name, "name must not be null");
-        Objects.requireNonNull(action, "action must not be null");
-        CompensationAction<C> effComp = (compensationAction != null) ? compensationAction : CompensationAction.noop();
-        return new DirectActionBranch<>(name, action, effComp);
-    }
-
-    /**
-     * Direct action implementation of {@link ParallelBranch}.
-     */
-    record DirectActionBranch<C extends StateMachineContext>(
-            @NonNull String name,
-            @NonNull Action<C> action,
-            @NonNull CompensationAction<C> compensationAction
-    ) implements ParallelBranch<C> {
-        @NonNull
-        @Override
-        public C execute(@NonNull C context) throws Exception {
-            return action.execute(context);
-        }
+        return new ParallelBranch<>(name, action, compensationAction);
     }
 }

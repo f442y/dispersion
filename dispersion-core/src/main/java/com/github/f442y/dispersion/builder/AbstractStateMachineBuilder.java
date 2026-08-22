@@ -2,30 +2,28 @@ package com.github.f442y.dispersion.builder;
 
 import com.github.f442y.dispersion.config.InputFunction;
 import com.github.f442y.dispersion.config.OutputFunction;
-import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.context.StateMachineContextFactory;
+import com.github.f442y.dispersion.state.State;
 import com.github.f442y.dispersion.state.StateKey;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
-import java.util.Collections;
-import java.util.HashSet;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.Supplier;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
- * Abstract base builder defining common configuration properties and fluent methods
- * shared across both Atomic (micro) and Orchestration (macro) State Machine builders.
+ * Abstract fluent builder providing common configuration options across Atomic and Orchestration State Machines.
  *
- * @param <CONTEXT>   The concrete type of {@link StateMachineContext} managed by the state machine
- * @param <STATE_KEY> The enum type representing state identifiers in the state machine
- * @param <INPUT>     The type of input payload accepted by the state machine
- * @param <OUTPUT>    The type of output result produced upon state machine completion
- * @param <SELF>      The recursive self-type for fluent builder chaining
+ * @param <CONTEXT>   The concrete type of {@link StateMachineContext}
+ * @param <STATE_KEY> The state identifier enum type
+ * @param <INPUT>     The input payload type
+ * @param <OUTPUT>    The output return type
+ * @param <SELF>      The recursive builder subtype for method chaining
  */
 public abstract class AbstractStateMachineBuilder<
         CONTEXT extends StateMachineContext,
@@ -34,115 +32,98 @@ public abstract class AbstractStateMachineBuilder<
         OUTPUT,
         SELF extends AbstractStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT, SELF>> {
 
-    @NonNull
     protected final Class<STATE_KEY> stateKeyClass;
-
+    protected final Map<STATE_KEY, State<CONTEXT, STATE_KEY>> states;
+    protected STATE_KEY initialState;
+    protected final Set<STATE_KEY> endStates;
+    protected int maxTransitions = -1;
     protected StateMachineContextFactory<CONTEXT> contextFactory;
-    protected STATE_KEY initialStateKey;
-    protected final Set<STATE_KEY> endStateKeys = new HashSet<>();
     protected InputFunction<CONTEXT, INPUT> inputFunction;
     protected OutputFunction<CONTEXT, OUTPUT> outputFunction;
-    protected int maxTransitions = StateMachineConfiguration.DEFAULT_MAX_TRANSITIONS;
+    protected BiConsumer<CONTEXT, Throwable> exceptionTrigger;
+    protected Consumer<CONTEXT> finishTrigger;
 
     protected AbstractStateMachineBuilder(@NonNull Class<STATE_KEY> stateKeyClass) {
         this.stateKeyClass = Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
+        this.states = new EnumMap<>(stateKeyClass);
+        this.endStates = EnumSet.noneOf(stateKeyClass);
     }
 
     @SuppressWarnings("unchecked")
-    @NonNull
     protected SELF self() {
         return (SELF) this;
     }
 
-    /**
-     * Configures the supplier used to instantiate a fresh {@link StateMachineContext} for each execution.
-     *
-     * @param contextSupplier A lambda supplier returning a new context instance
-     * @return This builder instance for chaining
-     */
     @NonNull
-    public SELF context(@NonNull Supplier<CONTEXT> contextSupplier) {
-        Objects.requireNonNull(contextSupplier, "context supplier must not be null");
-        this.contextFactory = contextSupplier::get;
+    public SELF context(@NonNull StateMachineContextFactory<CONTEXT> factory) {
+        this.contextFactory = Objects.requireNonNull(factory, "factory must not be null");
         return self();
     }
 
-    /**
-     * Configures the factory used to instantiate a fresh {@link StateMachineContext}.
-     *
-     * @param contextFactory The factory instance
-     * @return This builder instance for chaining
-     */
-    @NonNull
-    public SELF contextFactory(@NonNull StateMachineContextFactory<CONTEXT> contextFactory) {
-        this.contextFactory = Objects.requireNonNull(contextFactory, "contextFactory must not be null");
-        return self();
-    }
-
-    /**
-     * Sets the entry-point state key for the state machine.
-     *
-     * @param initialState The initial state key
-     * @return This builder instance for chaining
-     */
     @NonNull
     public SELF initialState(@NonNull STATE_KEY initialState) {
-        this.initialStateKey = Objects.requireNonNull(initialState, "initialState must not be null");
+        this.initialState = Objects.requireNonNull(initialState, "initialState must not be null");
         return self();
     }
 
-    /**
-     * Configures a global maximum transition circuit breaker to prevent infinite loops.
-     *
-     * @param maxTransitions Maximum transitions allowed in a single execution run
-     * @return This builder instance for chaining
-     */
+    @NonNull
+    public SELF endState(@NonNull STATE_KEY endState) {
+        Objects.requireNonNull(endState, "endState must not be null");
+        this.endStates.add(endState);
+        return self();
+    }
+
+    @NonNull
+    @SafeVarargs
+    public final SELF endStates(@NonNull STATE_KEY... endStates) {
+        for (STATE_KEY s : endStates) {
+            endState(s);
+        }
+        return self();
+    }
+
+    @NonNull
+    public SELF endStates(@NonNull Set<STATE_KEY> endStates) {
+        Objects.requireNonNull(endStates, "endStates must not be null");
+        this.endStates.addAll(endStates);
+        return self();
+    }
+
     @NonNull
     public SELF maxTransitions(int maxTransitions) {
         this.maxTransitions = maxTransitions;
         return self();
     }
 
-    /**
-     * Declares one or more terminal end states that conclude the state machine lifecycle.
-     *
-     * @param endStates The state keys representing terminal endpoints
-     * @return This builder instance for chaining
-     */
     @NonNull
-    @SafeVarargs
-    public final SELF endStates(@NonNull STATE_KEY... endStates) {
-        if (endStates != null) {
-            Collections.addAll(this.endStateKeys, endStates);
-        }
+    public SELF input(@NonNull InputFunction<CONTEXT, INPUT> inputFunction) {
+        this.inputFunction = Objects.requireNonNull(inputFunction, "inputFunction must not be null");
         return self();
     }
 
-    /**
-     * Configures the input transformation function applied before state execution begins.
-     *
-     * @param inputFunction Function merging input payload into the initial context
-     * @return This builder instance for chaining
-     */
     @NonNull
-    public SELF input(@Nullable BiFunction<CONTEXT, INPUT, CONTEXT> inputFunction) {
-        if (inputFunction != null) {
-            this.inputFunction = inputFunction::apply;
-        }
+    public SELF output(@NonNull OutputFunction<CONTEXT, OUTPUT> outputFunction) {
+        this.outputFunction = Objects.requireNonNull(outputFunction, "outputFunction must not be null");
         return self();
     }
 
-    /**
-     * Configures the output transformation function extracting the final result from context.
-     *
-     * @param outputFunction Function extracting the final output from context upon completion
-     * @return This builder instance for chaining
-     */
     @NonNull
-    public SELF output(@Nullable Function<CONTEXT, OUTPUT> outputFunction) {
-        if (outputFunction != null) {
-            this.outputFunction = outputFunction::apply;
-        }
+    public SELF onException(@NonNull BiConsumer<CONTEXT, Throwable> exceptionTrigger) {
+        this.exceptionTrigger = Objects.requireNonNull(exceptionTrigger, "exceptionTrigger must not be null");
+        return self();
+    }
+
+    @NonNull
+    public SELF onFinish(@NonNull Consumer<CONTEXT> finishTrigger) {
+        this.finishTrigger = Objects.requireNonNull(finishTrigger, "finishTrigger must not be null");
+        return self();
+    }
+
+    @NonNull
+    public SELF addState(@NonNull STATE_KEY stateKey, @NonNull State<CONTEXT, STATE_KEY> state) {
+        Objects.requireNonNull(stateKey, "stateKey must not be null");
+        Objects.requireNonNull(state, "state must not be null");
+        this.states.put(stateKey, state);
         return self();
     }
 }

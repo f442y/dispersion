@@ -1,42 +1,27 @@
 package com.github.f442y.dispersion.exception;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Sealed root abstract exception class for all errors and exceptional conditions originating
- * within the Finite State Machine engine.
+ * Sealed root base class for all Finite State Machine runtime exceptions in Dispersion.
  * <p>
- * Using a sealed class hierarchy ensures compile-time exhaustiveness in {@code switch} pattern matching.
+ * Using a sealed class enables exhaustive pattern matching with Java 25 {@code switch} expressions
+ * across all possible failure modes of state machine execution.
  */
-public abstract sealed class StateMachineException extends Exception
-        permits ActionException, TransitionException, BackpressureException,
-                MaxTransitionsExceededException, MaxStateVisitsExceededException {
+public abstract sealed class StateMachineException extends RuntimeException
+        permits ActionException,
+                TransitionException,
+                BackpressureException,
+                MaxTransitionsExceededException,
+                MaxStateVisitsExceededException,
+                CompensationException {
 
-    /**
-     * Constructs a new state machine exception with the specified detail message.
-     *
-     * @param message The detail message explaining the cause of the failure
-     */
-    public StateMachineException(@Nullable String message) {
+    protected StateMachineException(@NonNull String message) {
         super(message);
     }
 
-    /**
-     * Constructs a new state machine exception with the specified detail message and root cause.
-     *
-     * @param message The detail message explaining the cause of the failure
-     * @param cause   The underlying cause of the failure
-     */
-    public StateMachineException(@Nullable String message, @Nullable Throwable cause) {
+    protected StateMachineException(@NonNull String message, @Nullable Throwable cause) {
         super(message, cause);
-    }
-
-    /**
-     * Constructs a new state machine exception with the specified root cause.
-     *
-     * @param cause The underlying cause of the failure
-     */
-    public StateMachineException(@Nullable Throwable cause) {
-        super(cause);
     }
 }

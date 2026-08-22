@@ -13,7 +13,6 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -27,7 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -48,8 +46,6 @@ public final class BatchOrchestrationStepDriver {
         public SignalHandler<ITEM_CONTEXT, ?> signalHandler;
         public boolean isBarrier = false;
         public BarrierPolicy barrierPolicy = BarrierPolicy.ALL_ITEMS_ARRIVED;
-        public String expectedBatchSignal;
-        public BiFunction<StateMachineContext, List<ITEM_CONTEXT>, StateMachineContext> batchAction;
     }
 
     public static class BatchConfiguration<
@@ -106,9 +102,9 @@ public final class BatchOrchestrationStepDriver {
                 itemContexts,
                 arrivedBarrierItemKeys,
                 processedCommandIds,
-                null, // targetItemKey
-                null, // itemSignal
-                null, // batchSignal
+                null,
+                null,
+                null,
                 virtualThreadExecutor
         );
     }
@@ -144,7 +140,17 @@ public final class BatchOrchestrationStepDriver {
             if (processedCommandIds.contains(env.commandId())) {
                 log.info("Ignoring duplicate command [{}] for batch [{}]", env.commandId(), checkpoint.batchKey());
                 OUTPUT out = (config.outputFunction != null) ? config.outputFunction.apply(checkpoint.batchContext()) : null;
-                return new BatchTurnResult<>(checkpoint.batchId(), checkpoint.batchKey(), checkpoint.status(), checkpoint.currentBatchStateKey(), itemStates, itemContexts, checkpoint.batchContext(), out, null);
+                return new BatchTurnResult<>(
+                        checkpoint.batchId(),
+                        checkpoint.batchKey(),
+                        checkpoint.status(),
+                        checkpoint.currentBatchStateKey(),
+                        itemStates,
+                        itemContexts,
+                        checkpoint.batchContext(),
+                        out,
+                        null
+                );
             }
             processedCommandIds.add(env.commandId());
             effectiveItemSignal = env.command();
@@ -310,7 +316,17 @@ public final class BatchOrchestrationStepDriver {
             Throwable firstFailure = failures.get(0);
             if (config.failurePolicy == BatchFailurePolicy.FAIL_FAST) {
                 OUTPUT out = (config.outputFunction != null) ? config.outputFunction.apply(batchContext) : null;
-                return new BatchTurnResult<>(batchId, batchKey, OrchestrationStatus.COMPENSATED, null, itemStates, itemContexts, batchContext, out, firstFailure);
+                return new BatchTurnResult<>(
+                        batchId,
+                        batchKey,
+                        OrchestrationStatus.COMPENSATED,
+                        null,
+                        itemStates,
+                        itemContexts,
+                        batchContext,
+                        out,
+                        firstFailure
+                );
             }
         }
 

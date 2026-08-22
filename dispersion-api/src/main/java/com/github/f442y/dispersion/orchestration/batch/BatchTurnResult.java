@@ -12,7 +12,12 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Result model representing the outcome of a batch execution turn across item contexts.
+ * Immutable record capturing the outcome of a batch orchestration turn execution.
+ *
+ * @param <BATCH_CONTEXT> The batch-level context type
+ * @param <ITEM_CONTEXT>  The item-level context type
+ * @param <STATE_KEY>     The state key enum type
+ * @param <OUTPUT>        The output type
  */
 public record BatchTurnResult<
         BATCH_CONTEXT extends StateMachineContext,
@@ -48,6 +53,10 @@ public record BatchTurnResult<
     }
 
     public boolean isFailed() {
-        return status == OrchestrationStatus.COMPENSATED || error != null;
+        return status == OrchestrationStatus.FAILED;
+    }
+
+    public boolean isCompensated() {
+        return status == OrchestrationStatus.COMPENSATED;
     }
 }

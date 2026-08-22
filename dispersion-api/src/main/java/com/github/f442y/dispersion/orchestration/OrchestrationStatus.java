@@ -1,21 +1,42 @@
 package com.github.f442y.dispersion.orchestration;
 
 /**
- * Represents the lifecycle execution status of an Orchestration State Machine.
+ * Lifecycle execution status of a turn-based durable Orchestration State Machine.
  */
 public enum OrchestrationStatus {
-    /** The orchestration state machine is initialized and pending execution. */
+
+    /**
+     * Initial status before the first turn begins.
+     */
     PENDING,
-    /** The orchestration state machine is currently traversing states on virtual threads. */
+
+    /**
+     * Currently executing a step or turn on a virtual thread.
+     */
     RUNNING,
-    /** The orchestration state machine reached a terminal end state successfully. */
+
+    /**
+     * Successfully transitioned to a terminal end state.
+     */
     COMPLETED,
-    /** The orchestration state machine is suspended/dehydrated waiting for an external signal or event. */
+
+    /**
+     * Execution suspended at a signal/command wait state, releasing thread and persisting a checkpoint.
+     */
     SUSPENDED,
-    /** A state failed permanently and saga compensation is currently executing. */
+
+    /**
+     * Unwinding actions via LIFO Saga compensations due to a downstream failure.
+     */
     COMPENSATING,
-    /** Saga compensation finished and the orchestration state machine concluded in a rolled-back state. */
+
+    /**
+     * Saga compensation rollback has completed.
+     */
     COMPENSATED,
-    /** The orchestration state machine failed permanently. */
+
+    /**
+     * Execution terminated with a fatal unhandled failure or uncompensated error.
+     */
     FAILED
 }

@@ -1,62 +1,60 @@
 package com.github.f442y.dispersion.executor;
 
+import com.github.f442y.dispersion.StateMachineFuture;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.concurrent.Future;
-
 /**
- * Universal execution contract for both Atomic (Micro) and Orchestration (Macro) State Machines.
+ * Universal execution contract for Finite State Machines, supporting both synchronous blocking
+ * and non-blocking asynchronous dispatch on Java Virtual Threads.
  *
- * @param <CONTEXT> The state machine context type
- * @param <INPUT>   The input payload type
- * @param <OUTPUT>  The output result type
+ * @param <CONTEXT> The concrete type of {@link StateMachineContext} managed by the state machine
+ * @param <INPUT>   The input payload accepted by the state machine
+ * @param <OUTPUT>  The return result produced by the state machine
  */
 public interface StateMachineExecutor<CONTEXT extends StateMachineContext, INPUT, OUTPUT> extends AutoCloseable {
 
     /**
-     * Executes the state machine synchronously, blocking the caller until completion.
+     * Synchronously dispatches a state machine execution with a new context instance and the given input.
      *
-     * @param input The input payload
-     * @return The final output result
-     * @throws Exception If state machine execution fails
+     * @param input The external input payload
+     * @return The final output result produced by the state machine
+     * @throws Exception If an unhandled execution error or backpressure exception occurs
      */
     @Nullable
     OUTPUT dispatchSync(@Nullable INPUT input) throws Exception;
 
     /**
-     * Executes the state machine synchronously with a pre-populated initial context.
+     * Synchronously dispatches a state machine execution using an explicit initial context and input.
      *
-     * @param initialContext Pre-populated context
-     * @param input          The input payload
-     * @return The final output result
-     * @throws Exception If state machine execution fails
+     * @param initialContext The initial context instance to execute with
+     * @param input          The external input payload
+     * @return The final output result produced by the state machine
+     * @throws Exception If an unhandled execution error or backpressure exception occurs
      */
     @Nullable
-    OUTPUT dispatchSync(@Nullable CONTEXT initialContext, @Nullable INPUT input) throws Exception;
+    OUTPUT dispatchSync(@NonNull CONTEXT initialContext, @Nullable INPUT input) throws Exception;
 
     /**
-     * Dispatches the state machine asynchronously on a dedicated Virtual Thread.
+     * Asynchronously dispatches a state machine execution on a dedicated Virtual Thread.
      *
-     * @param input The input payload
-     * @return A {@link Future} tracking execution completion
-     * @throws Exception If dispatch admission is rejected
+     * @param input The external input payload
+     * @return A {@link StateMachineFuture} handle wrapping execution and providing cancellation and future resolution
      */
     @NonNull
-    Future<OUTPUT> dispatchAsync(@Nullable INPUT input) throws Exception;
+    StateMachineFuture<OUTPUT> dispatchAsync(@Nullable INPUT input);
 
     /**
-     * Dispatches the state machine asynchronously with a pre-populated initial context.
+     * Asynchronously dispatches a state machine execution on a dedicated Virtual Thread with explicit context.
      *
-     * @param initialContext Pre-populated context
-     * @param input          The input payload
-     * @return A {@link Future} tracking execution completion
-     * @throws Exception If dispatch admission is rejected
+     * @param initialContext The initial context instance to execute with
+     * @param input          The external input payload
+     * @return A {@link StateMachineFuture} handle wrapping execution and providing cancellation and future resolution
      */
     @NonNull
-    Future<OUTPUT> dispatchAsync(@Nullable CONTEXT initialContext, @Nullable INPUT input) throws Exception;
+    StateMachineFuture<OUTPUT> dispatchAsync(@NonNull CONTEXT initialContext, @Nullable INPUT input);
 
     @Override
-    default void close() {}
+    void close();
 }

@@ -67,11 +67,11 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     /**
      * Creates an intermediate state pairing the given action with explicit permitted targets and a dynamic transition.
      *
-     * @param <C> The context type
-     * @param <S> The state key type
-     * @param action The action business logic
+     * @param <C>              The context type
+     * @param <S>              The state key type
+     * @param action           The action business logic
      * @param permittedTargets The explicit set of valid next states
-     * @param transition The transition routing logic
+     * @param transition       The transition routing logic
      * @return A new {@link State} instance
      */
     @NonNull
@@ -86,13 +86,13 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     /**
      * Creates an intermediate state pairing the given action with explicit permitted targets, transition, and visit limits.
      *
-     * @param <C> The context type
-     * @param <S> The state key type
-     * @param action The action business logic
-     * @param permittedTargets The explicit set of valid next states
-     * @param transition The transition routing logic
-     * @param maxVisits Maximum allowed visits
-     * @param maxVisitsFallback Optional fallback state key
+     * @param <C>                 The context type
+     * @param <S>                 The state key type
+     * @param action              The action business logic
+     * @param permittedTargets    The explicit set of valid next states
+     * @param transition          The transition routing logic
+     * @param maxVisits           Maximum allowed visits
+     * @param maxVisitsFallback   Optional fallback state key
      * @return A new {@link State} instance
      */
     @NonNull
@@ -109,9 +109,9 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     /**
      * Creates an intermediate state pairing the given action with an unconditional next state.
      *
-     * @param <C> The context type
-     * @param <S> The state key type
-     * @param action The action business logic
+     * @param <C>       The context type
+     * @param <S>       The state key type
+     * @param action    The action business logic
      * @param nextState The deterministic next state key
      * @return A new {@link State} instance
      */
@@ -137,7 +137,7 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     }
 
     /**
-     * Default immutable implementation of {@link State}.
+     * Default immutable record implementation of {@link State}.
      */
     record SimpleState<C extends StateMachineContext, S extends Enum<S> & StateKey>(
             @NonNull Action<C> action,
@@ -149,7 +149,7 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     ) implements State<C, S> {
         public SimpleState {
             action = (action != null) ? action : Action.identity();
-            permittedTargets = (permittedTargets != null) ? Collections.unmodifiableSet(permittedTargets) : Collections.emptySet();
+            permittedTargets = (permittedTargets != null) ? Set.copyOf(permittedTargets) : Collections.emptySet();
             transition = (transition != null) ? transition : Transition.terminal();
         }
     }

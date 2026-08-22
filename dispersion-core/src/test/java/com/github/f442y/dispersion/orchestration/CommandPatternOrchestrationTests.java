@@ -69,7 +69,7 @@ public class CommandPatternOrchestrationTests {
         }
 
         @Override
-        public EcomContext undo(EcomContext context) {
+        public EcomContext compensate(EcomContext context) {
             context.inventoryReleased = true;
             context.executionLog.add("UNRESERVED_SKU_" + sku + "_" + count);
             return context;

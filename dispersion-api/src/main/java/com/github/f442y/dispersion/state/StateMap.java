@@ -6,109 +6,159 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Immutable lookup table and directed graph representing all states and their permitted transitions
- * within a Finite State Machine.
+ * Immutable topological directed graph representation of a Finite State Machine.
  * <p>
- * Validates graph integrity at construction time, ensuring all edges and fallback destinations
- * target existing states and that terminal states have no outgoing transitions.
+ * Enforces compile-time and build-time graph integrity checks:
+ * <ul>
+ *   <li>Initial state must be registered.</li>
+ *   <li>All declared target states (permitted targets) must be valid registered states.</li>
+ *   <li>Terminal end-states cannot have outgoing permitted target transitions.</li>
+ *   <li>Fallback states for visit-limited states must be registered in the graph.</li>
+ * </ul>
  *
  * @param <CONTEXT>   The concrete type of {@link StateMachineContext} managed by the state machine
  * @param <STATE_KEY> The enum type representing state identifiers in the state machine
  */
 public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> {
 
-    @NonNull
-    private final Map<STATE_KEY, State<CONTEXT, STATE_KEY>> stateEnumMap;
-
-    @NonNull
+    private final Class<STATE_KEY> stateKeyClass;
+    private final Map<STATE_KEY, State<CONTEXT, STATE_KEY>> stateMap;
     private final STATE_KEY initialState;
+    private final Set<STATE_KEY> endStates;
 
-    /**
-     * Constructs an immutable {@link StateMap} from the provided state definitions and initial state key.
-     *
-     * @param states       The map containing state keys mapped to state definitions
-     * @param initialState The entry-point state key for the state machine
-     */
-    public StateMap(
-            @NonNull Map<STATE_KEY, State<CONTEXT, STATE_KEY>> states,
-            @NonNull STATE_KEY initialState
+    private StateMap(
+            @NonNull Class<STATE_KEY> stateKeyClass,
+            @NonNull Map<STATE_KEY, State<CONTEXT, STATE_KEY>> stateMap,
+            @NonNull STATE_KEY initialState,
+            @NonNull Set<STATE_KEY> endStates
     ) {
-        Objects.requireNonNull(states, "states map must not be null");
+        this.stateKeyClass = Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
+        this.stateMap = Collections.unmodifiableMap(new EnumMap<>(stateMap));
         this.initialState = Objects.requireNonNull(initialState, "initialState must not be null");
-        this.stateEnumMap = new EnumMap<>(states);
+        this.endStates = Collections.unmodifiableSet(
+                endStates.isEmpty() ? EnumSet.noneOf(stateKeyClass) : EnumSet.copyOf(endStates)
+        );
+        validateGraphTopology();
+    }
+
+    private void validateGraphTopology() {
+        if (!stateMap.containsKey(initialState)) {
+            throw new IllegalStateException("Initial state [" + initialState + "] is not registered in the state machine");
+        }
+
+        for (STATE_KEY endState : endStates) {
+            State<CONTEXT, STATE_KEY> endStateNode = stateMap.get(endState);
+            if (endStateNode != null && !endStateNode.permittedTargets().isEmpty()) {
+                throw new IllegalStateException("Terminal end-state [" + endState + "] cannot declare outgoing permitted transitions");
+            }
+        }
+
+        for (Map.Entry<STATE_KEY, State<CONTEXT, STATE_KEY>> entry : stateMap.entrySet()) {
+            STATE_KEY sourceKey = entry.getKey();
+            State<CONTEXT, STATE_KEY> node = entry.getValue();
+
+            for (STATE_KEY targetKey : node.permittedTargets()) {
+                if (!stateMap.containsKey(targetKey) && !endStates.contains(targetKey)) {
+                    throw new IllegalStateException(
+                            "State [" + sourceKey + "] declares transition target [" + targetKey +
+                            "] which is not registered in the state machine"
+                    );
+                }
+            }
+
+            if (node.maxVisitsFallback() != null) {
+                STATE_KEY fallback = node.maxVisitsFallback();
+                if (!stateMap.containsKey(fallback) && !endStates.contains(fallback)) {
+                    throw new IllegalStateException(
+                            "State [" + sourceKey + "] defines maxVisitsFallback [" + fallback +
+                            "] which is not registered in the state machine"
+                    );
+                }
+            }
+        }
     }
 
     /**
-     * Returns the initial entry-point {@link State} definition for this state machine.
+     * Retrieves the {@link State} node configuration associated with the given state key.
      *
-     * @return The initial {@link State} instance
+     * @param stateKey The state identifier to lookup
+     * @return The configured {@link State} node
+     * @throws NoSuchElementException If the state key is not registered
      */
     @NonNull
-    public State<CONTEXT, STATE_KEY> getInitialState() {
-        State<CONTEXT, STATE_KEY> state = this.stateEnumMap.get(initialState);
+    public State<CONTEXT, STATE_KEY> getState(@NonNull STATE_KEY stateKey) {
+        Objects.requireNonNull(stateKey, "stateKey must not be null");
+        State<CONTEXT, STATE_KEY> state = stateMap.get(stateKey);
         if (state == null) {
-            throw new IllegalStateException("Initial state '" + initialState + "' is not registered in the state map");
+            if (endStates.contains(stateKey)) {
+                return State.terminal();
+            }
+            throw new NoSuchElementException("State [" + stateKey + "] is not registered in this StateMap");
         }
         return state;
     }
 
     /**
-     * Returns the designated starting state key.
+     * Checks whether the state key is registered in this state map.
      *
-     * @return The initial state key
+     * @param stateKey The state identifier
+     * @return {@code true} if present; otherwise {@code false}
+     */
+    public boolean containsState(@NonNull STATE_KEY stateKey) {
+        return stateMap.containsKey(stateKey) || endStates.contains(stateKey);
+    }
+
+    /**
+     * Returns the initial starting state key of this state machine graph.
+     *
+     * @return The initial {@link StateKey}
      */
     @NonNull
-    public STATE_KEY getInitialStateKey() {
+    public STATE_KEY getInitialState() {
         return initialState;
     }
 
     /**
-     * Retrieves the {@link State} definition registered for the given state key.
+     * Returns the set of all terminal end states in this state machine graph.
      *
-     * @param stateKey The state identifier to look up
-     * @return The registered {@link State} instance, or {@code null} if not found
-     */
-    @Nullable
-    public State<CONTEXT, STATE_KEY> getState(@NonNull STATE_KEY stateKey) {
-        return this.stateEnumMap.get(stateKey);
-    }
-
-    /**
-     * Returns an unmodifiable view of all registered states.
-     *
-     * @return Unmodifiable map of state keys to their state definitions
+     * @return Immutable set of terminal {@link StateKey} identifiers
      */
     @NonNull
-    public Map<STATE_KEY, State<CONTEXT, STATE_KEY>> stateEnumMap() {
-        return Collections.unmodifiableMap(stateEnumMap);
+    public Set<STATE_KEY> getEndStates() {
+        return endStates;
     }
 
     /**
-     * Returns the directed adjacency map containing each state's permitted outgoing target states.
+     * Returns the enum class of state keys managed by this state map.
      *
-     * @return Map of state keys to their set of permitted target state keys
+     * @return The state key class
      */
     @NonNull
-    public Map<STATE_KEY, Set<STATE_KEY>> adjacencyList() {
-        if (stateEnumMap.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        Map<STATE_KEY, Set<STATE_KEY>> adj = new EnumMap<>(initialState.getDeclaringClass());
-        for (Map.Entry<STATE_KEY, State<CONTEXT, STATE_KEY>> entry : stateEnumMap.entrySet()) {
-            adj.put(entry.getKey(), entry.getValue().permittedTargets());
-        }
-        return Collections.unmodifiableMap(adj);
+    public Class<STATE_KEY> getStateKeyClass() {
+        return stateKeyClass;
     }
 
     /**
-     * Generates a Mermaid diagram representing the complete directed state machine graph topology.
+     * Returns an unmodifiable map of all registered states in this graph.
      *
-     * @return Mermaid markdown string (e.g. `stateDiagram-v2 ...`)
+     * @return Map of state keys to their state nodes
+     */
+    @NonNull
+    public Map<STATE_KEY, State<CONTEXT, STATE_KEY>> getAllStates() {
+        return stateMap;
+    }
+
+    /**
+     * Generates a Mermaid stateDiagram-v2 string representing this Finite State Machine topology.
+     *
+     * @return Mermaid diagram string
      */
     @NonNull
     public String toMermaid() {
@@ -116,137 +166,107 @@ public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY exten
         sb.append("stateDiagram-v2\n");
         sb.append("    [*] --> ").append(initialState.name()).append("\n");
 
-        for (Map.Entry<STATE_KEY, State<CONTEXT, STATE_KEY>> entry : stateEnumMap.entrySet()) {
+        for (Map.Entry<STATE_KEY, State<CONTEXT, STATE_KEY>> entry : stateMap.entrySet()) {
             STATE_KEY source = entry.getKey();
-            State<CONTEXT, STATE_KEY> state = entry.getValue();
+            State<CONTEXT, STATE_KEY> node = entry.getValue();
 
-            if (state.isTerminal()) {
-                sb.append("    ").append(source.name()).append(" --> [*]\n");
-            } else {
-                for (STATE_KEY target : state.permittedTargets()) {
-                    sb.append("    ").append(source.name()).append(" --> ").append(target.name()).append("\n");
-                }
-                if (state.maxVisitsFallback() != null) {
-                    sb.append("    ").append(source.name()).append(" --> ")
-                            .append(state.maxVisitsFallback().name())
-                            .append(" : max visits (").append(state.maxVisits()).append(") exceeded\n");
-                }
+            for (STATE_KEY target : node.permittedTargets()) {
+                sb.append("    ").append(source.name()).append(" --> ").append(target.name()).append("\n");
+            }
+
+            if (node.maxVisitsFallback() != null) {
+                sb.append("    ").append(source.name()).append(" --> ").append(node.maxVisitsFallback().name())
+                  .append(" : maxVisitsFallback\n");
             }
         }
+
+        for (STATE_KEY endState : endStates) {
+            sb.append("    ").append(endState.name()).append(" --> [*]\n");
+        }
+
         return sb.toString();
     }
 
     /**
-     * Creates a new fluent {@link Builder} for assembling and validating an immutable {@link StateMap}.
+     * Creates a new builder for constructing a {@link StateMap}.
      *
-     * @param <CONTEXT_TYPE>   The concrete type of {@link StateMachineContext}
-     * @param <STATE_KEY_TYPE> The enum type representing state identifiers
-     * @param stateKeyClass    The Class token for the state key enum
+     * @param <C>           The context type
+     * @param <S>           The state key enum type
+     * @param stateKeyClass The state key enum class
      * @return A new {@link Builder} instance
      */
     @NonNull
-    public static <CONTEXT_TYPE extends StateMachineContext, STATE_KEY_TYPE extends Enum<STATE_KEY_TYPE> & StateKey>
-    Builder<CONTEXT_TYPE, STATE_KEY_TYPE> builder(@NonNull Class<STATE_KEY_TYPE> stateKeyClass) {
+    public static <C extends StateMachineContext, S extends Enum<S> & StateKey> Builder<C, S> builder(
+            @NonNull Class<S> stateKeyClass
+    ) {
         return new Builder<>(stateKeyClass);
     }
 
     /**
-     * Builder for assembling and verifying immutable {@link StateMap} instances.
-     *
-     * @param <CONTEXT>   The concrete type of {@link StateMachineContext}
-     * @param <STATE_KEY> The enum type representing state identifiers
+     * Builder for constructing validated immutable {@link StateMap} instances.
      */
     public static final class Builder<CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> {
+        private final Class<STATE_KEY> stateKeyClass;
         private final Map<STATE_KEY, State<CONTEXT, STATE_KEY>> states;
         private STATE_KEY initialState;
+        private final Set<STATE_KEY> endStates;
 
-        public Builder(@NonNull Class<STATE_KEY> stateKeyClass) {
-            this.states = new EnumMap<>(Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null"));
+        private Builder(@NonNull Class<STATE_KEY> stateKeyClass) {
+            this.stateKeyClass = Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
+            this.states = new EnumMap<>(stateKeyClass);
+            this.endStates = EnumSet.noneOf(stateKeyClass);
         }
 
-        /**
-         * Registers a state definition for the specified state key.
-         *
-         * @param stateKey The state key identifier
-         * @param state    The state definition
-         * @return This builder instance for chaining
-         */
         @NonNull
-        public Builder<CONTEXT, STATE_KEY> addState(@NonNull STATE_KEY stateKey, @NonNull State<CONTEXT, STATE_KEY> state) {
-            this.states.put(Objects.requireNonNull(stateKey, "stateKey must not be null"),
-                    Objects.requireNonNull(state, "state must not be null"));
+        public Builder<CONTEXT, STATE_KEY> addState(
+                @NonNull STATE_KEY stateKey,
+                @NonNull State<CONTEXT, STATE_KEY> state
+        ) {
+            Objects.requireNonNull(stateKey, "stateKey must not be null");
+            Objects.requireNonNull(state, "state must not be null");
+            this.states.put(stateKey, state);
             return this;
         }
 
-        /**
-         * Designates the starting state key for this state machine.
-         *
-         * @param initialState The initial state key
-         * @return This builder instance for chaining
-         */
         @NonNull
         public Builder<CONTEXT, STATE_KEY> initialState(@NonNull STATE_KEY initialState) {
             this.initialState = Objects.requireNonNull(initialState, "initialState must not be null");
             return this;
         }
 
-        /**
-         * Registers a terminal end state for the given state key.
-         *
-         * @param endStateKey The state key representing a completion endpoint
-         * @return This builder instance for chaining
-         */
         @NonNull
-        public Builder<CONTEXT, STATE_KEY> endState(@NonNull STATE_KEY endStateKey) {
-            this.states.put(Objects.requireNonNull(endStateKey, "endStateKey must not be null"), State.terminal());
+        public Builder<CONTEXT, STATE_KEY> endState(@NonNull STATE_KEY endState) {
+            Objects.requireNonNull(endState, "endState must not be null");
+            this.endStates.add(endState);
             return this;
         }
 
-        /**
-         * Builds and verifies the integrity of the state graph.
-         *
-         * @return An immutable, validated {@link StateMap} instance
-         * @throws IllegalStateException If initial state is missing or any state targets an unregistered state
-         */
+        @NonNull
+        @SafeVarargs
+        public final Builder<CONTEXT, STATE_KEY> endStates(@NonNull STATE_KEY... endStates) {
+            for (STATE_KEY s : endStates) {
+                endState(s);
+            }
+            return this;
+        }
+
+        @NonNull
+        public Builder<CONTEXT, STATE_KEY> endStates(@NonNull Set<STATE_KEY> endStates) {
+            Objects.requireNonNull(endStates, "endStates must not be null");
+            this.endStates.addAll(endStates);
+            return this;
+        }
+
         @NonNull
         public StateMap<CONTEXT, STATE_KEY> build() {
             if (initialState == null) {
-                throw new IllegalStateException("Initial state must be specified before building the state map");
+                throw new IllegalStateException("Initial state must be configured on StateMap");
             }
-            if (!states.containsKey(initialState)) {
-                throw new IllegalStateException("Initial state '" + initialState + "' is not registered in the state map");
+            // If end states were registered without an explicit state node, register terminal nodes for them
+            for (STATE_KEY endState : endStates) {
+                states.putIfAbsent(endState, State.terminal());
             }
-
-            // Verify graph topology: all permitted target states must be registered in the state map
-            for (Map.Entry<STATE_KEY, State<CONTEXT, STATE_KEY>> entry : states.entrySet()) {
-                STATE_KEY sourceKey = entry.getKey();
-                State<CONTEXT, STATE_KEY> state = entry.getValue();
-
-                if (state.isTerminal() && !state.permittedTargets().isEmpty()) {
-                    throw new IllegalStateException(String.format(
-                            "Graph integrity violation: Terminal end-state '%s' must not declare outgoing transitions %s",
-                            sourceKey, state.permittedTargets()
-                    ));
-                }
-
-                for (STATE_KEY targetKey : state.permittedTargets()) {
-                    if (!states.containsKey(targetKey)) {
-                        throw new IllegalStateException(String.format(
-                                "Graph integrity violation: State '%s' declares transition to unregistered state '%s'",
-                                sourceKey, targetKey
-                        ));
-                    }
-                }
-
-                if (state.maxVisitsFallback() != null && !states.containsKey(state.maxVisitsFallback())) {
-                    throw new IllegalStateException(String.format(
-                            "Graph integrity violation: State '%s' declares max visits fallback to unregistered state '%s'",
-                            sourceKey, state.maxVisitsFallback()
-                    ));
-                }
-            }
-
-            return new StateMap<>(states, initialState);
+            return new StateMap<>(stateKeyClass, states, initialState, endStates);
         }
     }
 }

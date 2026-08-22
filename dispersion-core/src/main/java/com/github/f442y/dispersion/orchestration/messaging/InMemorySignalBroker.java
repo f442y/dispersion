@@ -14,7 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * In-memory implementation of {@link SignalPublisher} using Virtual Threads.
+ * In-memory implementation of {@link SignalPublisher} using dedicated Virtual Threads.
  */
 public class InMemorySignalBroker implements SignalPublisher, AutoCloseable {
 

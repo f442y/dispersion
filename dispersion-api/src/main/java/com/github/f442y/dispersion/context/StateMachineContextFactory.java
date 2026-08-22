@@ -2,22 +2,28 @@ package com.github.f442y.dispersion.context;
 
 import org.jspecify.annotations.NonNull;
 
+import java.util.function.Supplier;
+
 /**
- * Factory contract responsible for instantiating clean, isolated {@link StateMachineContext} instances
- * for each state machine execution.
+ * Factory contract responsible for instantiating fresh, clean {@link StateMachineContext} instances
+ * for state machine executions. Extends {@link Supplier} for seamless compatibility with method references.
  *
- * @param <CONTEXT> The concrete type of {@link StateMachineContext} produced by this factory
- * @author Faizaan Ahmed
- * @see StateMachineContext
+ * @param <CONTEXT> The concrete type of {@link StateMachineContext}
  */
 @FunctionalInterface
-public interface StateMachineContextFactory<CONTEXT extends StateMachineContext> {
+public interface StateMachineContextFactory<CONTEXT extends StateMachineContext> extends Supplier<CONTEXT> {
 
     /**
-     * Instantiates a fresh, isolated state machine context instance.
+     * Creates and returns a new {@link StateMachineContext} instance.
      *
-     * @return A new {@link StateMachineContext} instance
+     * @return A newly initialized context instance
      */
     @NonNull
     CONTEXT newInstance();
+
+    @Override
+    @NonNull
+    default CONTEXT get() {
+        return newInstance();
+    }
 }

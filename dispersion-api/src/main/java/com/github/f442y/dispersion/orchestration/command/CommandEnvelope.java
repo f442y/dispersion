@@ -7,8 +7,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Distributed delivery envelope wrapping a {@link SignalCommand} with a unique {@code commandId}
- * for idempotency, deduplication, and timestamps.
+ * Idempotency envelope wrapping a {@link SignalCommand} with a unique message/command ID
+ * to guarantee exactly-once processing semantics across network retries and webhook redeliveries.
  *
  * @param <C> The concrete {@link SignalCommand} type
  */
@@ -24,28 +24,16 @@ public record CommandEnvelope<C extends SignalCommand>(
         Objects.requireNonNull(command, "command must not be null");
     }
 
-    /**
-     * Creates a new {@link CommandEnvelope} with an auto-generated random commandId and current timestamp.
-     *
-     * @param <CMD>   The command type
-     * @param command The signal command to wrap
-     * @return A new {@link CommandEnvelope} instance
-     */
+    @NonNull
+    public static <CMD extends SignalCommand> CommandEnvelope<CMD> of(
+            @NonNull UUID commandId,
+            @NonNull CMD command
+    ) {
+        return new CommandEnvelope<>(commandId, Instant.now(), command);
+    }
+
     @NonNull
     public static <CMD extends SignalCommand> CommandEnvelope<CMD> of(@NonNull CMD command) {
         return new CommandEnvelope<>(UUID.randomUUID(), Instant.now(), command);
-    }
-
-    /**
-     * Creates a new {@link CommandEnvelope} with an explicit commandId and current timestamp.
-     *
-     * @param <CMD>     The command type
-     * @param commandId The explicit command identifier
-     * @param command   The signal command to wrap
-     * @return A new {@link CommandEnvelope} instance
-     */
-    @NonNull
-    public static <CMD extends SignalCommand> CommandEnvelope<CMD> of(@NonNull UUID commandId, @NonNull CMD command) {
-        return new CommandEnvelope<>(commandId, Instant.now(), command);
     }
 }

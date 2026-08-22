@@ -23,7 +23,12 @@ import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 
 /**
- * Unified execution coordinator for both singular items and batch collections on Java 25 Virtual Threads.
+ * Unified execution coordinator for singular items and batch collections on Java 25 Virtual Threads.
+ *
+ * @param <BATCH_CONTEXT> The batch-level context type
+ * @param <ITEM_CONTEXT>  The item-level context type
+ * @param <STATE_KEY>     The state key enum type
+ * @param <OUTPUT>        The output type
  */
 public class BatchOrchestrationExecutor<
         BATCH_CONTEXT extends StateMachineContext,
