@@ -10,6 +10,8 @@ public enum OrchestrationStatus {
     RUNNING,
     /** The orchestration state machine reached a terminal end state successfully. */
     COMPLETED,
+    /** The orchestration state machine is suspended/dehydrated waiting for an external signal or event. */
+    SUSPENDED,
     /** A state failed permanently and saga compensation is currently executing. */
     COMPENSATING,
     /** Saga compensation finished and the orchestration state machine concluded in a rolled-back state. */

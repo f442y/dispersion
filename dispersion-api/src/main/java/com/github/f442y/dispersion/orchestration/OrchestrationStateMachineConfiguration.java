@@ -9,10 +9,11 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Specialized configuration model for Orchestration State Machines, holding the machine name,
- * directed graph state map, and checkpoint snapshot listeners.
+ * directed graph state map, checkpoint snapshot listeners, correlation key extractor, and checkpoint store.
  *
  * @param <CONTEXT>   The orchestration context type
  * @param <STATE_KEY> The orchestration state key enum type
@@ -32,15 +33,34 @@ public abstract class OrchestrationStateMachineConfiguration<
     @Nullable
     private final Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener;
 
+    @Nullable
+    private final Function<CONTEXT, String> correlationKeyExtractor;
+
+    @Nullable
+    private final CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
+
     public OrchestrationStateMachineConfiguration(
             @NonNull String machineName,
             @NonNull StateMap<CONTEXT, STATE_KEY> stateMap,
             int maxTransitions,
             @Nullable Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener
     ) {
+        this(machineName, stateMap, maxTransitions, checkpointListener, null, null);
+    }
+
+    public OrchestrationStateMachineConfiguration(
+            @NonNull String machineName,
+            @NonNull StateMap<CONTEXT, STATE_KEY> stateMap,
+            int maxTransitions,
+            @Nullable Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener,
+            @Nullable Function<CONTEXT, String> correlationKeyExtractor,
+            @Nullable CheckpointStore<CONTEXT, STATE_KEY> checkpointStore
+    ) {
         super(stateMap, maxTransitions);
         this.machineName = Objects.requireNonNull(machineName, "machineName must not be null");
         this.checkpointListener = checkpointListener;
+        this.correlationKeyExtractor = correlationKeyExtractor;
+        this.checkpointStore = checkpointStore;
     }
 
     /**
@@ -61,5 +81,25 @@ public abstract class OrchestrationStateMachineConfiguration<
     @Nullable
     public Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener() {
         return checkpointListener;
+    }
+
+    /**
+     * Returns the function used to extract the business correlation key from the context.
+     *
+     * @return The correlation key extractor, or {@code null}
+     */
+    @Nullable
+    public Function<CONTEXT, String> correlationKeyExtractor() {
+        return correlationKeyExtractor;
+    }
+
+    /**
+     * Returns the configured checkpoint store for persistence and rehydration.
+     *
+     * @return The checkpoint store, or {@code null}
+     */
+    @Nullable
+    public CheckpointStore<CONTEXT, STATE_KEY> checkpointStore() {
+        return checkpointStore;
     }
 }

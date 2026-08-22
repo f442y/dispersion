@@ -8,6 +8,11 @@ import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.context.StateMachineContextFactory;
 import com.github.f442y.dispersion.exception.StateMachineException;
 import com.github.f442y.dispersion.executor.AdmissionController;
+import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
+import com.github.f442y.dispersion.orchestration.command.SagaCommand;
+import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
+import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 import com.github.f442y.dispersion.state.Action;
 import com.github.f442y.dispersion.state.StateKey;
 import com.github.f442y.dispersion.state.StateMap;
@@ -31,7 +36,7 @@ import java.util.function.Function;
 /**
  * Fluent builder DSL for assembling Orchestration State Machines with directed graph routing,
  * atomic child state machine executions, nested orchestrations, parallel fork-join execution,
- * context recovery, and Saga compensations.
+ * signal-based suspension and rehydration, context recovery, and Saga compensations.
  *
  * @param <ORCHESTRATION_CONTEXT>   The orchestration context type
  * @param <ORCHESTRATION_STATE_KEY> The orchestration state key enum type
@@ -56,6 +61,12 @@ public final class OrchestrationStateMachineBuilder<
     @Nullable
     private Consumer<OrchestrationCheckpoint<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY>> checkpointListener;
 
+    @Nullable
+    private Function<ORCHESTRATION_CONTEXT, String> correlationKeyExtractor;
+
+    @Nullable
+    private CheckpointStore<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY> checkpointStore;
+
     private final Map<ORCHESTRATION_STATE_KEY, OrchestrationStateHolder<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY>> stateHolders = new LinkedHashMap<>();
 
     private record OrchestrationStateHolder<C extends StateMachineContext, S extends Enum<S> & StateKey>(
@@ -66,6 +77,8 @@ public final class OrchestrationStateMachineBuilder<
             S maxVisitsFallback,
             StateMachineConfiguration<?, ?, ?, ?> childMachine,
             List<ParallelBranch<C>> parallelBranches,
+            String expectedSignal,
+            SignalHandler<C, ?> signalHandler,
             ContextRecoverer<C, ?> recoverer,
             BiFunction<C, ?, C> outputMerger,
             RetryPolicy retryPolicy,
@@ -114,6 +127,34 @@ public final class OrchestrationStateMachineBuilder<
             @Nullable Consumer<OrchestrationCheckpoint<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY>> checkpointListener
     ) {
         this.checkpointListener = checkpointListener;
+        return this;
+    }
+
+    /**
+     * Configures the function extracting a domain correlation key (e.g. orderId) from context.
+     *
+     * @param correlationKeyExtractor The correlation key extractor function
+     * @return This builder instance for chaining
+     */
+    @NonNull
+    public OrchestrationStateMachineBuilder<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY, INPUT, OUTPUT> correlationKey(
+            @NonNull Function<ORCHESTRATION_CONTEXT, String> correlationKeyExtractor
+    ) {
+        this.correlationKeyExtractor = Objects.requireNonNull(correlationKeyExtractor, "correlationKeyExtractor must not be null");
+        return this;
+    }
+
+    /**
+     * Configures the persistent or in-memory checkpoint store for dehydration and rehydration.
+     *
+     * @param checkpointStore The checkpoint store instance
+     * @return This builder instance for chaining
+     */
+    @NonNull
+    public OrchestrationStateMachineBuilder<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY, INPUT, OUTPUT> checkpointStore(
+            @NonNull CheckpointStore<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY> checkpointStore
+    ) {
+        this.checkpointStore = Objects.requireNonNull(checkpointStore, "checkpointStore must not be null");
         return this;
     }
 
@@ -168,6 +209,8 @@ public final class OrchestrationStateMachineBuilder<
                             holder.maxVisitsFallback,
                             holder.childMachine,
                             holder.parallelBranches,
+                            holder.expectedSignal,
+                            holder.signalHandler,
                             holder.recoverer,
                             holder.outputMerger,
                             holder.retryPolicy,
@@ -189,8 +232,18 @@ public final class OrchestrationStateMachineBuilder<
         final int finalMaxTransitions = this.maxTransitions;
         final String finalMachineName = this.machineName;
         final Consumer<OrchestrationCheckpoint<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY>> finalCheckpointListener = this.checkpointListener;
+        final Function<ORCHESTRATION_CONTEXT, String> finalCorrelationKeyExtractor = this.correlationKeyExtractor;
+        final CheckpointStore<ORCHESTRATION_CONTEXT, ORCHESTRATION_STATE_KEY> finalCheckpointStore =
+                (this.checkpointStore != null) ? this.checkpointStore : new InMemoryCheckpointStore<>();
 
-        return new OrchestrationStateMachineConfiguration<>(finalMachineName, builtStateMap, finalMaxTransitions, finalCheckpointListener) {
+        return new OrchestrationStateMachineConfiguration<>(
+                finalMachineName,
+                builtStateMap,
+                finalMaxTransitions,
+                finalCheckpointListener,
+                finalCorrelationKeyExtractor,
+                finalCheckpointStore
+        ) {
             @NonNull
             @Override
             public StateMachineContextFactory<ORCHESTRATION_CONTEXT> stateMachineContextFactory() {
@@ -239,6 +292,8 @@ public final class OrchestrationStateMachineBuilder<
         private Action<ORCHESTRATION_CONTEXT> action;
         private int maxVisits = -1;
         private ORCHESTRATION_STATE_KEY maxVisitsFallback;
+        private String expectedSignal;
+        private SignalHandler<ORCHESTRATION_CONTEXT, ?> signalHandler;
         private CompensationAction<ORCHESTRATION_CONTEXT> compensationAction = CompensationAction.noop();
 
         private OrchestrationStateDefinitionBuilder(@NonNull ORCHESTRATION_STATE_KEY stateKey) {
@@ -248,6 +303,130 @@ public final class OrchestrationStateMachineBuilder<
         @NonNull
         public OrchestrationStateDefinitionBuilder action(@NonNull Action<ORCHESTRATION_CONTEXT> action) {
             this.action = Objects.requireNonNull(action, "action must not be null");
+            return this;
+        }
+
+        /**
+         * Configures this state with a reversible {@link SagaCommand}, binding forward execution
+         * to {@link SagaCommand#execute(StateMachineContext)} and compensation rollback to {@link SagaCommand#undo(StateMachineContext)}.
+         *
+         * @param sagaCommand The reversible Saga command instance
+         * @return This builder instance for chaining
+         */
+        @NonNull
+        public OrchestrationStateDefinitionBuilder command(@NonNull SagaCommand<ORCHESTRATION_CONTEXT> sagaCommand) {
+            Objects.requireNonNull(sagaCommand, "sagaCommand must not be null");
+            this.action = sagaCommand::execute;
+            this.compensationAction = sagaCommand::undo;
+            return this;
+        }
+
+        /**
+         * Configures this state to publish an outbound signal message to a message broker.
+         *
+         * @param publisher        The broker publisher instance
+         * @param destination      The target topic/queue
+         * @param commandExtractor Function extracting the command to emit from the context
+         * @return This builder instance for chaining
+         */
+        @NonNull
+        public OrchestrationStateDefinitionBuilder publish(
+                @NonNull SignalPublisher publisher,
+                @NonNull String destination,
+                @NonNull Function<ORCHESTRATION_CONTEXT, ? extends SignalCommand> commandExtractor
+        ) {
+            Objects.requireNonNull(publisher, "publisher must not be null");
+            Objects.requireNonNull(destination, "destination must not be null");
+            Objects.requireNonNull(commandExtractor, "commandExtractor must not be null");
+            this.action = ctx -> {
+                SignalCommand cmd = commandExtractor.apply(ctx);
+                if (cmd != null) {
+                    publisher.publish(destination, cmd).join();
+                }
+                return ctx;
+            };
+            return this;
+        }
+
+        /**
+         * Configures this state to publish an outbound {@link SignalMessage} to a message broker.
+         *
+         * @param publisher        The broker publisher instance
+         * @param messageExtractor Function extracting the signal message from the context
+         * @return This builder instance for chaining
+         */
+        @NonNull
+        public OrchestrationStateDefinitionBuilder publish(
+                @NonNull SignalPublisher publisher,
+                @NonNull Function<ORCHESTRATION_CONTEXT, SignalMessage> messageExtractor
+        ) {
+            Objects.requireNonNull(publisher, "publisher must not be null");
+            Objects.requireNonNull(messageExtractor, "messageExtractor must not be null");
+            this.action = ctx -> {
+                SignalMessage msg = messageExtractor.apply(ctx);
+                if (msg != null) {
+                    publisher.publish(msg).join();
+                }
+                return ctx;
+            };
+            return this;
+        }
+
+        /**
+         * Configures this state to suspend and wait for a strongly typed {@link SignalCommand}.
+         *
+         * @param <CMD>          The signal command type
+         * @param commandClass   The signal command class token
+         * @param commandHandler Function merging the signal command payload into the context
+         * @return This builder instance for chaining
+         */
+        @NonNull
+        public <CMD extends SignalCommand> OrchestrationStateDefinitionBuilder waitForCommand(
+                @NonNull Class<CMD> commandClass,
+                @NonNull SignalHandler<ORCHESTRATION_CONTEXT, CMD> commandHandler
+        ) {
+            Objects.requireNonNull(commandClass, "commandClass must not be null");
+            Objects.requireNonNull(commandHandler, "commandHandler must not be null");
+            return waitForSignal(commandClass.getSimpleName(), commandClass, commandHandler);
+        }
+
+        /**
+         * Configures this state to suspend and wait for an external signal before proceeding.
+         *
+         * @param signalName    The unique signal identifier
+         * @param signalHandler Function merging the signal payload into the context
+         * @return This builder instance for chaining
+         */
+        @NonNull
+        public OrchestrationStateDefinitionBuilder waitForSignal(
+                @NonNull String signalName,
+                @NonNull SignalHandler<ORCHESTRATION_CONTEXT, ?> signalHandler
+        ) {
+            this.expectedSignal = Objects.requireNonNull(signalName, "signalName must not be null");
+            this.signalHandler = Objects.requireNonNull(signalHandler, "signalHandler must not be null");
+            return this;
+        }
+
+        /**
+         * Configures this state to suspend and wait for a typed external signal before proceeding.
+         *
+         * @param <SIGNAL>      The signal payload type
+         * @param signalName    The unique signal identifier
+         * @param signalClass   The signal payload class token
+         * @param signalHandler Function merging the typed signal payload into the context
+         * @return This builder instance for chaining
+         */
+        @NonNull
+        @SuppressWarnings("unchecked")
+        public <SIGNAL> OrchestrationStateDefinitionBuilder waitForSignal(
+                @NonNull String signalName,
+                @NonNull Class<SIGNAL> signalClass,
+                @NonNull SignalHandler<ORCHESTRATION_CONTEXT, SIGNAL> signalHandler
+        ) {
+            Objects.requireNonNull(signalClass, "signalClass must not be null");
+            Objects.requireNonNull(signalHandler, "signalHandler must not be null");
+            this.expectedSignal = Objects.requireNonNull(signalName, "signalName must not be null");
+            this.signalHandler = (ctx, payload) -> signalHandler.handleSignal(ctx, (SIGNAL) payload);
             return this;
         }
 
@@ -342,6 +521,8 @@ public final class OrchestrationStateMachineBuilder<
                     this.maxVisitsFallback,
                     null,
                     Collections.emptyList(),
+                    this.expectedSignal,
+                    this.signalHandler,
                     null,
                     null,
                     RetryPolicy.noRetries(),
@@ -365,6 +546,8 @@ public final class OrchestrationStateMachineBuilder<
                     this.maxVisitsFallback,
                     null,
                     Collections.emptyList(),
+                    this.expectedSignal,
+                    this.signalHandler,
                     null,
                     null,
                     RetryPolicy.noRetries(),
@@ -489,6 +672,8 @@ public final class OrchestrationStateMachineBuilder<
                     this.maxVisitsFallback,
                     this.childMachine,
                     Collections.emptyList(),
+                    null,
+                    null,
                     this.recoverer,
                     this.outputMerger,
                     this.retryPolicy,
@@ -512,6 +697,8 @@ public final class OrchestrationStateMachineBuilder<
                     this.maxVisitsFallback,
                     this.childMachine,
                     Collections.emptyList(),
+                    null,
+                    null,
                     this.recoverer,
                     this.outputMerger,
                     this.retryPolicy,
@@ -609,6 +796,8 @@ public final class OrchestrationStateMachineBuilder<
                     List.copyOf(this.branches),
                     null,
                     null,
+                    null,
+                    null,
                     RetryPolicy.noRetries(),
                     this.compensationAction
             ));
@@ -628,6 +817,8 @@ public final class OrchestrationStateMachineBuilder<
                     this.maxVisitsFallback,
                     null,
                     List.copyOf(this.branches),
+                    null,
+                    null,
                     null,
                     null,
                     RetryPolicy.noRetries(),

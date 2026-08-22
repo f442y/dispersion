@@ -17,8 +17,8 @@ import java.util.function.BiFunction;
 /**
  * Specialized {@link State} node contract for Orchestration State Machines.
  * Can execute a direct action, a child state machine (atomic micro-machine or nested orchestration machine),
- * or multiple parallel independent branches concurrently, while supporting {@link ContextRecoverer} retries
- * on virtual threads and Saga {@link CompensationAction} rollbacks.
+ * multiple parallel independent branches concurrently, or suspend and wait for an external {@link SignalHandler},
+ * while supporting {@link ContextRecoverer} retries on virtual threads and Saga {@link CompensationAction} rollbacks.
  *
  * @param <ORCHESTRATION_CONTEXT>   The orchestration context type
  * @param <ORCHESTRATION_STATE_KEY> The orchestration state key enum type
@@ -82,6 +82,31 @@ public interface OrchestrationState<
     List<ParallelBranch<ORCHESTRATION_CONTEXT>> parallelBranches();
 
     /**
+     * Checks whether this state is configured to suspend and wait for an external signal.
+     *
+     * @return {@code true} if waiting for an external signal; otherwise {@code false}
+     */
+    default boolean isSignalWait() {
+        return expectedSignal() != null;
+    }
+
+    /**
+     * Returns the name of the expected external signal required to resume this state.
+     *
+     * @return The signal name, or {@code null} if not a signal wait state
+     */
+    @Nullable
+    String expectedSignal();
+
+    /**
+     * Returns the signal handler responsible for merging the external signal payload into context.
+     *
+     * @return The {@link SignalHandler}, or {@code null}
+     */
+    @Nullable
+    SignalHandler<ORCHESTRATION_CONTEXT, ?> signalHandler();
+
+    /**
      * Returns the context recoverer responsible for rebuilding clean input upon retries.
      *
      * @return The {@link ContextRecoverer}, or {@code null}
@@ -115,21 +140,6 @@ public interface OrchestrationState<
 
     /**
      * Factory method for creating an immutable {@link OrchestrationState}.
-     *
-     * @param <C> The orchestration context type
-     * @param <S> The orchestration state key type
-     * @param action The action business logic
-     * @param permittedTargets The explicit set of valid target states
-     * @param transition The transition routing logic
-     * @param isTerminal Whether this state terminates the machine
-     * @param maxVisits Maximum visits allowed
-     * @param maxVisitsFallback Fallback state key when visit limit is exceeded
-     * @param childStateMachine The child state machine configuration (Atomic or Orchestration)
-     * @param contextRecoverer The recoverer function
-     * @param outputMerger The output merger function
-     * @param retryPolicy The retry policy
-     * @param compensationAction The compensation action
-     * @return A new {@link OrchestrationState} instance
      */
     @NonNull
     static <C extends StateMachineContext, S extends Enum<S> & StateKey> OrchestrationState<C, S> of(
@@ -154,6 +164,8 @@ public interface OrchestrationState<
                 maxVisitsFallback,
                 childStateMachine,
                 Collections.emptyList(),
+                null,
+                null,
                 contextRecoverer,
                 outputMerger,
                 retryPolicy,
@@ -163,22 +175,6 @@ public interface OrchestrationState<
 
     /**
      * Factory method for creating an immutable {@link OrchestrationState} with parallel branches.
-     *
-     * @param <C> The orchestration context type
-     * @param <S> The orchestration state key type
-     * @param action The action business logic
-     * @param permittedTargets The explicit set of valid target states
-     * @param transition The transition routing logic
-     * @param isTerminal Whether this state terminates the machine
-     * @param maxVisits Maximum visits allowed
-     * @param maxVisitsFallback Fallback state key when visit limit is exceeded
-     * @param childStateMachine The child state machine configuration
-     * @param parallelBranches List of parallel branches to run concurrently
-     * @param contextRecoverer The recoverer function
-     * @param outputMerger The output merger function
-     * @param retryPolicy The retry policy
-     * @param compensationAction The compensation action
-     * @return A new {@link OrchestrationState} instance
      */
     @NonNull
     static <C extends StateMachineContext, S extends Enum<S> & StateKey> OrchestrationState<C, S> of(
@@ -195,6 +191,44 @@ public interface OrchestrationState<
             @Nullable RetryPolicy retryPolicy,
             @Nullable CompensationAction<C> compensationAction
     ) {
+        return of(
+                action,
+                permittedTargets,
+                transition,
+                isTerminal,
+                maxVisits,
+                maxVisitsFallback,
+                childStateMachine,
+                parallelBranches,
+                null,
+                null,
+                contextRecoverer,
+                outputMerger,
+                retryPolicy,
+                compensationAction
+        );
+    }
+
+    /**
+     * Full factory method for creating an immutable {@link OrchestrationState} including signal wait configuration.
+     */
+    @NonNull
+    static <C extends StateMachineContext, S extends Enum<S> & StateKey> OrchestrationState<C, S> of(
+            @Nullable Action<C> action,
+            @NonNull Set<S> permittedTargets,
+            @NonNull Transition<C, S> transition,
+            boolean isTerminal,
+            int maxVisits,
+            @Nullable S maxVisitsFallback,
+            @Nullable StateMachineConfiguration<?, ?, ?, ?> childStateMachine,
+            @Nullable List<ParallelBranch<C>> parallelBranches,
+            @Nullable String expectedSignal,
+            @Nullable SignalHandler<C, ?> signalHandler,
+            @Nullable ContextRecoverer<C, ?> contextRecoverer,
+            @Nullable BiFunction<C, ?, C> outputMerger,
+            @Nullable RetryPolicy retryPolicy,
+            @Nullable CompensationAction<C> compensationAction
+    ) {
         return new SimpleOrchestrationState<>(
                 action,
                 permittedTargets,
@@ -204,6 +238,8 @@ public interface OrchestrationState<
                 maxVisitsFallback,
                 childStateMachine,
                 parallelBranches != null ? List.copyOf(parallelBranches) : Collections.emptyList(),
+                expectedSignal,
+                signalHandler,
                 contextRecoverer,
                 outputMerger,
                 retryPolicy != null ? retryPolicy : RetryPolicy.noRetries(),
@@ -223,6 +259,8 @@ public interface OrchestrationState<
             @Nullable S maxVisitsFallback,
             @Nullable StateMachineConfiguration<?, ?, ?, ?> childStateMachine,
             @NonNull List<ParallelBranch<C>> parallelBranches,
+            @Nullable String expectedSignal,
+            @Nullable SignalHandler<C, ?> signalHandler,
             @Nullable ContextRecoverer<C, ?> contextRecoverer,
             @Nullable BiFunction<C, ?, C> outputMerger,
             @NonNull RetryPolicy retryPolicy,
