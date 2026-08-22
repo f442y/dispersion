@@ -1,7 +1,5 @@
 package com.github.f442y.dispersion.exception;
 
-import org.jspecify.annotations.NonNull;
-
 /**
  * Thrown when a state machine execution exceeds the global maximum permitted transition count,
  * acting as a circuit breaker against infinite loops or runaway cycles.

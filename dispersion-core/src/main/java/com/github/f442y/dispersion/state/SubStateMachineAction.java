@@ -1,17 +1,26 @@
 package com.github.f442y.dispersion.state;
 
-import com.github.f442y.dispersion.StateMachineCallable;
+import com.github.f442y.dispersion.AbstractStateMachineCallable;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * Action executing a nested child State Machine synchronously within the calling thread's virtual thread context.
+ * Action executing a nested child State Machine synchronously within the calling thread's virtual thread context
+ * with zero-allocation direct execution.
+ *
+ * <h2>Hierarchical State Machine Nesting</h2>
+ * Allows atomic micro-state machines to be embedded directly as steps within parent state machines:
+ * <ul>
+ *   <li>Maps parent context variables to child input via {@code inputMapper}.</li>
+ *   <li>Executes the child state machine graph synchronously using {@link AbstractStateMachineCallable#executeDirect}.</li>
+ *   <li>Merges the child result back into the parent context via {@code outputMerger}.</li>
+ *   <li>Incurs zero thread context switching or task wrapper allocations.</li>
+ * </ul>
  *
  * @param <PARENT_CONTEXT>  The parent context type
  * @param <CHILD_CONTEXT>   The child context type
@@ -44,14 +53,7 @@ public class SubStateMachineAction<
     @Override
     public PARENT_CONTEXT execute(@NonNull PARENT_CONTEXT parentContext) throws Exception {
         CHILD_INPUT childInput = inputMapper.apply(parentContext);
-
-        StateMachineCallable<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT> childCallable =
-                StateMachineCallable.<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT>builder(childConfiguration)
-                        .uuid(UUID.randomUUID())
-                        .input(childInput)
-                        .build();
-
-        CHILD_OUTPUT childOutput = childCallable.call();
+        CHILD_OUTPUT childOutput = AbstractStateMachineCallable.executeDirect(null, childConfiguration, null, childInput);
         return outputMerger.apply(parentContext, childOutput);
     }
 }

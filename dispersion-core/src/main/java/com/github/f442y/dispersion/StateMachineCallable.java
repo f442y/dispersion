@@ -24,7 +24,7 @@ public class StateMachineCallable<
         OUTPUT> extends AbstractStateMachineCallable<CONTEXT, STATE_KEY, INPUT, OUTPUT> {
 
     public StateMachineCallable(
-            @NonNull UUID uuid,
+            @Nullable UUID uuid,
             @NonNull StateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration,
             @Nullable CONTEXT initialContext,
             @Nullable INPUT input
@@ -50,7 +50,7 @@ public class StateMachineCallable<
             OUTPUT> {
 
         private final StateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration;
-        private UUID uuid = UUID.randomUUID();
+        private UUID uuid;
         private CONTEXT initialContext;
         private INPUT input;
 
@@ -59,8 +59,8 @@ public class StateMachineCallable<
         }
 
         @NonNull
-        public Builder<CONTEXT, STATE_KEY, INPUT, OUTPUT> uuid(@NonNull UUID uuid) {
-            this.uuid = Objects.requireNonNull(uuid, "uuid must not be null");
+        public Builder<CONTEXT, STATE_KEY, INPUT, OUTPUT> uuid(@Nullable UUID uuid) {
+            this.uuid = uuid;
             return this;
         }
 

@@ -1,11 +1,10 @@
 package com.github.f442y.dispersion.orchestration;
 
-import com.github.f442y.dispersion.StateMachineCallable;
+import com.github.f442y.dispersion.AbstractStateMachineCallable;
 import com.github.f442y.dispersion.config.InputFunction;
 import com.github.f442y.dispersion.config.OutputFunction;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
-import com.github.f442y.dispersion.exception.StateMachineException;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
@@ -19,10 +18,8 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -372,11 +369,7 @@ public final class OrchestrationStepDriver {
                     }
                     childResult = turn.output();
                 } else {
-                    StateMachineCallable childCallable = StateMachineCallable.builder(childConfig)
-                            .uuid(UUID.randomUUID())
-                            .input(childInput)
-                            .build();
-                    childResult = childCallable.call();
+                    childResult = AbstractStateMachineCallable.executeDirect(null, childConfig, null, childInput);
                 }
 
                 if (orchState.childOutputMerger() != null) {

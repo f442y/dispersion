@@ -1,7 +1,6 @@
 package com.github.f442y.dispersion.orchestration.batch;
 
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
-import com.github.f442y.dispersion.orchestration.command.ItemSignalCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalConsumer;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;

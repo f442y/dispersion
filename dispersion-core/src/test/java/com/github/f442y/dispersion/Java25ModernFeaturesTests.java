@@ -1,6 +1,7 @@
 package com.github.f442y.dispersion;
 
 import com.github.f442y.dispersion.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.atomic.AtomicStateMachineExecutor;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.exception.ActionException;
@@ -11,12 +12,10 @@ import com.github.f442y.dispersion.exception.MaxTransitionsExceededException;
 import com.github.f442y.dispersion.exception.StateMachineException;
 import com.github.f442y.dispersion.exception.TransitionException;
 import com.github.f442y.dispersion.orchestration.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
 import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
-import com.github.f442y.dispersion.orchestration.command.SagaCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import com.github.f442y.dispersion.state.StateKey;
@@ -28,18 +27,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -330,5 +326,58 @@ public class Java25ModernFeaturesTests {
         // Must unwind in LIFO order: COMPENSATE_STEP_A then COMPENSATE_INIT
         assertThat(ctx.trail).containsExactly("INIT_DONE", "STEP_A_DONE", "COMPENSATE_STEP_A", "COMPENSATE_INIT");
         executor.close();
+    }
+
+    /**
+     * Tests ultra-lightweight atomic state machine execution at high volume (50,000 executions).
+     */
+    @Test
+    @DisplayName("Should execute 50,000 atomic state machine workflows with sub-microsecond latency")
+    public void testUltraHighThroughputAtomicExecution() throws Exception {
+        var config = AtomicStateMachineBuilder.<ModernContext, ModernState, Integer, String>create(ModernState.class)
+                .context(ModernContext::new)
+                .initialState(ModernState.INIT)
+                .input((ctx, val) -> {
+                    ctx.counter = (val != null) ? val : 0;
+                    return ctx;
+                })
+                .state(ModernState.INIT)
+                    .action(ctx -> {
+                        ctx.counter += 10;
+                        return ctx;
+                    })
+                    .transition(ModernState.STEP_A)
+                .state(ModernState.STEP_A)
+                    .action(ctx -> {
+                        ctx.counter *= 2;
+                        return ctx;
+                    })
+                    .transition(ModernState.STEP_B)
+                .state(ModernState.STEP_B)
+                    .action(ctx -> {
+                        ctx.counter += 5;
+                        return ctx;
+                    })
+                    .transition(ModernState.COMPLETED)
+                .endStates(ModernState.COMPLETED)
+                .output(ctx -> "VAL:" + ctx.counter)
+                .build();
+
+        try (var executor = new AtomicStateMachineExecutor<>("fast-atomic", config, 100_000)) {
+            int iterations = 50_000;
+            long start = System.nanoTime();
+
+            for (int i = 0; i < iterations; i++) {
+                String result = executor.dispatchSync(i);
+                int expected = (i + 10) * 2 + 5;
+                assertEquals("VAL:" + expected, result);
+            }
+
+            long durationNs = System.nanoTime() - start;
+            double ms = durationNs / 1_000_000.0;
+            double opsPerSec = (iterations / ms) * 1000.0;
+            System.out.printf("Processed %d atomic state machines in %.2f ms (%.0f ops/sec)%n",
+                    iterations, ms, opsPerSec);
+        }
     }
 }

@@ -1,7 +1,7 @@
 package com.github.f442y.dispersion.executor;
 
+import com.github.f442y.dispersion.AbstractStateMachineCallable;
 import com.github.f442y.dispersion.StateMachineFuture;
-import com.github.f442y.dispersion.atomic.AtomicStateMachineCallable;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.exception.BackpressureException;
@@ -15,12 +15,25 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Virtual Thread-backed state machine executor with admission control and backpressure management.
+ * Ultra-fast Virtual Thread-backed state machine executor with zero-sync direct execution
+ * and admission control for high-throughput micro-state machines.
+ *
+ * <h2>Execution Modes &amp; Performance Profile</h2>
+ * <ul>
+ *   <li><b>Synchronous Fast-Path ({@link #dispatchSync(Object)}):</b> Runs directly within the caller's virtual thread.
+ *       Acquires an admission permit via {@link AdmissionController}, executes {@link AbstractStateMachineCallable#executeDirect},
+ *       and releases the permit in a {@code finally} block. This mode incurs zero thread-hopping, zero {@link CompletableFuture}
+ *       allocations, and zero context switching.</li>
+ *   <li><b>Asynchronous Virtual Threads ({@link #dispatchAsync(Object)}):</b> Asynchronously acquires a permit and dispatches
+ *       the execution to an unpinned, lightweight Java 25 Virtual Thread via a thread-per-task executor. Returns a strongly-typed
+ *       {@link StateMachineFuture} carrying the unique execution {@link UUID}.</li>
+ *   <li><b>Adaptive Admission Control &amp; Backpressure:</b> Protects downstream services and system memory by throttling
+ *       concurrent runs according to configurable policies (immediate rejection, blocking, or timed timeouts).</li>
+ * </ul>
  *
  * @param <CONTEXT>   The concrete type of {@link StateMachineContext}
  * @param <STATE_KEY> The state identifier enum type
@@ -65,29 +78,32 @@ public class BufferedStateMachineExecutor<
         this.virtualThreadExecutor = Objects.requireNonNull(virtualThreadExecutor, "virtualThreadExecutor must not be null");
     }
 
+    /**
+     * Ultra-low-overhead synchronous direct execution path avoiding thread hops and future allocations.
+     */
     @Override
     @Nullable
     public OUTPUT dispatchSync(@Nullable INPUT input) throws Exception {
-        try {
-            return dispatchAsync(input).get();
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof Exception ex) {
-                throw ex;
-            }
-            throw e;
-        }
+        return dispatchSync(null, input);
     }
 
+    /**
+     * Ultra-low-overhead synchronous direct execution path with explicit context.
+     */
     @Override
     @Nullable
-    public OUTPUT dispatchSync(@NonNull CONTEXT initialContext, @Nullable INPUT input) throws Exception {
+    public OUTPUT dispatchSync(@Nullable CONTEXT initialContext, @Nullable INPUT input) throws Exception {
         try {
-            return dispatchAsync(initialContext, input).get();
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof Exception ex) {
-                throw ex;
-            }
-            throw e;
+            admissionController.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BackpressureException("Interrupted while acquiring execution permit", e);
+        }
+
+        try {
+            return AbstractStateMachineCallable.executeDirect(null, configuration, initialContext, input);
+        } finally {
+            admissionController.release();
         }
     }
 
@@ -116,8 +132,6 @@ public class BufferedStateMachineExecutor<
             @Nullable INPUT input,
             @Nullable Duration timeout
     ) {
-        UUID executionId = UUID.randomUUID();
-
         try {
             if (timeout != null) {
                 admissionController.acquire(timeout);
@@ -129,13 +143,12 @@ public class BufferedStateMachineExecutor<
             throw new BackpressureException("Interrupted while acquiring execution permit", e);
         }
 
+        UUID executionId = UUID.randomUUID();
         CompletableFuture<OUTPUT> future = new CompletableFuture<>();
-        AtomicStateMachineCallable<CONTEXT, STATE_KEY, INPUT, OUTPUT> callable =
-                new AtomicStateMachineCallable<>(executionId, configuration, initialContext, input);
 
         virtualThreadExecutor.submit(() -> {
             try {
-                OUTPUT result = callable.call();
+                OUTPUT result = AbstractStateMachineCallable.executeDirect(executionId, configuration, initialContext, input);
                 future.complete(result);
             } catch (Throwable t) {
                 future.completeExceptionally(t);
