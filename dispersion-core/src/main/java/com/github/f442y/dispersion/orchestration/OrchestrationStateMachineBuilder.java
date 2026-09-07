@@ -39,7 +39,6 @@ public class OrchestrationStateMachineBuilder<
         OUTPUT> extends AbstractStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT,
         OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT>> {
 
-    private final String machineName;
     private Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener;
     private Function<CONTEXT, String> correlationKeyExtractor;
     private CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
@@ -399,7 +398,8 @@ public class OrchestrationStateMachineBuilder<
                 finishTrigger,
                 checkpointListener,
                 correlationKeyExtractor,
-                checkpointStore
+                checkpointStore,
+                eventListener
         );
     }
 

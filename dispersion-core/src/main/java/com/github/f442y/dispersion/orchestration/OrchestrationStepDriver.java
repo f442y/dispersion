@@ -6,6 +6,8 @@ import com.github.f442y.dispersion.config.OutputFunction;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.context.StateMachineContextFactory;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
@@ -111,6 +113,15 @@ public final class OrchestrationStepDriver {
         if (signalPayload instanceof CommandEnvelope<?> env) {
             if (processedIds.contains(env.commandId())) {
                 log.info("[{}] Ignoring duplicate command envelope [{}]", checkpoint.machineId(), env.commandId());
+                if (config.eventListener() != null) {
+                    safeNotify(config.eventListener(), new ExecutionEvent.CommandDeduplicatedEvent(
+                            checkpoint.machineId(),
+                            config.getMachineName(),
+                            env.commandId(),
+                            checkpoint.correlationKey(),
+                            Instant.now()
+                    ));
+                }
                 OutputFunction<CONTEXT, OUTPUT> outputFn = config.outputFunction();
                 OUTPUT out = (outputFn != null) ? outputFn.apply(checkpoint.contextSnapshot()) : null;
                 return new OrchestrationTurnResult<>(
@@ -163,6 +174,18 @@ public final class OrchestrationStepDriver {
         String correlationKey = (config.getCorrelationKeyExtractor() != null)
                 ? config.getCorrelationKeyExtractor().apply(context) : null;
 
+        ExecutionEventListener eventListener = config.eventListener();
+        long turnStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
+
+        if (eventListener != null) {
+            safeNotify(eventListener, new ExecutionEvent.TurnStartedEvent(
+                    machineId,
+                    config.getMachineName(),
+                    correlationKey,
+                    Instant.now()
+            ));
+        }
+
         try {
             while (currentStateKey != null) {
                 // 1. Check if terminal
@@ -176,7 +199,18 @@ public final class OrchestrationStepDriver {
 
                 // 2. Check Signal Wait
                 if (orchState != null && orchState.isSignalWaitState()) {
+                    String expectedSignal = (orchState.expectedSignal() != null) ? orchState.expectedSignal() : "SIGNAL";
                     if (pendingSignal != null) {
+                        if (eventListener != null) {
+                            safeNotify(eventListener, new ExecutionEvent.SignalDeliveredEvent(
+                                    machineId,
+                                    config.getMachineName(),
+                                    currentStateKey.name(),
+                                    expectedSignal,
+                                    correlationKey,
+                                    Instant.now()
+                            ));
+                        }
                         SignalHandler handler = orchState.signalHandler();
                         if (handler != null) {
                             context = (CONTEXT) handler.handleSignal(context, pendingSignal);
@@ -184,6 +218,27 @@ public final class OrchestrationStepDriver {
                         pendingSignal = null; // consumed
                     } else {
                         // Suspend execution at this state
+                        Duration turnDuration = Duration.ofNanos(System.nanoTime() - turnStartNanos);
+                        if (eventListener != null) {
+                            safeNotify(eventListener, new ExecutionEvent.SignalAwaitedEvent(
+                                    machineId,
+                                    config.getMachineName(),
+                                    currentStateKey.name(),
+                                    expectedSignal,
+                                    correlationKey,
+                                    Instant.now()
+                            ));
+                            safeNotify(eventListener, new ExecutionEvent.TurnSuspendedEvent(
+                                    machineId,
+                                    config.getMachineName(),
+                                    currentStateKey.name(),
+                                    orchState.expectedSignal(),
+                                    correlationKey,
+                                    turnDuration,
+                                    Instant.now()
+                            ));
+                        }
+
                         OrchestrationCheckpoint<CONTEXT, STATE_KEY> cp = new OrchestrationCheckpoint<>(
                                 machineId,
                                 config.getMachineName(),
@@ -211,6 +266,17 @@ public final class OrchestrationStepDriver {
                     }
                 }
 
+                if (eventListener != null) {
+                    safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
+                            machineId,
+                            config.getMachineName(),
+                            currentStateKey.name(),
+                            Instant.now()
+                    ));
+                }
+
+                long stateStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
+
                 // 3. Child State Machine Execution with Retry and Recovery
                 if (orchState != null && orchState.hasChildStateMachine()) {
                     context = executeChildMachineWithRetry(machineId, orchState, context);
@@ -222,6 +288,16 @@ public final class OrchestrationStepDriver {
                 // 5. Standard Action
                 else {
                     context = stateNode.action().execute(context);
+                }
+
+                if (eventListener != null) {
+                    safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
+                            machineId,
+                            config.getMachineName(),
+                            currentStateKey.name(),
+                            Duration.ofNanos(System.nanoTime() - stateStartNanos),
+                            Instant.now()
+                    ));
                 }
 
                 // 6. Outbound Broker Publishing
@@ -262,10 +338,31 @@ public final class OrchestrationStepDriver {
                 }
 
                 // 7. Transition
-                currentStateKey = stateNode.transition().nextState(context);
+                STATE_KEY nextStateKey = stateNode.transition().nextState(context);
+                if (eventListener != null && nextStateKey != null) {
+                    safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
+                            machineId,
+                            config.getMachineName(),
+                            currentStateKey.name(),
+                            nextStateKey.name(),
+                            Instant.now()
+                    ));
+                }
+                currentStateKey = nextStateKey;
             }
 
             // Execution Completed
+            if (eventListener != null) {
+                safeNotify(eventListener, new ExecutionEvent.TurnCompletedEvent(
+                        machineId,
+                        config.getMachineName(),
+                        (currentStateKey != null) ? currentStateKey.name() : null,
+                        correlationKey,
+                        Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                        Instant.now()
+                ));
+            }
+
             OutputFunction<CONTEXT, OUTPUT> outputFn = config.outputFunction();
             OUTPUT output = (outputFn != null) ? outputFn.apply(context) : null;
 
@@ -298,6 +395,7 @@ public final class OrchestrationStepDriver {
             log.error("[{}] Failure in state [{}]; initiating automated LIFO Saga compensation rollback: {}",
                     machineId, currentStateKey, t.getMessage(), t);
 
+            List<String> compStateNames = new ArrayList<>();
             // Execute Saga Compensation Rollback in Reverse Chronological Order (LIFO)
             for (int i = completedStates.size() - 1; i >= 0; i--) {
                 STATE_KEY compStateKey = completedStates.get(i);
@@ -308,11 +406,25 @@ public final class OrchestrationStepDriver {
                         if (compAction != null) {
                             log.debug("[{}] Compensating completed state [{}]", machineId, compStateKey);
                             context = compAction.compensate(context);
+                            compStateNames.add(compStateKey.name());
                         }
                     }
                 } catch (Throwable compErr) {
                     log.error("[{}] Compensation error in state [{}]: {}", machineId, compStateKey, compErr.getMessage(), compErr);
                 }
+            }
+
+            if (eventListener != null) {
+                safeNotify(eventListener, new ExecutionEvent.TurnCompensatedEvent(
+                        machineId,
+                        config.getMachineName(),
+                        (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
+                        compStateNames,
+                        t,
+                        correlationKey,
+                        Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                        Instant.now()
+                ));
             }
 
             OrchestrationCheckpoint<CONTEXT, STATE_KEY> compensatedCheckpoint = new OrchestrationCheckpoint<>(
@@ -443,6 +555,14 @@ public final class OrchestrationStepDriver {
             } catch (Throwable t) {
                 log.error("Error invoking checkpoint listener", t);
             }
+        }
+    }
+
+    private static void safeNotify(@NonNull ExecutionEventListener listener, @NonNull ExecutionEvent event) {
+        try {
+            listener.onEvent(event);
+        } catch (Throwable t) {
+            log.error("ExecutionEventListener [{}] threw an exception: {}", listener.getClass().getName(), t.getMessage(), t);
         }
     }
 }

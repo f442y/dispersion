@@ -5,6 +5,8 @@ import com.github.f442y.dispersion.config.OutputFunction;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.context.StateMachineContextFactory;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.exception.ActionException;
 import com.github.f442y.dispersion.exception.MaxStateVisitsExceededException;
 import com.github.f442y.dispersion.exception.MaxTransitionsExceededException;
@@ -18,6 +20,9 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -38,8 +43,11 @@ import java.util.function.Consumer;
  *       for the duration of the turn. This eliminates memory barriers, volatile read/write overhead, and mutex locks,
  *       enabling raw memory mutation speeds.</li>
  *   <li><b>Conditional Primitive Visit Tracking:</b> If a state machine does not configure per-state visit limits
- *       ({@link StateMap#hasVisitLimits()} is {@code false}), the visit tracking array allocation is completely skipped.\n *       When limits are present, a flat primitive {@code int[]} indexed by enum ordinal is used, avoiding boxed\n *       {@link Integer} allocations and hash lookups entirely.</li>
- *   <li><b>Direct Synchronous Fast-Path:</b> Via {@link #executeDirect(UUID, StateMachineConfiguration, StateMachineContext, Object)},\n *       synchronous executions run directly on the caller's virtual thread without thread-hopping, context switches, or
+ *       ({@link StateMap#hasVisitLimits()} is {@code false}), the visit tracking array allocation is completely skipped.
+ *       When limits are present, a flat primitive {@code int[]} indexed by enum ordinal is used, avoiding boxed
+ *       {@link Integer} allocations and hash lookups entirely.</li>
+ *   <li><b>Direct Synchronous Fast-Path:</b> Via {@link #executeDirect(UUID, StateMachineConfiguration, StateMachineContext, Object)},
+ *       synchronous executions run directly on the caller's virtual thread without thread-hopping, context switches, or
  *       {@link java.util.concurrent.CompletableFuture} allocation overhead.</li>
  *   <li><b>Lazy UUID Generation:</b> Cryptographic pseudo-random number generator (PRNG) entropy locks are bypassed
  *       by deferring {@link UUID#randomUUID()} generation until explicitly requested.</li>
@@ -123,6 +131,10 @@ public abstract class AbstractStateMachineCallable<
     ) throws Exception {
         Objects.requireNonNull(configuration, "configuration must not be null");
 
+        ExecutionEventListener eventListener = configuration.eventListener();
+        UUID effectiveId = executionId != null ? executionId : (eventListener != null ? UUID.randomUUID() : null);
+        long turnStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
+
         StateMap<CONTEXT, STATE_KEY> stateMap = configuration.getStateMap();
         CONTEXT context = initialContext;
 
@@ -149,6 +161,15 @@ public abstract class AbstractStateMachineCallable<
         int maxTransitions = configuration.getMaxTransitions();
 
         STATE_KEY currentStateKey = stateMap.getInitialState();
+
+        if (eventListener != null) {
+            safeNotify(eventListener, new ExecutionEvent.TurnStartedEvent(
+                    effectiveId,
+                    configuration.getMachineName(),
+                    null,
+                    Instant.now()
+            ));
+        }
 
         try {
             while (true) {
@@ -191,6 +212,17 @@ public abstract class AbstractStateMachineCallable<
                     }
                 }
 
+                if (eventListener != null) {
+                    safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
+                            effectiveId,
+                            configuration.getMachineName(),
+                            currentStateKey.name(),
+                            Instant.now()
+                    ));
+                }
+
+                long stateStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
+
                 // 5. Execute state business logic
                 try {
                     context = currentState.action().execute(context);
@@ -200,12 +232,32 @@ public abstract class AbstractStateMachineCallable<
                     throw new ActionException(currentStateKey.name(), t);
                 }
 
+                if (eventListener != null) {
+                    safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
+                            effectiveId,
+                            configuration.getMachineName(),
+                            currentStateKey.name(),
+                            Duration.ofNanos(System.nanoTime() - stateStartNanos),
+                            Instant.now()
+                    ));
+                }
+
                 // 6. Evaluate transition logic
                 STATE_KEY nextStateKey;
                 try {
                     nextStateKey = currentState.transition().nextState(context);
                 } catch (Throwable t) {
                     throw new TransitionException(currentStateKey.name(), t.getMessage(), t);
+                }
+
+                if (eventListener != null && nextStateKey != null) {
+                    safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
+                            effectiveId,
+                            configuration.getMachineName(),
+                            currentStateKey.name(),
+                            nextStateKey.name(),
+                            Instant.now()
+                    ));
                 }
 
                 totalTransitions++;
@@ -229,6 +281,17 @@ public abstract class AbstractStateMachineCallable<
                 currentStateKey = nextStateKey;
             }
 
+            if (eventListener != null) {
+                safeNotify(eventListener, new ExecutionEvent.TurnCompletedEvent(
+                        effectiveId,
+                        configuration.getMachineName(),
+                        (currentStateKey != null) ? currentStateKey.name() : null,
+                        null,
+                        Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                        Instant.now()
+                ));
+            }
+
             Consumer<CONTEXT> finishTrigger = configuration.stateMachineFinishTrigger();
             if (finishTrigger != null) {
                 finishTrigger.accept(context);
@@ -238,6 +301,19 @@ public abstract class AbstractStateMachineCallable<
             return (outputFn != null) ? outputFn.apply(context) : null;
 
         } catch (Throwable t) {
+            if (eventListener != null) {
+                safeNotify(eventListener, new ExecutionEvent.TurnCompensatedEvent(
+                        effectiveId,
+                        configuration.getMachineName(),
+                        (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
+                        List.of(),
+                        t,
+                        null,
+                        Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                        Instant.now()
+                ));
+            }
+
             BiConsumer<CONTEXT, Throwable> exceptionTrigger = configuration.stateMachineExceptionTrigger();
             if (exceptionTrigger != null) {
                 try {
@@ -251,6 +327,14 @@ public abstract class AbstractStateMachineCallable<
                 throw e;
             }
             throw new RuntimeException(t);
+        }
+    }
+
+    private static void safeNotify(@NonNull ExecutionEventListener listener, @NonNull ExecutionEvent event) {
+        try {
+            listener.onEvent(event);
+        } catch (Throwable t) {
+            log.error("ExecutionEventListener [{}] threw exception: {}", listener.getClass().getName(), t.getMessage(), t);
         }
     }
 }

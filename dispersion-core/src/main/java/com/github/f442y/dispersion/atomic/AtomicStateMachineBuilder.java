@@ -38,6 +38,11 @@ public class AtomicStateMachineBuilder<
         super(stateKeyClass);
     }
 
+    protected AtomicStateMachineBuilder(@NonNull String machineName, @NonNull Class<STATE_KEY> stateKeyClass) {
+        super(stateKeyClass);
+        this.machineName = Objects.requireNonNull(machineName, "machineName must not be null");
+    }
+
     @NonNull
     public static <
             CONTEXT extends StateMachineContext,
@@ -46,6 +51,19 @@ public class AtomicStateMachineBuilder<
             OUTPUT>
     AtomicStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> create(@NonNull Class<STATE_KEY> stateKeyClass) {
         return new AtomicStateMachineBuilder<>(stateKeyClass);
+    }
+
+    @NonNull
+    public static <
+            CONTEXT extends StateMachineContext,
+            STATE_KEY extends Enum<STATE_KEY> & StateKey,
+            INPUT,
+            OUTPUT>
+    AtomicStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> create(
+            @NonNull String machineName,
+            @NonNull Class<STATE_KEY> stateKeyClass
+    ) {
+        return new AtomicStateMachineBuilder<>(machineName, stateKeyClass);
     }
 
     @NonNull
@@ -165,13 +183,15 @@ public class AtomicStateMachineBuilder<
         StateMap<CONTEXT, STATE_KEY> stateMap = stateMapBuilder.build();
 
         return new StateMachineConfiguration<>(
+                machineName,
                 stateMap,
                 maxTransitions,
                 contextFactory,
                 inputFunction,
                 outputFunction,
                 exceptionTrigger,
-                finishTrigger
+                finishTrigger,
+                eventListener
         );
     }
 
@@ -190,6 +210,7 @@ public class AtomicStateMachineBuilder<
 
     @NonNull
     public AtomicStateMachineExecutor<CONTEXT, STATE_KEY, INPUT, OUTPUT> buildExecutor() {
-        return buildExecutor("atomic-" + stateKeyClass.getSimpleName());
+        String name = (machineName != null) ? machineName : "atomic-" + stateKeyClass.getSimpleName();
+        return buildExecutor(name);
     }
 }

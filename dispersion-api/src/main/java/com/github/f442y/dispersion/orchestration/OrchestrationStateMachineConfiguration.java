@@ -5,6 +5,7 @@ import com.github.f442y.dispersion.config.OutputFunction;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.context.StateMachineContextFactory;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.state.StateKey;
 import com.github.f442y.dispersion.state.StateMap;
 import org.jspecify.annotations.NonNull;
@@ -29,7 +30,6 @@ public class OrchestrationStateMachineConfiguration<
         INPUT,
         OUTPUT> extends StateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> {
 
-    private final String machineName;
     private final Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener;
     private final Function<CONTEXT, String> correlationKeyExtractor;
     private final CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
@@ -47,16 +47,30 @@ public class OrchestrationStateMachineConfiguration<
             @Nullable Function<CONTEXT, String> correlationKeyExtractor,
             @Nullable CheckpointStore<CONTEXT, STATE_KEY> checkpointStore
     ) {
-        super(stateMap, maxTransitions, contextFactory, inputFunction, outputFunction, exceptionTrigger, finishTrigger);
-        this.machineName = Objects.requireNonNull(machineName, "machineName must not be null");
+        this(machineName, stateMap, maxTransitions, contextFactory, inputFunction, outputFunction,
+                exceptionTrigger, finishTrigger, checkpointListener, correlationKeyExtractor, checkpointStore, null);
+    }
+
+    public OrchestrationStateMachineConfiguration(
+            @NonNull String machineName,
+            @NonNull StateMap<CONTEXT, STATE_KEY> stateMap,
+            int maxTransitions,
+            @Nullable StateMachineContextFactory<CONTEXT> contextFactory,
+            @Nullable InputFunction<CONTEXT, INPUT> inputFunction,
+            @Nullable OutputFunction<CONTEXT, OUTPUT> outputFunction,
+            @Nullable BiConsumer<CONTEXT, Throwable> exceptionTrigger,
+            @Nullable Consumer<CONTEXT> finishTrigger,
+            @Nullable Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener,
+            @Nullable Function<CONTEXT, String> correlationKeyExtractor,
+            @Nullable CheckpointStore<CONTEXT, STATE_KEY> checkpointStore,
+            @Nullable ExecutionEventListener eventListener
+    ) {
+        super(Objects.requireNonNull(machineName, "machineName must not be null"),
+                stateMap, maxTransitions, contextFactory, inputFunction, outputFunction,
+                exceptionTrigger, finishTrigger, eventListener);
         this.checkpointListener = checkpointListener;
         this.correlationKeyExtractor = correlationKeyExtractor;
         this.checkpointStore = checkpointStore;
-    }
-
-    @NonNull
-    public String getMachineName() {
-        return machineName;
     }
 
     @Nullable

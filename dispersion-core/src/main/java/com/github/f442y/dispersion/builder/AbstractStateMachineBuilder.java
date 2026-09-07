@@ -4,6 +4,7 @@ import com.github.f442y.dispersion.config.InputFunction;
 import com.github.f442y.dispersion.config.OutputFunction;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.context.StateMachineContextFactory;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.state.State;
 import com.github.f442y.dispersion.state.StateKey;
 import org.jspecify.annotations.NonNull;
@@ -34,6 +35,7 @@ public abstract class AbstractStateMachineBuilder<
 
     protected final Class<STATE_KEY> stateKeyClass;
     protected final Map<STATE_KEY, State<CONTEXT, STATE_KEY>> states;
+    protected String machineName;
     protected STATE_KEY initialState;
     protected final Set<STATE_KEY> endStates;
     protected int maxTransitions = -1;
@@ -42,6 +44,7 @@ public abstract class AbstractStateMachineBuilder<
     protected OutputFunction<CONTEXT, OUTPUT> outputFunction;
     protected BiConsumer<CONTEXT, Throwable> exceptionTrigger;
     protected Consumer<CONTEXT> finishTrigger;
+    protected ExecutionEventListener eventListener;
 
     protected AbstractStateMachineBuilder(@NonNull Class<STATE_KEY> stateKeyClass) {
         this.stateKeyClass = Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
@@ -52,6 +55,18 @@ public abstract class AbstractStateMachineBuilder<
     @SuppressWarnings("unchecked")
     protected SELF self() {
         return (SELF) this;
+    }
+
+    @NonNull
+    public SELF name(@NonNull String name) {
+        this.machineName = Objects.requireNonNull(name, "name must not be null");
+        return self();
+    }
+
+    @NonNull
+    public SELF eventListener(@NonNull ExecutionEventListener eventListener) {
+        this.eventListener = Objects.requireNonNull(eventListener, "eventListener must not be null");
+        return self();
     }
 
     @NonNull
