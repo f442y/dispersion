@@ -148,6 +148,7 @@ Explore our modular documentation guides for detailed explanations, patterns, an
 | 📦 **[Distributed Messaging & Batch Orchestration](docs/distributed-messaging-and-batching.md)** | Network deduplication with `CommandEnvelope`, broker-agnostic messaging SPI (Kafka, SQS, RabbitMQ, In-Memory), and batch collections with dynamic synchronization barriers (`BarrierPolicy`). |
 | 🔭 **[Observability & Core Control Plane](docs/observability-and-control-plane.md)** | Real-time `ExecutionEventListener` SPI, 12 sealed telemetry records, `AsyncExecutionEventDispatcher`, and the in-memory `DefaultControlPlane` (topology discovery, live summaries, timeline replay, signal routing, and React TanStack Router UI integration). |
 | ☕ **[Java 25+ Language Features in Action](docs/java-25-features.md)** | Virtual Threads (Project Loom), compile-time exhaustive switch matching over sealed exceptions and events, nested record pattern deconstruction, and JSpecify null safety. |
+| 🗺️ **[Roadmap & Next Steps Plan](NEXT_STEPS.md)** | Live tracker for upcoming phases: JSON serialization, API gateway transport module, and React + TanStack Router Control Panel Web UI. |
 
 ---
 
@@ -229,6 +230,7 @@ module com.example.myapp {
 
 ```
 dispersion/
+├── NEXT_STEPS.md                 # Project roadmap & next steps for UI / Gateway
 ├── docs/                        # Complete in-depth architectural guides & documentation
 │   ├── architecture-and-concepts.md
 │   ├── tier-1-atomic-machines.md
