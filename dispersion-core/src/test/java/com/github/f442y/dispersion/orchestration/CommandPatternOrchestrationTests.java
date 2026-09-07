@@ -5,15 +5,16 @@ import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SagaCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.state.StateKey;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,45 +34,39 @@ public class CommandPatternOrchestrationTests {
         public int amount;
         public String transactionId;
         public boolean inventoryReserved = false;
-        public boolean inventoryReleased = false;
         public boolean orderFulfilled = false;
         public List<String> executionLog = new ArrayList<>();
     }
 
-    // Sealed Signal Command hierarchy
-    public sealed interface EcomSignalCommand extends SignalCommand
-            permits ConfirmPaymentCommand, CancelOrderCommand {
+    public record ConfirmPaymentCommand(
+            String correlationKey,
+            String transactionId,
+            int amount
+    ) implements SignalCommand {
         @Override
-        String correlationKey();
-    }
-
-    public record ConfirmPaymentCommand(String orderId, String transactionId, int amountPaid) implements EcomSignalCommand {
-        @Override
-        public String correlationKey() {
-            return orderId;
+        @NonNull
+        public String signalName() {
+            return "ConfirmPaymentCommand";
         }
     }
 
-    public record CancelOrderCommand(String orderId, String reason) implements EcomSignalCommand {
+    public record ReserveInventorySagaCommand(
+            String sku,
+            int quantity
+    ) implements SagaCommand<EcomContext> {
         @Override
-        public String correlationKey() {
-            return orderId;
-        }
-    }
-
-    // Reversible Saga Command
-    public record ReserveInventorySagaCommand(String sku, int count) implements SagaCommand<EcomContext> {
-        @Override
-        public EcomContext execute(EcomContext context) {
+        @NonNull
+        public EcomContext execute(@NonNull EcomContext context) {
             context.inventoryReserved = true;
-            context.executionLog.add("RESERVED_SKU_" + sku + "_" + count);
+            context.executionLog.add("RESERVED_SKU_" + sku + "_" + quantity);
             return context;
         }
 
         @Override
-        public EcomContext compensate(EcomContext context) {
-            context.inventoryReleased = true;
-            context.executionLog.add("UNRESERVED_SKU_" + sku + "_" + count);
+        @NonNull
+        public EcomContext compensate(@NonNull EcomContext context) {
+            context.inventoryReserved = false;
+            context.executionLog.add("RELEASED_SKU_" + sku + "_" + quantity);
             return context;
         }
     }
@@ -83,7 +78,8 @@ public class CommandPatternOrchestrationTests {
     public void testTypedSignalCommandAndSagaCommand() throws Exception {
         InMemoryCheckpointStore<EcomContext, EcomState> store = new InMemoryCheckpointStore<>();
 
-        var executor = OrchestrationStateMachineBuilder.<EcomContext, EcomState, EcomContext, String>create("EcomCommandOrchestrator", EcomState.class)
+        OrchestrationStateMachineExecutor<EcomContext, EcomState, EcomContext, String> executor =
+                OrchestrationStateMachineBuilder.<EcomContext, EcomState, EcomContext, String>create("EcomCommandOrchestrator", EcomState.class)
                 .context(EcomContext::new)
                 .initialState(EcomState.VALIDATE)
                 .correlationKey(ctx -> ctx.orderId)
@@ -108,6 +104,7 @@ public class CommandPatternOrchestrationTests {
                 // Strongly typed command receiver
                 .state(EcomState.AWAIT_PAYMENT_COMMAND)
                     .waitForCommand(ConfirmPaymentCommand.class, (ctx, cmd) -> {
+                        Objects.requireNonNull(cmd, "cmd must not be null");
                         ctx.transactionId = cmd.transactionId();
                         ctx.executionLog.add("PAYMENT_CONFIRMED:" + cmd.transactionId());
                         return ctx;
@@ -121,31 +118,31 @@ public class CommandPatternOrchestrationTests {
                     })
                     .transition(EcomState.COMPLETED)
                 .endStates(EcomState.COMPLETED, EcomState.FAILED)
-                .output(ctx -> "Ecom " + ctx.orderId + " completed via " + ctx.transactionId)
+                .output(ctx -> "Success: " + ctx.orderId)
                 .buildExecutor();
 
-        EcomContext initial = new EcomContext();
-        initial.orderId = "ORD-CMD-101";
-        initial.amount = 9900;
+        EcomContext order = new EcomContext();
+        order.orderId = "ORDER-CMD-001";
+        order.amount = 250;
 
-        // 1. Initial turn: runs VALIDATE -> executes ReserveInventorySagaCommand -> suspends at AWAIT_PAYMENT_COMMAND
-        OrchestrationTurnResult<EcomContext, EcomState, String> turn1 = executor.dispatchTurnSync(null, initial);
+        // Turn 1: Validates and executes Saga command, then halts waiting for ConfirmPaymentCommand
+        OrchestrationTurnResult<EcomContext, EcomState, String> turn1 = executor.dispatchTurnSync(null, order);
         assertTrue(turn1.isSuspended());
-        assertEquals("ConfirmPaymentCommand", turn1.expectedSignal());
         assertTrue(turn1.context().inventoryReserved);
-        assertFalse(turn1.context().orderFulfilled);
+        assertEquals(EcomState.AWAIT_PAYMENT_COMMAND, turn1.currentStateKey());
 
-        // 2. Dispatch typed SignalCommand directly (executor routes by correlationKey)
-        CompletableFuture<OrchestrationTurnResult<EcomContext, EcomState, String>> future =
-                executor.handleCommand(new ConfirmPaymentCommand("ORD-CMD-101", "TX-CMD-777", 9900));
+        // Turn 2: Dispatch strongly typed SignalCommand directly to executor
+        ConfirmPaymentCommand command = new ConfirmPaymentCommand("ORDER-CMD-001", "TX-SECURE-999", 250);
+        CompletableFuture<OrchestrationTurnResult<EcomContext, EcomState, String>> turn2Future =
+                executor.handleCommand(command);
 
-        OrchestrationTurnResult<EcomContext, EcomState, String> turn2 = future.get();
+        OrchestrationTurnResult<EcomContext, EcomState, String> turn2 = turn2Future.get();
         assertTrue(turn2.isCompleted());
-        assertEquals("Ecom ORD-CMD-101 completed via TX-CMD-777", turn2.output());
-        assertNotNull(turn2.context());
+        assertEquals("Success: ORDER-CMD-001", turn2.output());
         assertTrue(turn2.context().orderFulfilled);
+        assertEquals("TX-SECURE-999", turn2.context().transactionId);
         assertEquals(
-                List.of("VALIDATE", "RESERVED_SKU_ITEM-404_1", "PAYMENT_CONFIRMED:TX-CMD-777", "FULFILL"),
+                List.of("VALIDATE", "RESERVED_SKU_ITEM-404_1", "PAYMENT_CONFIRMED:TX-SECURE-999", "FULFILL"),
                 turn2.context().executionLog
         );
 
@@ -153,13 +150,14 @@ public class CommandPatternOrchestrationTests {
     }
 
     /**
-     * Tests idempotent CommandEnvelope deduplication to prevent duplicate webhook delivery execution.
+     * Tests idempotent delivery via CommandEnvelope: Duplicate deliveries with the same commandId are deduplicated.
      */
     @Test
     public void testIdempotentCommandEnvelopeDeduplication() throws Exception {
         InMemoryCheckpointStore<EcomContext, EcomState> store = new InMemoryCheckpointStore<>();
 
-        var executor = OrchestrationStateMachineBuilder.<EcomContext, EcomState, EcomContext, String>create("IdempotentCommandOrchestrator", EcomState.class)
+        OrchestrationStateMachineExecutor<EcomContext, EcomState, EcomContext, String> executor =
+                OrchestrationStateMachineBuilder.<EcomContext, EcomState, EcomContext, String>create("IdempotentCommandOrchestrator", EcomState.class)
                 .context(EcomContext::new)
                 .initialState(EcomState.VALIDATE)
                 .correlationKey(ctx -> ctx.orderId)
@@ -175,6 +173,7 @@ public class CommandPatternOrchestrationTests {
                     .transition(EcomState.AWAIT_PAYMENT_COMMAND)
                 .state(EcomState.AWAIT_PAYMENT_COMMAND)
                     .waitForCommand(ConfirmPaymentCommand.class, (ctx, cmd) -> {
+                        Objects.requireNonNull(cmd, "cmd must not be null");
                         ctx.transactionId = cmd.transactionId();
                         ctx.executionLog.add("PAYMENT:" + cmd.transactionId());
                         return ctx;

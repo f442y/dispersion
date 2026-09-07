@@ -86,13 +86,17 @@ public class OrchestrationStateMachineExecutor<
     public StateMachineFuture<OUTPUT> dispatchAsync(@Nullable CONTEXT initialContext, @Nullable INPUT input) {
         UUID machineId = UUID.randomUUID();
         CompletableFuture<OUTPUT> future = new CompletableFuture<>();
-        virtualThreadExecutor.submit(() -> {
-            try {
-                future.complete(dispatchSync(initialContext, input));
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
-            }
-        });
+        try {
+            virtualThreadExecutor.submit(() -> {
+                try {
+                    future.complete(dispatchSync(initialContext, input));
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
         return new StateMachineFuture<>(machineId, future);
     }
 
@@ -117,13 +121,17 @@ public class OrchestrationStateMachineExecutor<
             @Nullable INPUT input
     ) {
         CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> future = new CompletableFuture<>();
-        virtualThreadExecutor.submit(() -> {
-            try {
-                future.complete(dispatchTurnSync(initialContext, input));
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
-            }
-        });
+        try {
+            virtualThreadExecutor.submit(() -> {
+                try {
+                    future.complete(dispatchTurnSync(initialContext, input));
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
         return future;
     }
 

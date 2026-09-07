@@ -6,7 +6,6 @@ import com.github.f442y.dispersion.state.StateKey;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -39,9 +38,9 @@ public record BatchTurnResult<
         Objects.requireNonNull(batchId, "batchId must not be null");
         Objects.requireNonNull(batchKey, "batchKey must not be null");
         Objects.requireNonNull(status, "status must not be null");
-        itemStates = (itemStates != null) ? Map.copyOf(itemStates) : Collections.emptyMap();
-        itemContexts = (itemContexts != null) ? Map.copyOf(itemContexts) : Collections.emptyMap();
         Objects.requireNonNull(batchContext, "batchContext must not be null");
+        itemStates = Map.copyOf(Objects.requireNonNull(itemStates, "itemStates must not be null"));
+        itemContexts = Map.copyOf(Objects.requireNonNull(itemContexts, "itemContexts must not be null"));
     }
 
     public boolean isCompleted() {

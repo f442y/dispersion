@@ -8,6 +8,7 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -41,8 +42,8 @@ public class SignalReceiver implements SignalConsumer {
         try {
             Object payload = message.payload();
 
-            if (payload instanceof CommandEnvelope<?> env && env.command() instanceof SignalCommand) {
-                return (CompletableFuture) executor.handleCommand((CommandEnvelope) env);
+            if (payload instanceof CommandEnvelope<?> env) {
+                return (CompletableFuture) executor.handleCommand(env);
             }
 
             if (payload instanceof SignalCommand cmd) {
@@ -55,7 +56,8 @@ public class SignalReceiver implements SignalConsumer {
                 return (CompletableFuture) executor.sendSignalByCorrelationKey(corrKey, message.signalName(), payload);
             }
 
-            String machineIdHeader = message.headers().get("machineId");
+            Map<String, String> headers = message.headers();
+            String machineIdHeader = headers != null ? headers.get("machineId") : null;
             if (machineIdHeader != null && !machineIdHeader.isBlank()) {
                 UUID machineId = UUID.fromString(machineIdHeader);
                 return (CompletableFuture) executor.sendSignal(machineId, message.signalName(), payload);

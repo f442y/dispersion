@@ -5,9 +5,11 @@ import com.github.f442y.dispersion.config.InputFunction;
 import com.github.f442y.dispersion.config.OutputFunction;
 import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
+import com.github.f442y.dispersion.context.StateMachineContextFactory;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
+import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 import com.github.f442y.dispersion.state.State;
 import com.github.f442y.dispersion.state.StateKey;
 import com.github.f442y.dispersion.state.StateMap;
@@ -16,14 +18,19 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * Execution driver for turn-based durable Orchestrations on Java 25 Virtual Threads,
@@ -55,7 +62,7 @@ public final class OrchestrationStepDriver {
 
         CONTEXT context = initialContext;
         if (context == null) {
-            var factory = config.stateMachineContextFactory();
+            StateMachineContextFactory<CONTEXT> factory = config.stateMachineContextFactory();
             if (factory == null) {
                 throw new IllegalStateException("StateMachineContextFactory must be configured or initialContext provided");
             }
@@ -67,8 +74,7 @@ public final class OrchestrationStepDriver {
             context = inputFn.apply(context, input);
         }
 
-        StateMap<CONTEXT, STATE_KEY> stateMap = config.getStateMap();
-        STATE_KEY initialState = stateMap.getInitialState();
+        STATE_KEY initialState = config.getStateMap().getInitialState();
 
         return runTurn(
                 machineId,
@@ -86,7 +92,6 @@ public final class OrchestrationStepDriver {
      * Resumes an existing suspended orchestration from a checkpoint with an incoming signal or command.
      */
     @NonNull
-    @SuppressWarnings("unchecked")
     public static <
             CONTEXT extends StateMachineContext,
             STATE_KEY extends Enum<STATE_KEY> & StateKey,
@@ -106,7 +111,8 @@ public final class OrchestrationStepDriver {
         if (signalPayload instanceof CommandEnvelope<?> env) {
             if (processedIds.contains(env.commandId())) {
                 log.info("[{}] Ignoring duplicate command envelope [{}]", checkpoint.machineId(), env.commandId());
-                OUTPUT out = (config.outputFunction() != null) ? config.outputFunction().apply(checkpoint.contextSnapshot()) : null;
+                OutputFunction<CONTEXT, OUTPUT> outputFn = config.outputFunction();
+                OUTPUT out = (outputFn != null) ? outputFn.apply(checkpoint.contextSnapshot()) : null;
                 return new OrchestrationTurnResult<>(
                         checkpoint.machineId(),
                         checkpoint.status(),
@@ -211,7 +217,7 @@ public final class OrchestrationStepDriver {
                 }
                 // 4. Parallel Fork-Join Execution
                 else if (orchState != null && orchState.isParallelState()) {
-                    context = ParallelStateExecutor.executeParallel(orchState.parallelBranches(), context, virtualThreadExecutor);
+                    ParallelStateExecutor.executeParallel(orchState.parallelBranches(), context, virtualThreadExecutor);
                 }
                 // 5. Standard Action
                 else {
@@ -220,26 +226,31 @@ public final class OrchestrationStepDriver {
 
                 // 6. Outbound Broker Publishing
                 if (orchState != null && orchState.hasOutboundPublish()) {
-                    Object pubPayload = orchState.publishPayloadExtractor().apply(context);
-                    CompletableFuture<Void> pubFuture;
-                    if (pubPayload instanceof SignalCommand cmd) {
-                        pubFuture = orchState.signalPublisher().publish(orchState.publishDestination(), cmd);
-                    } else if (pubPayload instanceof CommandEnvelope<?> env) {
-                        pubFuture = orchState.signalPublisher().publish(orchState.publishDestination(), env);
-                    } else if (pubPayload instanceof SignalMessage msg) {
-                        pubFuture = orchState.signalPublisher().publish(msg);
-                    } else if (pubPayload != null) {
-                        SignalMessage msg = new SignalMessage(
-                                orchState.publishDestination(),
-                                pubPayload.getClass().getSimpleName(),
-                                correlationKey,
-                                pubPayload
-                        );
-                        pubFuture = orchState.signalPublisher().publish(msg);
-                    } else {
-                        pubFuture = CompletableFuture.completedFuture(null);
+                    SignalPublisher publisher = orchState.signalPublisher();
+                    String destination = orchState.publishDestination();
+                    Function<CONTEXT, ?> extractor = orchState.publishPayloadExtractor();
+                    if (publisher != null && destination != null && extractor != null) {
+                        Object pubPayload = extractor.apply(context);
+                        CompletableFuture<Void> pubFuture;
+                        if (pubPayload instanceof SignalCommand cmd) {
+                            pubFuture = publisher.publish(destination, cmd);
+                        } else if (pubPayload instanceof CommandEnvelope<?> env) {
+                            pubFuture = publisher.publish(destination, env);
+                        } else if (pubPayload instanceof SignalMessage msg) {
+                            pubFuture = publisher.publish(msg);
+                        } else if (pubPayload != null) {
+                            SignalMessage msg = new SignalMessage(
+                                    destination,
+                                    pubPayload.getClass().getSimpleName(),
+                                    correlationKey,
+                                    pubPayload
+                            );
+                            pubFuture = publisher.publish(msg);
+                        } else {
+                            pubFuture = CompletableFuture.completedFuture(null);
+                        }
+                        pubFuture.join();
                     }
-                    pubFuture.join();
                 }
 
                 // Record completed state for Saga compensation
@@ -251,8 +262,7 @@ public final class OrchestrationStepDriver {
                 }
 
                 // 7. Transition
-                STATE_KEY nextState = stateNode.transition().nextState(context);
-                currentStateKey = nextState;
+                currentStateKey = stateNode.transition().nextState(context);
             }
 
             // Execution Completed
@@ -293,9 +303,12 @@ public final class OrchestrationStepDriver {
                 STATE_KEY compStateKey = completedStates.get(i);
                 try {
                     State<CONTEXT, STATE_KEY> s = stateMap.getState(compStateKey);
-                    if (s instanceof OrchestrationState<CONTEXT, STATE_KEY> os && os.compensationAction() != null) {
-                        log.debug("[{}] Compensating completed state [{}]", machineId, compStateKey);
-                        context = os.compensationAction().compensate(context);
+                    if (s instanceof OrchestrationState<CONTEXT, STATE_KEY> os) {
+                        CompensationAction<CONTEXT> compAction = os.compensationAction();
+                        if (compAction != null) {
+                            log.debug("[{}] Compensating completed state [{}]", machineId, compStateKey);
+                            context = compAction.compensate(context);
+                        }
                     }
                 } catch (Throwable compErr) {
                     log.error("[{}] Compensation error in state [{}]: {}", machineId, compStateKey, compErr.getMessage(), compErr);
@@ -334,7 +347,10 @@ public final class OrchestrationStepDriver {
             @NonNull CONTEXT parentContext
     ) throws Exception {
 
-        StateMachineConfiguration childConfig = orchState.childStateMachine();
+        StateMachineConfiguration childConfig = Objects.requireNonNull(
+                orchState.childStateMachine(),
+                "childStateMachine must not be null"
+        );
         RetryPolicy retryPolicy = orchState.retryPolicy();
         ContextRecoverer recoverer = orchState.contextRecoverer();
 
@@ -344,17 +360,18 @@ public final class OrchestrationStepDriver {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 if (attempt > 1) {
-                    var delay = retryPolicy.computeDelay(attempt);
+                    Duration delay = retryPolicy.computeDelay(attempt);
                     if (!delay.isZero()) {
                         Thread.sleep(delay);
                     }
                 }
 
                 Object childInput;
+                Function<CONTEXT, ?> inputExtractor = orchState.childInputExtractor();
                 if (attempt > 1 && recoverer != null) {
                     childInput = recoverer.recover(parentContext, lastError, attempt);
-                } else if (orchState.childInputExtractor() != null) {
-                    childInput = orchState.childInputExtractor().apply(parentContext);
+                } else if (inputExtractor != null) {
+                    childInput = inputExtractor.apply(parentContext);
                 } else {
                     childInput = null;
                 }
@@ -363,17 +380,21 @@ public final class OrchestrationStepDriver {
                 Object childResult;
                 if (childConfig instanceof OrchestrationStateMachineConfiguration orchChildConfig) {
                     UUID childMachineId = UUID.randomUUID();
-                    var turn = executeChildOrchestrationTurn(childMachineId, orchChildConfig, childInput);
+                    OrchestrationTurnResult<?, ?, ?> turn = executeChildOrchestrationTurn(childMachineId, orchChildConfig, childInput);
                     if (turn.isFailed() || turn.isCompensated()) {
                         throw (turn.error() != null) ? new RuntimeException(turn.error()) : new IllegalStateException("Child orchestration failed");
+                    }
+                    if (turn.isSuspended()) {
+                        throw new IllegalStateException("Child orchestration [" + childMachineId + "] unexpectedly suspended at state [" + turn.currentStateKey() + "]");
                     }
                     childResult = turn.output();
                 } else {
                     childResult = AbstractStateMachineCallable.executeDirect(null, childConfig, null, childInput);
                 }
 
-                if (orchState.childOutputMerger() != null) {
-                    return orchState.childOutputMerger().apply(parentContext, childResult);
+                BiFunction<CONTEXT, Object, CONTEXT> outputMerger = orchState.childOutputMerger();
+                if (outputMerger != null) {
+                    return outputMerger.apply(parentContext, childResult);
                 }
                 return parentContext;
 
@@ -390,14 +411,14 @@ public final class OrchestrationStepDriver {
         throw new RuntimeException(lastError);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     private static <CC extends StateMachineContext, CS extends Enum<CS> & StateKey, CI, CO>
     OrchestrationTurnResult<CC, CS, CO> executeChildOrchestrationTurn(
             @NonNull UUID childMachineId,
             @NonNull OrchestrationStateMachineConfiguration<CC, CS, CI, CO> childConfig,
             @Nullable Object childInput
     ) throws Exception {
-        try (var childExecutor = java.util.concurrent.Executors.newThreadPerTaskExecutor(
+        try (ExecutorService childExecutor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("child-orch-", 0).factory()
         )) {
             return executeTurn(childMachineId, childConfig, null, (CI) childInput, childExecutor);

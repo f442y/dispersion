@@ -28,7 +28,21 @@ public interface CompensationAction<CONTEXT extends StateMachineContext> {
      * @return A no-op {@link CompensationAction}
      */
     @NonNull
+    @SuppressWarnings("unchecked")
     static <C extends StateMachineContext> CompensationAction<C> noop() {
-        return context -> context;
+        return (CompensationAction<C>) NoopCompensationAction.INSTANCE;
+    }
+
+    /**
+     * Singleton no-op compensation action implementation.
+     */
+    enum NoopCompensationAction implements CompensationAction<StateMachineContext> {
+        INSTANCE;
+
+        @NonNull
+        @Override
+        public StateMachineContext compensate(@NonNull StateMachineContext context) {
+            return context;
+        }
     }
 }

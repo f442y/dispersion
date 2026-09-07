@@ -35,6 +35,6 @@ public interface InputFunction<CONTEXT extends StateMachineContext, INPUT> {
      */
     @NonNull
     static <C extends StateMachineContext, I> InputFunction<C, I> identity() {
-        return (context, input) -> context;
+        return (context, _) -> context;
     }
 }

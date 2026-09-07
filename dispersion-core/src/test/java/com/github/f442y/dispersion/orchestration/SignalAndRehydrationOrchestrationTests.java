@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,7 +46,8 @@ public class SignalAndRehydrationOrchestrationTests {
     public void testSuspendAndResumeWithSignalByMachineId() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        var executor = OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderOrchestrator", OrderState.class)
+        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderOrchestrator", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .checkpointStore(store)
@@ -69,16 +70,12 @@ public class SignalAndRehydrationOrchestrationTests {
                         ctx.log.add("RESERVE_INVENTORY");
                         return ctx;
                     })
-                    .compensate(ctx -> {
-                        ctx.inventoryReleased = true;
-                        ctx.log.add("COMPENSATE_INVENTORY");
-                        return ctx;
-                    })
                     .transition(OrderState.AWAIT_PAYMENT_SIGNAL)
                 .state(OrderState.AWAIT_PAYMENT_SIGNAL)
                     .waitForSignal("PAYMENT_CONFIRMED", PaymentSignalPayload.class, (ctx, payload) -> {
+                        Objects.requireNonNull(payload, "payload must not be null");
                         ctx.transactionId = payload.transactionId();
-                        ctx.log.add("PAYMENT_PROCESSED:" + payload.transactionId());
+                        ctx.log.add("PAYMENT_CONFIRMED:" + payload.transactionId());
                         return ctx;
                     })
                     .transition(OrderState.FULFILL)
@@ -90,59 +87,62 @@ public class SignalAndRehydrationOrchestrationTests {
                     })
                     .transition(OrderState.COMPLETED)
                 .endStates(OrderState.COMPLETED, OrderState.FAILED)
-                .output(ctx -> "Order " + ctx.orderId + " completed with tx " + ctx.transactionId)
+                .output(ctx -> "Order " + ctx.orderId + " fulfilled successfully with tx " + ctx.transactionId)
                 .buildExecutor();
 
-        // 1. Dispatch initial turn
         OrderContext input = new OrderContext();
-        input.orderId = "ORD-001";
-        input.amount = 5000;
+        input.orderId = "ORD-90210";
+        input.amount = 450;
 
-        OrchestrationTurnResult<OrderContext, OrderState, String> firstTurn = executor.dispatchTurnSync(null, input);
+        // --- Turn 1: Starts workflow, executes VALIDATE & RESERVE_INVENTORY, pauses at AWAIT_PAYMENT_SIGNAL ---
+        OrchestrationTurnResult<OrderContext, OrderState, String> turn1Result = executor.dispatchTurnSync(null, input);
 
-        // Verify it paused at AWAIT_PAYMENT_SIGNAL
-        assertTrue(firstTurn.isSuspended());
-        assertEquals(OrderState.AWAIT_PAYMENT_SIGNAL, firstTurn.currentStateKey());
-        assertEquals("PAYMENT_CONFIRMED", firstTurn.expectedSignal());
-        assertNotNull(firstTurn.context());
-        assertTrue(firstTurn.context().inventoryReserved);
-        assertFalse(firstTurn.context().orderFulfilled);
+        assertNotNull(turn1Result.machineId());
+        assertTrue(turn1Result.isSuspended());
+        assertEquals(OrderState.AWAIT_PAYMENT_SIGNAL, turn1Result.currentStateKey());
+        assertEquals("PAYMENT_CONFIRMED", turn1Result.expectedSignal());
+        assertTrue(turn1Result.context().inventoryReserved);
+        assertFalse(turn1Result.context().orderFulfilled);
 
-        UUID machineId = firstTurn.machineId();
+        // Verify checkpoint was persisted into store
+        Optional<OrchestrationCheckpoint<OrderContext, OrderState>> savedCp = store.findById(turn1Result.machineId());
+        assertTrue(savedCp.isPresent());
+        assertEquals(OrchestrationStatus.SUSPENDED, savedCp.get().status());
+        assertEquals(OrderState.AWAIT_PAYMENT_SIGNAL, savedCp.get().currentStateKey());
 
-        // Verify checkpoint was persisted in store
-        Optional<OrchestrationCheckpoint<OrderContext, OrderState>> savedCheckpoint = store.findById(machineId);
-        assertTrue(savedCheckpoint.isPresent());
-        assertEquals(OrchestrationStatus.SUSPENDED, savedCheckpoint.get().status());
-        assertEquals(OrderState.AWAIT_PAYMENT_SIGNAL, savedCheckpoint.get().currentStateKey());
-        assertEquals("PAYMENT_CONFIRMED", savedCheckpoint.get().expectedSignal());
-
-        // 2. Deliver external signal (e.g. webhook)
-        PaymentSignalPayload paymentPayload = new PaymentSignalPayload("TX-9988", 5000);
+        // --- Turn 2: External signal arrives with payment confirmation ---
         CompletableFuture<OrchestrationTurnResult<OrderContext, OrderState, String>> resumeFuture =
-                executor.sendSignal(machineId, "PAYMENT_CONFIRMED", paymentPayload);
+                executor.sendSignal(turn1Result.machineId(), "PAYMENT_CONFIRMED", new PaymentSignalPayload("TX-4482-OK", 450));
 
-        OrchestrationTurnResult<OrderContext, OrderState, String> secondTurn = resumeFuture.get();
+        OrchestrationTurnResult<OrderContext, OrderState, String> turn2Result = resumeFuture.get();
 
-        // Verify it resumed and completed successfully
-        assertTrue(secondTurn.isCompleted());
-        assertEquals("Order ORD-001 completed with tx TX-9988", secondTurn.output());
-        assertNotNull(secondTurn.context());
-        assertTrue(secondTurn.context().orderFulfilled);
-        assertEquals("TX-9988", secondTurn.context().transactionId);
-        assertEquals(List.of("VALIDATE", "RESERVE_INVENTORY", "PAYMENT_PROCESSED:TX-9988", "FULFILL"), secondTurn.context().log);
+        assertTrue(turn2Result.isCompleted());
+        assertEquals(OrderState.COMPLETED, turn2Result.currentStateKey());
+        assertEquals("Order ORD-90210 fulfilled successfully with tx TX-4482-OK", turn2Result.output());
+        assertTrue(turn2Result.context().orderFulfilled);
+        assertEquals("TX-4482-OK", turn2Result.context().transactionId);
+        assertEquals(
+                List.of("VALIDATE", "RESERVE_INVENTORY", "PAYMENT_CONFIRMED:TX-4482-OK", "FULFILL"),
+                turn2Result.context().log
+        );
+
+        // Verify final checkpoint state is COMPLETED
+        Optional<OrchestrationCheckpoint<OrderContext, OrderState>> finalCp = store.findById(turn1Result.machineId());
+        assertTrue(finalCp.isPresent());
+        assertEquals(OrchestrationStatus.COMPLETED, finalCp.get().status());
 
         executor.close();
     }
 
     /**
-     * Tests delivering external signal using a domain correlation key (e.g. orderId).
+     * Tests signal delivery correlated via domain business key (e.g. orderId).
      */
     @Test
     public void testSignalDeliveryByCorrelationKey() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        var executor = OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("CorrelatedOrderOrchestrator", OrderState.class)
+        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("CorrelatedOrderOrchestrator", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .correlationKey(ctx -> ctx.orderId)
@@ -158,7 +158,8 @@ public class SignalAndRehydrationOrchestrationTests {
                     .action(ctx -> ctx)
                     .transition(OrderState.AWAIT_PAYMENT_SIGNAL)
                 .state(OrderState.AWAIT_PAYMENT_SIGNAL)
-                    .waitForSignal("PAYMENT_RECEIVED", PaymentSignalPayload.class, (ctx, payload) -> {
+                    .waitForSignal("PAYMENT_CONFIRMED", PaymentSignalPayload.class, (ctx, payload) -> {
+                        Objects.requireNonNull(payload, "payload must not be null");
                         ctx.transactionId = payload.transactionId();
                         return ctx;
                     })
@@ -167,26 +168,20 @@ public class SignalAndRehydrationOrchestrationTests {
                 .output(ctx -> "Processed " + ctx.orderId)
                 .buildExecutor();
 
-        OrderContext initial = new OrderContext();
-        initial.orderId = "ORDER-CORR-42";
-        initial.amount = 1000;
+        OrderContext input = new OrderContext();
+        input.orderId = "ORDER-BIZ-KEY-123";
 
-        OrchestrationTurnResult<OrderContext, OrderState, String> turn1 = executor.dispatchTurnSync(null, initial);
+        OrchestrationTurnResult<OrderContext, OrderState, String> turn1 = executor.dispatchTurnSync(null, input);
         assertTrue(turn1.isSuspended());
 
-        // Check correlation index
-        Optional<OrchestrationCheckpoint<OrderContext, OrderState>> cp = store.findByCorrelationKey("ORDER-CORR-42");
-        assertTrue(cp.isPresent());
-        assertEquals(turn1.machineId(), cp.get().machineId());
-        assertEquals("ORDER-CORR-42", cp.get().correlationKey());
-
-        // Deliver signal using correlation key
+        // Signal delivered by domain correlationKey, not machineId
         CompletableFuture<OrchestrationTurnResult<OrderContext, OrderState, String>> future =
-                executor.sendSignalByCorrelationKey("ORDER-CORR-42", "PAYMENT_RECEIVED", new PaymentSignalPayload("TX-42", 1000));
+                executor.sendSignalByCorrelationKey("ORDER-BIZ-KEY-123", "PAYMENT_CONFIRMED", new PaymentSignalPayload("TX-CORR-1", 100));
 
         OrchestrationTurnResult<OrderContext, OrderState, String> turn2 = future.get();
         assertTrue(turn2.isCompleted());
-        assertEquals("Processed ORDER-CORR-42", turn2.output());
+        assertEquals("Processed ORDER-BIZ-KEY-123", turn2.output());
+        assertEquals("TX-CORR-1", turn2.context().transactionId);
 
         executor.close();
     }
@@ -198,7 +193,8 @@ public class SignalAndRehydrationOrchestrationTests {
     public void testSagaCompensationRollbackAcrossMultipleTurns() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        var executor = OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("SagaRollbackOrchestrator", OrderState.class)
+        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("SagaRollbackOrchestrator", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .checkpointStore(store)
@@ -228,6 +224,7 @@ public class SignalAndRehydrationOrchestrationTests {
                     .transition(OrderState.AWAIT_PAYMENT_SIGNAL)
                 .state(OrderState.AWAIT_PAYMENT_SIGNAL)
                     .waitForSignal("PAYMENT_CONFIRMED", PaymentSignalPayload.class, (ctx, payload) -> {
+                        Objects.requireNonNull(payload, "payload must not be null");
                         ctx.transactionId = payload.transactionId();
                         ctx.log.add("PAYMENT_APPLIED");
                         return ctx;

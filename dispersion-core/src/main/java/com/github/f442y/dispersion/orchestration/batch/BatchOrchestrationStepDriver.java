@@ -27,8 +27,8 @@ import java.util.concurrent.Future;
 import java.util.function.Function;
 
 /**
- * Execution driver for Set/Batch Orchestrations supporting independent itemized streaming,
- * dynamic barrier synchronization, and item/batch signal ingestion.
+ * Execution driver for turn-based batch orchestrations with concurrent item execution,
+ * barrier synchronization, and item-level signal rehydration on Java 25 Virtual Threads.
  */
 public final class BatchOrchestrationStepDriver {
 
@@ -36,17 +36,20 @@ public final class BatchOrchestrationStepDriver {
 
     private BatchOrchestrationStepDriver() {}
 
-    public static class ItemStateDefinition<ITEM_CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> {
+    public static final class ItemStateDefinition<
+            ITEM_CONTEXT extends StateMachineContext,
+            STATE_KEY extends Enum<STATE_KEY> & StateKey> {
+
         public Action<ITEM_CONTEXT> action = Action.identity();
-        public CompensationAction<ITEM_CONTEXT> compensationAction = CompensationAction.noop();
         public Transition<ITEM_CONTEXT, STATE_KEY> transition;
+        public boolean isBarrier;
+        public BarrierPolicy barrierPolicy;
         public String expectedSignal;
         public SignalHandler<ITEM_CONTEXT, ?> signalHandler;
-        public boolean isBarrier = false;
-        public BarrierPolicy barrierPolicy = BarrierPolicy.ALL_ITEMS_ARRIVED;
+        public CompensationAction<ITEM_CONTEXT> compensationAction = CompensationAction.noop();
     }
 
-    public static class BatchConfiguration<
+    public static final class BatchConfiguration<
             BATCH_CONTEXT extends StateMachineContext,
             ITEM_CONTEXT extends StateMachineContext,
             STATE_KEY extends Enum<STATE_KEY> & StateKey,
@@ -77,13 +80,13 @@ public final class BatchOrchestrationStepDriver {
             @NonNull BATCH_CONTEXT batchContext,
             @NonNull List<ITEM_CONTEXT> initialItemContexts,
             @NonNull ExecutorService virtualThreadExecutor
-    ) throws Exception {
+    ) {
 
-        String batchKey = (config.batchKeyExtractor != null) ? config.batchKeyExtractor.apply(batchContext) : batchId.toString();
+        String extractedKey = (config.batchKeyExtractor != null) ? config.batchKeyExtractor.apply(batchContext) : null;
+        String batchKey = (extractedKey != null) ? extractedKey : batchId.toString();
         Map<String, STATE_KEY> itemStates = new ConcurrentHashMap<>();
         Map<String, ITEM_CONTEXT> itemContexts = new ConcurrentHashMap<>();
         Set<String> arrivedBarrierItemKeys = ConcurrentHashMap.newKeySet();
-        Set<UUID> processedCommandIds = ConcurrentHashMap.newKeySet();
 
         for (ITEM_CONTEXT itemCtx : initialItemContexts) {
             String itemKey = config.itemKeyExtractor.apply(itemCtx);
@@ -99,7 +102,6 @@ public final class BatchOrchestrationStepDriver {
                 itemStates,
                 itemContexts,
                 arrivedBarrierItemKeys,
-                processedCommandIds,
                 null,
                 null,
                 null,
@@ -123,7 +125,7 @@ public final class BatchOrchestrationStepDriver {
             @Nullable Object itemSignal,
             @Nullable Object batchSignal,
             @NonNull ExecutorService virtualThreadExecutor
-    ) throws Exception {
+    ) {
 
         Map<String, STATE_KEY> itemStates = new ConcurrentHashMap<>(checkpoint.itemStates());
         Map<String, ITEM_CONTEXT> itemContexts = new ConcurrentHashMap<>(checkpoint.itemContexts());
@@ -162,7 +164,6 @@ public final class BatchOrchestrationStepDriver {
                 itemStates,
                 itemContexts,
                 arrivedBarrierItemKeys,
-                processedCommandIds,
                 targetItemKey,
                 effectiveItemSignal,
                 batchSignal,
@@ -184,14 +185,16 @@ public final class BatchOrchestrationStepDriver {
             @NonNull Map<String, STATE_KEY> itemStates,
             @NonNull Map<String, ITEM_CONTEXT> itemContexts,
             @NonNull Set<String> arrivedBarrierItemKeys,
-            @NonNull Set<UUID> processedCommandIds,
             @Nullable String targetItemKey,
             @Nullable Object itemSignalPayload,
             @Nullable Object batchSignalPayload,
             @NonNull ExecutorService virtualThreadExecutor
-    ) throws Exception {
+    ) {
 
         List<Throwable> failures = new CopyOnWriteArrayList<>();
+
+        String currentTargetItemKey = targetItemKey;
+        Object currentItemSignalPayload = itemSignalPayload;
 
         // Process loop: continues until no further items can make progress in this turn
         boolean progressMadeInTurn;
@@ -199,36 +202,31 @@ public final class BatchOrchestrationStepDriver {
             progressMadeInTurn = false;
             Set<String> candidatesToRun = new HashSet<>();
 
-            if (targetItemKey != null) {
-                candidatesToRun.add(targetItemKey);
-            } else {
-                candidatesToRun.addAll(itemStates.keySet());
-            }
+            for (Map.Entry<String, STATE_KEY> entry : itemStates.entrySet()) {
+                String itemKey = entry.getKey();
+                STATE_KEY state = entry.getValue();
 
-            // Also include any items that might be unlocked by barriers
-            for (String itemKey : itemStates.keySet()) {
-                STATE_KEY st = itemStates.get(itemKey);
-                ItemStateDefinition<ITEM_CONTEXT, STATE_KEY> sDef = config.stateDefinitions.get(st);
-                if (sDef != null && sDef.isBarrier) {
-                    if (sDef.barrierPolicy == BarrierPolicy.ALL_ITEMS_ARRIVED && arrivedBarrierItemKeys.size() >= itemStates.size()) {
-                        candidatesToRun.add(itemKey);
-                    } else if (sDef.barrierPolicy == BarrierPolicy.SIGNAL_TRIGGERED && batchSignalPayload != null) {
-                        candidatesToRun.add(itemKey);
-                    }
+                if (!config.endStates.contains(state)) {
+                    candidatesToRun.add(itemKey);
                 }
             }
+
+            if (candidatesToRun.isEmpty()) {
+                break;
+            }
+
+            final String effectiveTargetItemKey = currentTargetItemKey;
+            final Object effectiveItemSignal = currentItemSignalPayload;
 
             List<Future<Boolean>> futures = new ArrayList<>();
 
             for (String itemKey : candidatesToRun) {
-                final Object signalForThisItem = (itemKey.equals(targetItemKey)) ? itemSignalPayload : null;
-
                 futures.add(virtualThreadExecutor.submit(() -> {
                     boolean moved = false;
                     try {
                         STATE_KEY currentState = itemStates.get(itemKey);
                         ITEM_CONTEXT context = itemContexts.get(itemKey);
-                        Object pendingSignal = signalForThisItem;
+                        Object pendingSignal = (itemKey.equals(effectiveTargetItemKey)) ? effectiveItemSignal : null;
 
                         while (currentState != null && !config.endStates.contains(currentState)) {
                             ItemStateDefinition<ITEM_CONTEXT, STATE_KEY> stateDef = config.stateDefinitions.get(currentState);
@@ -270,7 +268,9 @@ public final class BatchOrchestrationStepDriver {
                                 }
                             } else {
                                 // Standard Item Action
-                                context = stateDef.action.execute(context);
+                                if (stateDef.action != null) {
+                                    context = stateDef.action.execute(context);
+                                }
                                 moved = true;
                             }
 
@@ -281,7 +281,6 @@ public final class BatchOrchestrationStepDriver {
                                 STATE_KEY nextState = stateDef.transition.nextState(context);
                                 currentState = nextState;
                                 itemStates.put(itemKey, nextState);
-                                moved = true;
                             } else {
                                 break;
                             }
@@ -305,13 +304,13 @@ public final class BatchOrchestrationStepDriver {
             }
 
             // Only consume the targetItemKey signal once
-            targetItemKey = null;
-            itemSignalPayload = null;
+            currentTargetItemKey = null;
+            currentItemSignalPayload = null;
 
         } while (progressMadeInTurn && failures.isEmpty());
 
         if (!failures.isEmpty()) {
-            Throwable firstFailure = failures.get(0);
+            Throwable firstFailure = failures.getFirst();
             if (config.failurePolicy == BatchFailurePolicy.FAIL_FAST) {
                 OUTPUT out = (config.outputFunction != null) ? config.outputFunction.apply(batchContext) : null;
                 return new BatchTurnResult<>(

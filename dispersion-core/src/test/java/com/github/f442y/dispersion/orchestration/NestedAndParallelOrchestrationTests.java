@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,7 +53,7 @@ public class NestedAndParallelOrchestrationTests {
     public void testParallelForkJoinExecution() throws Exception {
         CountDownLatch startLatch = new CountDownLatch(3);
 
-        OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, List<String>> executor =
+        try (OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, List<String>> executor =
                 OrchestrationStateMachineBuilder.<RootContext, RootOrchState, Void, List<String>>create("ParallelOrchestrator", RootOrchState.class)
                         .context(RootContext::new)
                         .initialState(RootOrchState.INIT)
@@ -67,19 +68,19 @@ public class NestedAndParallelOrchestrationTests {
                             .parallel()
                                 .branch("stockCheck", ctx -> {
                                     startLatch.countDown();
-                                    startLatch.await(5, TimeUnit.SECONDS);
+                                    assertTrue(startLatch.await(5, TimeUnit.SECONDS));
                                     ctx.parallelLog.add("STOCK_RESERVED");
                                     return ctx;
                                 })
                                 .branch("fraudCheck", ctx -> {
                                     startLatch.countDown();
-                                    startLatch.await(5, TimeUnit.SECONDS);
+                                    assertTrue(startLatch.await(5, TimeUnit.SECONDS));
                                     ctx.parallelLog.add("FRAUD_CLEARED");
                                     return ctx;
                                 })
                                 .branch("pricingEngine", ctx -> {
                                     startLatch.countDown();
-                                    startLatch.await(5, TimeUnit.SECONDS);
+                                    assertTrue(startLatch.await(5, TimeUnit.SECONDS));
                                     ctx.parallelLog.add("PRICING_CALCULATED");
                                     return ctx;
                                 })
@@ -90,13 +91,14 @@ public class NestedAndParallelOrchestrationTests {
                             .transition(RootOrchState.COMPLETED)
                         .endStates(RootOrchState.COMPLETED, RootOrchState.FAILED)
                         .output(ctx -> new ArrayList<>(ctx.parallelLog))
-                        .buildExecutor();
+                        .buildExecutor()) {
 
-        List<String> results = executor.dispatchSync(null);
-        assertEquals(3, results.size());
-        assertTrue(results.contains("STOCK_RESERVED"));
-        assertTrue(results.contains("FRAUD_CLEARED"));
-        assertTrue(results.contains("PRICING_CALCULATED"));
+            List<String> results = executor.dispatchSync(null);
+            assertThat(results).isNotNull().hasSize(3);
+            assertTrue(results.contains("STOCK_RESERVED"));
+            assertTrue(results.contains("FRAUD_CLEARED"));
+            assertTrue(results.contains("PRICING_CALCULATED"));
+        }
     }
 
     /**
@@ -104,7 +106,7 @@ public class NestedAndParallelOrchestrationTests {
      */
     @Test
     public void testParallelBranchFailureRollsBackSiblingBranches() {
-        OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, Void> executor =
+        try (OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, Void> executor =
                 OrchestrationStateMachineBuilder.<RootContext, RootOrchState, Void, Void>create("FailingParallelOrchestrator", RootOrchState.class)
                         .context(RootContext::new)
                         .initialState(RootOrchState.INIT)
@@ -132,16 +134,17 @@ public class NestedAndParallelOrchestrationTests {
                                         }
                                 )
                                 .branch("failingBranch",
-                                        ctx -> {
+                                        _ -> {
                                             throw new RuntimeException("Third-party gateway timeout");
                                         },
                                         null
                                 )
                             .transition(RootOrchState.COMPLETED)
                         .endStates(RootOrchState.COMPLETED, RootOrchState.FAILED)
-                        .buildExecutor();
+                        .buildExecutor()) {
 
-        assertThrows(Exception.class, () -> executor.dispatchSync(null));
+            assertThrows(Exception.class, () -> executor.dispatchSync(null));
+        }
     }
 
     /**
@@ -175,7 +178,7 @@ public class NestedAndParallelOrchestrationTests {
                             .transition(SubOrchState.SUB_RUN_ATOMIC)
                         .state(SubOrchState.SUB_RUN_ATOMIC)
                             .childMachine(microMachine)
-                            .input(ctx -> "FROM_SUB")
+                            .input(_ -> "FROM_SUB")
                             .output((ctx, out) -> {
                                 ctx.subResult = "SUB_RESULT[" + out + "]";
                                 return ctx;
@@ -186,7 +189,7 @@ public class NestedAndParallelOrchestrationTests {
                         .build();
 
         // Level 1: Root Orchestration Machine embedding Sub-Orchestration Machine
-        OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, String> rootExecutor =
+        try (OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, String> rootExecutor =
                 OrchestrationStateMachineBuilder.<RootContext, RootOrchState, Void, String>create("RootOrchestrator", RootOrchState.class)
                         .context(RootContext::new)
                         .initialState(RootOrchState.INIT)
@@ -198,7 +201,7 @@ public class NestedAndParallelOrchestrationTests {
                             .transition(RootOrchState.RUN_SUB_ORCHESTRATION)
                         .state(RootOrchState.RUN_SUB_ORCHESTRATION)
                             .childMachine(subOrchMachine)
-                            .input(ctx -> "ROOT_TRIGGER")
+                            .input(_ -> "ROOT_TRIGGER")
                             .output((ctx, subOut) -> {
                                 ctx.finalSummary = "ROOT_GOT(" + subOut + ")";
                                 return ctx;
@@ -206,9 +209,10 @@ public class NestedAndParallelOrchestrationTests {
                             .transition(RootOrchState.COMPLETED)
                         .endStates(RootOrchState.COMPLETED, RootOrchState.FAILED)
                         .output(ctx -> ctx.finalSummary)
-                        .buildExecutor();
+                        .buildExecutor()) {
 
-        String result = rootExecutor.dispatchSync(null);
-        assertEquals("ROOT_GOT(SUB_RESULT[MICRO(FROM_SUB)])", result);
+            String result = rootExecutor.dispatchSync(null);
+            assertEquals("ROOT_GOT(SUB_RESULT[MICRO(FROM_SUB)])", result);
+        }
     }
 }

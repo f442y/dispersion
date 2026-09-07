@@ -132,9 +132,56 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
      * @return A terminal {@link State} instance
      */
     @NonNull
+    @SuppressWarnings("unchecked")
     static <C extends StateMachineContext, S extends Enum<S> & StateKey> State<C, S> terminal() {
-        return new SimpleState<C, S>(Action.identity(), Collections.emptySet(), Transition.terminal(), true, -1, null);
+        return (State<C, S>) TerminalState.INSTANCE;
     }
+
+    /**
+     * Singleton terminal state implementation.
+     */
+    enum TerminalState implements State<StateMachineContext, StateKeyEnum> {
+        INSTANCE;
+
+        @NonNull
+        @Override
+        public Action<StateMachineContext> action() {
+            return Action.identity();
+        }
+
+        @NonNull
+        @Override
+        public Transition<StateMachineContext, StateKeyEnum> transition() {
+            return Transition.terminal();
+        }
+
+        @NonNull
+        @Override
+        public Set<StateKeyEnum> permittedTargets() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public boolean isTerminal() {
+            return true;
+        }
+
+        @Override
+        public int maxVisits() {
+            return -1;
+        }
+
+        @Nullable
+        @Override
+        public StateKeyEnum maxVisitsFallback() {
+            return null;
+        }
+    }
+
+    /**
+     * Private enum marker for raw TerminalState generic bound.
+     */
+    enum StateKeyEnum implements StateKey {}
 
     /**
      * Default immutable record implementation of {@link State}.
@@ -148,9 +195,9 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
             @Nullable S maxVisitsFallback
     ) implements State<C, S> {
         public SimpleState {
-            action = (action != null) ? action : Action.identity();
-            permittedTargets = (permittedTargets != null) ? Set.copyOf(permittedTargets) : Collections.emptySet();
-            transition = (transition != null) ? transition : Transition.terminal();
+            Objects.requireNonNull(action, "action must not be null");
+            Objects.requireNonNull(transition, "transition must not be null");
+            permittedTargets = Set.copyOf(Objects.requireNonNull(permittedTargets, "permittedTargets must not be null"));
         }
     }
 }

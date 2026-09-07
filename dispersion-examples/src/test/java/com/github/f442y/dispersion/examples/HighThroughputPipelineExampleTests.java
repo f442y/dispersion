@@ -42,8 +42,10 @@ public class HighThroughputPipelineExampleTests {
                         .context(EventContext::new)
                         .initialState(PipelineState.INGEST)
                         .input((ctx, in) -> {
-                            ctx.eventId = in.eventId();
-                            ctx.payload = in.rawData();
+                            if (in != null) {
+                                ctx.eventId = in.eventId();
+                                ctx.payload = in.rawData();
+                            }
                             ctx.timestamp = System.currentTimeMillis();
                             return ctx;
                         })
@@ -55,7 +57,9 @@ public class HighThroughputPipelineExampleTests {
                             .transition(PipelineState.TRANSFORM)
                         .state(PipelineState.TRANSFORM)
                             .action(ctx -> {
-                                ctx.payload = ctx.payload.toUpperCase();
+                                if (ctx.payload != null) {
+                                    ctx.payload = ctx.payload.toUpperCase();
+                                }
                                 ctx.processingScore *= 2;
                                 return ctx;
                             })

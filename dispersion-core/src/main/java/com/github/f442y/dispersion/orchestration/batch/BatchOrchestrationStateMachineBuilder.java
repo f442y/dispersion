@@ -35,6 +35,7 @@ public class BatchOrchestrationStateMachineBuilder<
 
     private BatchOrchestrationStateMachineBuilder(@NonNull String batchName, @NonNull Class<STATE_KEY> stateKeyClass) {
         this.configuration.batchName = Objects.requireNonNull(batchName, "batchName must not be null");
+        Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
     }
 
     public static <

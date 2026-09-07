@@ -8,6 +8,7 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
@@ -30,8 +31,7 @@ public class BatchSignalReceiver implements SignalConsumer {
 
     @Override
     @NonNull
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    public CompletableFuture onMessage(@NonNull SignalMessage message) {
+    public CompletableFuture<?> onMessage(@NonNull SignalMessage message) {
         Objects.requireNonNull(message, "message must not be null");
 
         log.debug("BatchSignalReceiver processing message [{}] (signal: {}, corr: {})",
@@ -40,8 +40,8 @@ public class BatchSignalReceiver implements SignalConsumer {
         try {
             Object payload = message.payload();
 
-            if (payload instanceof CommandEnvelope<?> env && env.command() instanceof SignalCommand) {
-                return batchExecutor.handleCommand((CommandEnvelope) env);
+            if (payload instanceof CommandEnvelope<?> env) {
+                return batchExecutor.handleCommand(env);
             }
 
             if (payload instanceof SignalCommand cmd) {
@@ -49,7 +49,8 @@ public class BatchSignalReceiver implements SignalConsumer {
                 return batchExecutor.handleCommand(env);
             }
 
-            String itemKeyHeader = message.headers().get("itemKey");
+            Map<String, String> headers = message.headers();
+            String itemKeyHeader = headers != null ? headers.get("itemKey") : null;
             String batchKey = message.correlationKey();
 
             if (batchKey != null && itemKeyHeader != null) {
@@ -60,13 +61,13 @@ public class BatchSignalReceiver implements SignalConsumer {
                 return batchExecutor.sendBatchSignal(batchKey, message.signalName(), payload);
             }
 
-            CompletableFuture failed = new CompletableFuture<>();
+            CompletableFuture<?> failed = new CompletableFuture<>();
             failed.completeExceptionally(new IllegalArgumentException("Cannot route batch SignalMessage: missing correlationKey/batchKey"));
             return failed;
 
         } catch (Throwable t) {
             log.error("Error routing batch SignalMessage [{}]", message.messageId(), t);
-            CompletableFuture failed = new CompletableFuture<>();
+            CompletableFuture<?> failed = new CompletableFuture<>();
             failed.completeExceptionally(t);
             return failed;
         }

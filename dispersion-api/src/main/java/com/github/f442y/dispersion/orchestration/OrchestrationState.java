@@ -53,7 +53,7 @@ public class OrchestrationState<
     public OrchestrationState(
             @NonNull Action<CONTEXT> action,
             @NonNull Transition<CONTEXT, STATE_KEY> transition,
-            @NonNull Set<STATE_KEY> permittedTargets,
+            @Nullable Set<STATE_KEY> permittedTargets,
             boolean isTerminal,
             int maxVisits,
             @Nullable STATE_KEY maxVisitsFallback,

@@ -55,20 +55,25 @@ public final class ParallelStateExecutor {
             CompletableFuture<Void> branchFuture = new CompletableFuture<>();
             futures.add(branchFuture);
 
-            executor.submit(() -> {
-                try {
-                    if (firstFailure.get() != null) {
-                        branchFuture.cancel(true);
-                        return;
+            try {
+                executor.submit(() -> {
+                    try {
+                        if (firstFailure.get() != null) {
+                            branchFuture.cancel(true);
+                            return;
+                        }
+                        branch.action().execute(context);
+                        completedBranches.add(branch);
+                        branchFuture.complete(null);
+                    } catch (Throwable t) {
+                        firstFailure.compareAndSet(null, t);
+                        branchFuture.completeExceptionally(t);
                     }
-                    branch.action().execute(context);
-                    completedBranches.add(branch);
-                    branchFuture.complete(null);
-                } catch (Throwable t) {
-                    firstFailure.compareAndSet(null, t);
-                    branchFuture.completeExceptionally(t);
-                }
-            });
+                });
+            } catch (Throwable t) {
+                firstFailure.compareAndSet(null, t);
+                branchFuture.completeExceptionally(t);
+            }
         }
 
         // Wait for all to complete or first failure

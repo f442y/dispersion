@@ -93,34 +93,35 @@ public class GraphTraversalAndValidationTests {
                         .output(ctx -> String.join(" -> ", ctx.history))
                         .build();
 
-        AtomicStateMachineExecutor<OrderContext, GraphState, OrderContext, String> executor =
-                new AtomicStateMachineExecutor<>("graph-traversal-test", stateMachine, 10);
+        try (AtomicStateMachineExecutor<OrderContext, GraphState, OrderContext, String> executor =
+                new AtomicStateMachineExecutor<>("graph-traversal-test", stateMachine, 10)) {
 
-        // 1. Standard non-VIP with 2 retry cycles before succeeding
-        OrderContext standard = new OrderContext();
-        String standardResult = executor.dispatchSync(standard, standard);
-        assertEquals(
-                "START -> VALIDATE (attempt 0) -> RETRY -> looping back to VALIDATE -> " +
-                "VALIDATE (attempt 1) -> RETRY -> looping back to VALIDATE -> " +
-                "VALIDATE (attempt 2) -> PROCESS",
-                standardResult
-        );
+            // 1. Standard non-VIP with 2 retry cycles before succeeding
+            OrderContext standard = new OrderContext();
+            String standardResult = executor.dispatchSync(standard, standard);
+            assertEquals(
+                    "START -> VALIDATE (attempt 0) -> RETRY -> looping back to VALIDATE -> " +
+                    "VALIDATE (attempt 1) -> RETRY -> looping back to VALIDATE -> " +
+                    "VALIDATE (attempt 2) -> PROCESS",
+                    standardResult
+            );
 
-        // 2. VIP skips validation retries directly to SKIP_FORWARD -> SUCCESS
-        OrderContext vip = new OrderContext();
-        vip.isVip = true;
-        String vipResult = executor.dispatchSync(vip, vip);
-        assertEquals(
-                "START -> VALIDATE (attempt 0) -> VIP_FAST_TRACK",
-                vipResult
-        );
+            // 2. VIP skips validation retries directly to SKIP_FORWARD -> SUCCESS
+            OrderContext vip = new OrderContext();
+            vip.isVip = true;
+            String vipResult = executor.dispatchSync(vip, vip);
+            assertEquals(
+                    "START -> VALIDATE (attempt 0) -> VIP_FAST_TRACK",
+                    vipResult
+            );
 
-        // 3. Test Mermaid Diagram Generation
-        String mermaid = stateMachine.getStateMap().toMermaid();
-        assertTrue(mermaid.contains("stateDiagram-v2"));
-        assertTrue(mermaid.contains("VALIDATE --> RETRY"));
-        assertTrue(mermaid.contains("RETRY --> VALIDATE"));
-        assertTrue(mermaid.contains("VALIDATE --> SKIP_FORWARD"));
+            // 3. Test Mermaid Diagram Generation
+            String mermaid = stateMachine.getStateMap().toMermaid();
+            assertTrue(mermaid.contains("stateDiagram-v2"));
+            assertTrue(mermaid.contains("VALIDATE --> RETRY"));
+            assertTrue(mermaid.contains("RETRY --> VALIDATE"));
+            assertTrue(mermaid.contains("VALIDATE --> SKIP_FORWARD"));
+        }
     }
 
     /**
@@ -155,11 +156,12 @@ public class GraphTraversalAndValidationTests {
                         .output(ctx -> String.join(" -> ", ctx.history))
                         .build();
 
-        AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
-                new AtomicStateMachineExecutor<>("max-visits-fallback-test", stateMachine, 10);
+        try (AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
+                new AtomicStateMachineExecutor<>("max-visits-fallback-test", stateMachine, 10)) {
 
-        String result = executor.dispatchSync(null);
-        assertEquals("START -> RETRY -> RETRY -> TIMEOUT_EXCEEDED", result);
+            String result = executor.dispatchSync(null);
+            assertEquals("START -> RETRY -> RETRY -> TIMEOUT_EXCEEDED", result);
+        }
     }
 
     /**
@@ -179,10 +181,11 @@ public class GraphTraversalAndValidationTests {
                         .endStates(GraphState.FAILED)
                         .build();
 
-        AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
-                new AtomicStateMachineExecutor<>("max-visits-exception-test", stateMachine, 10);
+        try (AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
+                new AtomicStateMachineExecutor<>("max-visits-exception-test", stateMachine, 10)) {
 
-        assertThrows(MaxStateVisitsExceededException.class, () -> executor.dispatchSync(null));
+            assertThrows(MaxStateVisitsExceededException.class, () -> executor.dispatchSync(null));
+        }
     }
 
     /**
@@ -204,10 +207,11 @@ public class GraphTraversalAndValidationTests {
                         .endStates(GraphState.SUCCESS)
                         .build();
 
-        AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
-                new AtomicStateMachineExecutor<>("global-max-transitions-test", stateMachine, 10);
+        try (AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
+                new AtomicStateMachineExecutor<>("global-max-transitions-test", stateMachine, 10)) {
 
-        assertThrows(MaxTransitionsExceededException.class, () -> executor.dispatchSync(null));
+            assertThrows(MaxTransitionsExceededException.class, () -> executor.dispatchSync(null));
+        }
     }
 
     /**
@@ -215,14 +219,14 @@ public class GraphTraversalAndValidationTests {
      */
     @Test
     public void testBuildTimeGraphIntegrityFailsOnUnregisteredTarget() {
-        assertThrows(IllegalStateException.class, () -> {
+        assertThrows(IllegalStateException.class, () ->
             AtomicStateMachineBuilder.<OrderContext, GraphState, Void, Void>create(GraphState.class)
                     .context(OrderContext::new)
                     .initialState(GraphState.START)
-                    .addState(GraphState.START, State.of(Action.identity(), Set.of(GraphState.PROCESS), ctx -> GraphState.PROCESS))
+                    .addState(GraphState.START, State.of(Action.identity(), Set.of(GraphState.PROCESS), _ -> GraphState.PROCESS))
                     .endStates(GraphState.SUCCESS)
-                    .build();
-        });
+                    .build()
+        );
     }
 
     /**
@@ -237,17 +241,18 @@ public class GraphTraversalAndValidationTests {
                         .addState(GraphState.START, State.of(
                                 Action.identity(),
                                 Set.of(GraphState.VALIDATE),
-                                ctx -> GraphState.PROCESS
+                                _ -> GraphState.PROCESS
                         ))
                         .addState(GraphState.VALIDATE, State.of(Action.identity(), GraphState.SUCCESS))
                         .addState(GraphState.PROCESS, State.of(Action.identity(), GraphState.SUCCESS))
                         .endStates(GraphState.SUCCESS)
-                        .output(ctx -> "OK")
+                        .output(_ -> "OK")
                         .build();
 
-        AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
-                new AtomicStateMachineExecutor<>("illegal-edge-test", stateMachine, 10);
+        try (AtomicStateMachineExecutor<OrderContext, GraphState, Void, String> executor =
+                new AtomicStateMachineExecutor<>("illegal-edge-test", stateMachine, 10)) {
 
-        assertThrows(TransitionException.class, () -> executor.dispatchSync(null));
+            assertThrows(TransitionException.class, () -> executor.dispatchSync(null));
+        }
     }
 }

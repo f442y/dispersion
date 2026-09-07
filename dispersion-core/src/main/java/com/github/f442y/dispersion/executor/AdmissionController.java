@@ -42,6 +42,18 @@ public class AdmissionController {
         this.semaphore = new Semaphore(maxConcurrent, true);
     }
 
+    public static AdmissionController rejectImmediately(int maxConcurrent) {
+        return new AdmissionController(maxConcurrent, BackpressureStrategy.REJECT_IMMEDIATELY, Duration.ZERO);
+    }
+
+    public static AdmissionController waitWithTimeout(int maxConcurrent, @NonNull Duration timeout) {
+        return new AdmissionController(maxConcurrent, BackpressureStrategy.WAIT_WITH_TIMEOUT, timeout);
+    }
+
+    public static AdmissionController block(int maxConcurrent) {
+        return new AdmissionController(maxConcurrent, BackpressureStrategy.BLOCK, Duration.ZERO);
+    }
+
     /**
      * Attempts to acquire an execution permit according to the configured {@link BackpressureStrategy}.
      *
@@ -71,7 +83,7 @@ public class AdmissionController {
      */
     public void acquire(@NonNull Duration timeout) throws InterruptedException, BackpressureException {
         Objects.requireNonNull(timeout, "timeout must not be null");
-        boolean acquired = semaphore.tryAcquire(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        boolean acquired = semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
         if (!acquired) {
             throw new BackpressureException(
                     "Admission timed out waiting for permit after " + timeout.toMillis() + "ms"

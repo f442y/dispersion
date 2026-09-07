@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class UnifiedOrchestrationStateMachineTests {
@@ -35,7 +36,6 @@ public class UnifiedOrchestrationStateMachineTests {
     // 3. Contexts
     public static class AtomicContext implements StateMachineContext {
         public String payload;
-        public boolean successful;
     }
 
     public static class OrderOrchestrationContext implements StateMachineContext {
@@ -87,7 +87,7 @@ public class UnifiedOrchestrationStateMachineTests {
         List<OrchestrationCheckpoint<OrderOrchestrationContext, OrderOrchState>> checkpoints = new ArrayList<>();
 
         // Macro Orchestration State Machine
-        OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, OrderOrchestrationContext, String> orchestrationMachine =
+        try (OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, OrderOrchestrationContext, String> orchestrationMachine =
                 OrchestrationStateMachineBuilder.<OrderOrchestrationContext, OrderOrchState, OrderOrchestrationContext, String>create("OrderOrchestrator", OrderOrchState.class)
                         .context(OrderOrchestrationContext::new)
                         .initialState(OrderOrchState.VALIDATE_ORDER)
@@ -155,23 +155,26 @@ public class UnifiedOrchestrationStateMachineTests {
 
                         .endStates(OrderOrchState.COMPLETED, OrderOrchState.FAILED)
                         .output(ctx -> String.join(" -> ", ctx.executionHistory))
-                        .buildExecutor();
+                        .buildExecutor()) {
 
-        // 1. Test Regular Order Flow: VALIDATE -> RESERVE_INVENTORY -> CHARGE_PAYMENT -> COMPLETED
-        OrderOrchestrationContext regular = new OrderOrchestrationContext();
-        regular.orderId = "ORD-REG-1";
-        regular.isVip = false;
+            // 1. Test Regular Order Flow: VALIDATE -> RESERVE_INVENTORY -> CHARGE_PAYMENT -> COMPLETED
+            OrderOrchestrationContext regular = new OrderOrchestrationContext();
+            regular.orderId = "ORD-REG-1";
+            regular.isVip = false;
 
-        String regResult = orchestrationMachine.dispatchSync(regular);
-        assertEquals("START:ORD-REG-1 -> VALIDATED -> INV_RESERVED_ORD-REG-1 -> PAID_TOKEN_ORD-REG-1", regResult);
+            String regResult = orchestrationMachine.dispatchSync(regular);
+            assertEquals("START:ORD-REG-1 -> VALIDATED -> INV_RESERVED_ORD-REG-1 -> PAID_TOKEN_ORD-REG-1", regResult);
 
-        // 2. Test VIP Order Flow (Branching/Skip): VALIDATE -> RESERVE_INVENTORY -> VIP_FAST_TRACK -> COMPLETED
-        OrderOrchestrationContext vip = new OrderOrchestrationContext();
-        vip.orderId = "ORD-VIP-99";
-        vip.isVip = true;
+            // 2. Test VIP Order Flow (Branching/Skip): VALIDATE -> RESERVE_INVENTORY -> VIP_FAST_TRACK -> COMPLETED
+            OrderOrchestrationContext vip = new OrderOrchestrationContext();
+            vip.orderId = "ORD-VIP-99";
+            vip.isVip = true;
 
-        String vipResult = orchestrationMachine.dispatchSync(vip);
-        assertEquals("START:ORD-VIP-99 -> VALIDATED -> INV_RESERVED_ORD-VIP-99 -> VIP_EXPRESS_SETTLEMENT", vipResult);
+            String vipResult = orchestrationMachine.dispatchSync(vip);
+            assertEquals("START:ORD-VIP-99 -> VALIDATED -> INV_RESERVED_ORD-VIP-99 -> VIP_EXPRESS_SETTLEMENT", vipResult);
+
+            assertFalse(checkpoints.isEmpty());
+        }
     }
 
     /**
@@ -202,7 +205,7 @@ public class UnifiedOrchestrationStateMachineTests {
                         .output(ctx -> ctx.payload)
                         .build();
 
-        OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, String, String> orchestrationMachine =
+        try (OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, String, String> orchestrationMachine =
                 OrchestrationStateMachineBuilder.<OrderOrchestrationContext, OrderOrchState, String, String>create("RecoveryOrchestrator", OrderOrchState.class)
                         .context(OrderOrchestrationContext::new)
                         .initialState(OrderOrchState.RESERVE_INVENTORY)
@@ -210,7 +213,7 @@ public class UnifiedOrchestrationStateMachineTests {
                         .state(OrderOrchState.RESERVE_INVENTORY)
                             .atomicMachine(flakyMachine)
                             // ContextRecoverer provides clean input for attempt 2 on a fresh virtual thread:
-                            .recoverer((orchCtx, err, attempt) -> orchCtx.orderId + "_ATTEMPT_" + attempt)
+                            .recoverer((orchCtx, _, attempt) -> orchCtx.orderId + "_ATTEMPT_" + attempt)
                             .retry(RetryPolicy.fixed(3, Duration.ofMillis(10)))
                             .output((ctx, out) -> {
                                 ctx.executionHistory.add(out);
@@ -218,12 +221,13 @@ public class UnifiedOrchestrationStateMachineTests {
                             })
                             .transition(OrderOrchState.COMPLETED)
                         .endStates(OrderOrchState.COMPLETED)
-                        .output(ctx -> ctx.executionHistory.get(0))
-                        .buildExecutor();
+                        .output(ctx -> ctx.executionHistory.getFirst())
+                        .buildExecutor()) {
 
-        String result = orchestrationMachine.dispatchSync("ORD-888");
-        assertEquals("CLEAN_SUCCESS_ORD-888_ATTEMPT_2", result);
-        assertEquals(2, attempts.get());
+            String result = orchestrationMachine.dispatchSync("ORD-888");
+            assertEquals("CLEAN_SUCCESS_ORD-888_ATTEMPT_2", result);
+            assertEquals(2, attempts.get());
+        }
     }
 
     /**
@@ -241,7 +245,7 @@ public class UnifiedOrchestrationStateMachineTests {
         List<String> compensationLog = new ArrayList<>();
         List<OrchestrationCheckpoint<OrderOrchestrationContext, OrderOrchState>> checkpoints = new ArrayList<>();
 
-        OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, Void, Void> orchestrationMachine =
+        try (OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, Void, Void> orchestrationMachine =
                 OrchestrationStateMachineBuilder.<OrderOrchestrationContext, OrderOrchState, Void, Void>create("SagaOrchestrator", OrderOrchState.class)
                         .context(OrderOrchestrationContext::new)
                         .initialState(OrderOrchState.VALIDATE_ORDER)
@@ -266,20 +270,21 @@ public class UnifiedOrchestrationStateMachineTests {
 
                         // State 3 (Fatal Failure)
                         .state(OrderOrchState.CHARGE_PAYMENT)
-                            .action(ctx -> { throw new RuntimeException("Fatal Payment Processing Outage"); })
+                            .action(_ -> { throw new RuntimeException("Fatal Payment Processing Outage"); })
                             .transition(OrderOrchState.COMPLETED)
 
                         .endStates(OrderOrchState.COMPLETED, OrderOrchState.FAILED)
-                        .buildExecutor();
+                        .buildExecutor()) {
 
-        assertThrows(Exception.class, () -> orchestrationMachine.dispatchSync(null));
+            assertThrows(Exception.class, () -> orchestrationMachine.dispatchSync(null));
 
-        // Verify LIFO order: State 2 (Inventory) compensated before State 1 (Validation)
-        assertEquals(2, compensationLog.size());
-        assertEquals("COMPENSATE_INVENTORY", compensationLog.get(0));
-        assertEquals("COMPENSATE_VALIDATION", compensationLog.get(1));
+            // Verify LIFO order: State 2 (Inventory) compensated before State 1 (Validation)
+            assertEquals(2, compensationLog.size());
+            assertEquals("COMPENSATE_INVENTORY", compensationLog.getFirst());
+            assertEquals("COMPENSATE_VALIDATION", compensationLog.getLast());
 
-        // Verify checkpoint status
-        assertEquals(OrchestrationStatus.COMPENSATED, checkpoints.get(checkpoints.size() - 1).status());
+            // Verify checkpoint status
+            assertEquals(OrchestrationStatus.COMPENSATED, checkpoints.getLast().status());
+        }
     }
 }

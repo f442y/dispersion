@@ -27,7 +27,7 @@ public class BackpressureAdmissionTests {
      * Tests that when buffer permits are exhausted with REJECT_IMMEDIATELY, dispatch throws BackpressureException.
      */
     @Test
-    public void testAdmissionControllerPermitExhaustionThrowsBackpressure() throws Exception {
+    public void testAdmissionControllerPermitExhaustionThrowsBackpressure() {
         CountDownLatch blockLatch = new CountDownLatch(1);
 
         StateMachineConfiguration<SimpleContext, SimpleState, Void, String> stateMachine =
@@ -45,22 +45,23 @@ public class BackpressureAdmissionTests {
                             })
                             .transition(SimpleState.DONE)
                         .endStates(SimpleState.DONE)
-                        .output(ctx -> "OK")
+                        .output(_ -> "OK")
                         .build();
 
         // Executor with REJECT_IMMEDIATELY strategy and only 1 permit
         AdmissionController admissionController = new AdmissionController(1, BackpressureStrategy.REJECT_IMMEDIATELY);
-        AtomicStateMachineExecutor<SimpleContext, SimpleState, Void, String> executor =
-                new AtomicStateMachineExecutor<>("backpressure-test", stateMachine, admissionController);
+        try (AtomicStateMachineExecutor<SimpleContext, SimpleState, Void, String> executor =
+                new AtomicStateMachineExecutor<>("backpressure-test", stateMachine, admissionController)) {
 
-        // Occupy the only available permit
-        executor.dispatchAsync(null);
+            // Occupy the only available permit
+            executor.dispatchAsync(null);
 
-        try {
-            // Second dispatch should immediately fail admission
-            assertThrows(BackpressureException.class, () -> executor.dispatchAsync(null));
-        } finally {
-            blockLatch.countDown();
+            try {
+                // Second dispatch should immediately fail admission
+                assertThrows(BackpressureException.class, () -> executor.dispatchAsync(null));
+            } finally {
+                blockLatch.countDown();
+            }
         }
     }
 
@@ -68,7 +69,7 @@ public class BackpressureAdmissionTests {
      * Tests that timeout permit acquisition fails with BackpressureException when permit is not released in time.
      */
     @Test
-    public void testAdmissionTimeoutThrowsBackpressure() throws Exception {
+    public void testAdmissionTimeoutThrowsBackpressure() {
         CountDownLatch blockLatch = new CountDownLatch(1);
 
         StateMachineConfiguration<SimpleContext, SimpleState, Void, String> stateMachine =
@@ -86,21 +87,22 @@ public class BackpressureAdmissionTests {
                             })
                             .transition(SimpleState.DONE)
                         .endStates(SimpleState.DONE)
-                        .output(ctx -> "OK")
+                        .output(_ -> "OK")
                         .build();
 
         AdmissionController controller = new AdmissionController(1, BackpressureStrategy.WAIT_WITH_TIMEOUT, Duration.ofMillis(50));
-        AtomicStateMachineExecutor<SimpleContext, SimpleState, Void, String> executor =
-                new AtomicStateMachineExecutor<>("timeout-test", stateMachine, controller);
+        try (AtomicStateMachineExecutor<SimpleContext, SimpleState, Void, String> executor =
+                new AtomicStateMachineExecutor<>("timeout-test", stateMachine, controller)) {
 
-        // Occupy permit
-        executor.dispatchAsync(null);
+            // Occupy permit
+            executor.dispatchAsync(null);
 
-        try {
-            // Should timeout waiting for permit and throw BackpressureException
-            assertThrows(BackpressureException.class, () -> executor.tryDispatchAsync(null, Duration.ofMillis(50)));
-        } finally {
-            blockLatch.countDown();
+            try {
+                // Should timeout waiting for permit and throw BackpressureException
+                assertThrows(BackpressureException.class, () -> executor.tryDispatchAsync(null, Duration.ofMillis(50)));
+            } finally {
+                blockLatch.countDown();
+            }
         }
     }
 }

@@ -6,8 +6,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -34,8 +34,12 @@ public record OrchestrationCheckpoint<
 ) {
 
     public OrchestrationCheckpoint {
-        completedStates = (completedStates != null) ? List.copyOf(completedStates) : Collections.emptyList();
-        processedCommandIds = (processedCommandIds != null) ? Set.copyOf(processedCommandIds) : Collections.emptySet();
-        timestamp = (timestamp != null) ? timestamp : Instant.now();
+        Objects.requireNonNull(machineId, "machineId must not be null");
+        Objects.requireNonNull(machineName, "machineName must not be null");
+        Objects.requireNonNull(status, "status must not be null");
+        Objects.requireNonNull(contextSnapshot, "contextSnapshot must not be null");
+        Objects.requireNonNull(timestamp, "timestamp must not be null");
+        completedStates = List.copyOf(Objects.requireNonNull(completedStates, "completedStates must not be null"));
+        processedCommandIds = Set.copyOf(Objects.requireNonNull(processedCommandIds, "processedCommandIds must not be null"));
     }
 }

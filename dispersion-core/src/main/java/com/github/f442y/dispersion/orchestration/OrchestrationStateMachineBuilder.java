@@ -7,6 +7,7 @@ import com.github.f442y.dispersion.orchestration.command.SagaCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 import com.github.f442y.dispersion.state.Action;
+import com.github.f442y.dispersion.state.State;
 import com.github.f442y.dispersion.state.StateKey;
 import com.github.f442y.dispersion.state.StateMap;
 import com.github.f442y.dispersion.state.Transition;
@@ -16,6 +17,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -380,7 +382,7 @@ public class OrchestrationStateMachineBuilder<
                 .initialState(initialState)
                 .endStates(endStates);
 
-        for (var entry : states.entrySet()) {
+        for (Map.Entry<STATE_KEY, State<CONTEXT, STATE_KEY>> entry : states.entrySet()) {
             stateMapBuilder.addState(entry.getKey(), entry.getValue());
         }
 

@@ -1,6 +1,7 @@
 package com.github.f442y.dispersion.orchestration.command;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Signal command targeting a specific item within a Set/Batch Orchestration.
@@ -24,7 +25,7 @@ public interface ItemSignalCommand extends SignalCommand {
     String itemKey();
 
     @Override
-    @NonNull
+    @Nullable
     default String correlationKey() {
         return batchKey();
     }

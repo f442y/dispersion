@@ -38,8 +38,13 @@ public class InMemorySignalBroker implements SignalPublisher, AutoCloseable {
     public InMemorySignalBroker subscribe(@NonNull String destination, @NonNull SignalConsumer consumer) {
         Objects.requireNonNull(destination, "destination must not be null");
         Objects.requireNonNull(consumer, "consumer must not be null");
-        topicSubscribers.computeIfAbsent(destination, k -> new CopyOnWriteArrayList<>()).add(consumer);
+        topicSubscribers.computeIfAbsent(destination, _ -> new CopyOnWriteArrayList<>()).add(consumer);
         return this;
+    }
+
+    @NonNull
+    public InMemorySignalBroker subscribeTopic(@NonNull String destination, @NonNull SignalConsumer consumer) {
+        return subscribe(destination, consumer);
     }
 
     @NonNull

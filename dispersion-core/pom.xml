@@ -15,15 +15,16 @@
 
     <name>Dispersion :: Core</name>
     <description>Runtime execution engine for Atomic and Orchestration state machines on Java Virtual Threads</description>
+    <url>https://github.com/f442y/dispersion</url>
 
     <dependencies>
-        <!-- API Dependency -->
+        <!-- API Specification -->
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-api</artifactId>
         </dependency>
 
-        <!-- Logging & Annotations -->
+        <!-- Annotations & Logging Facade -->
         <dependency>
             <groupId>org.jspecify</groupId>
             <artifactId>jspecify</artifactId>
@@ -33,15 +34,10 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
-        <!-- Testing & Logging Implementation in Test Scope -->
+        <!-- Testing Framework & Matchers -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -55,4 +51,20 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>com.github.f442y.dispersion.core</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -30,7 +30,7 @@ public class AtomicStateMachineBuilderTests {
                         .context(FlowContext::new)
                         .initialState(FlowState.INIT)
                         .input((ctx, input) -> {
-                            ctx.counter = input;
+                            ctx.counter = (input != null) ? input : 0;
                             ctx.trail.add("INPUT:" + input);
                             return ctx;
                         })
@@ -40,35 +40,36 @@ public class AtomicStateMachineBuilderTests {
                                 ctx.trail.add("INIT");
                                 return ctx;
                             })
-                            .transition(ctx -> FlowState.STEP_ONE)
+                            .transition(FlowState.STEP_ONE)
                         .state(FlowState.STEP_ONE)
                             .action(ctx -> {
                                 ctx.counter *= 2;
                                 ctx.trail.add("STEP_ONE");
                                 return ctx;
                             })
-                            .transition(ctx -> FlowState.STEP_TWO)
+                            .transition(FlowState.STEP_TWO)
                         .state(FlowState.STEP_TWO)
                             .action(ctx -> {
                                 ctx.counter += 5;
                                 ctx.trail.add("STEP_TWO");
                                 return ctx;
                             })
-                            .transition(ctx -> FlowState.DONE)
+                            .transition(FlowState.DONE)
                         .endStates(FlowState.DONE)
                         .output(ctx -> "Result=" + ctx.counter)
                         .build();
 
-        AtomicStateMachineExecutor<FlowContext, FlowState, Integer, String> executor =
-                new AtomicStateMachineExecutor<>("atomic-test", stateMachine, 10);
+        try (AtomicStateMachineExecutor<FlowContext, FlowState, Integer, String> executor =
+                new AtomicStateMachineExecutor<>("atomic-test", stateMachine, 10)) {
 
-        // (5 + 10) * 2 + 5 = 35
-        String result = executor.dispatchSync(5);
-        assertEquals("Result=35", result);
+            // (5 + 10) * 2 + 5 = 35
+            String result = executor.dispatchSync(5);
+            assertEquals("Result=35", result);
 
-        StateMachineFuture<String> future = executor.dispatchAsync(10);
-        // (10 + 10) * 2 + 5 = 45
-        assertEquals("Result=45", future.get());
+            StateMachineFuture<String> future = executor.dispatchAsync(10);
+            // (10 + 10) * 2 + 5 = 45
+            assertEquals("Result=45", future.get());
+        }
     }
 
     @Test
@@ -82,18 +83,19 @@ public class AtomicStateMachineBuilderTests {
                                 ctx.trail.add("VISITED_INIT");
                                 return ctx;
                             })
-                            .transition(ctx -> FlowState.DONE)
+                            .transition(FlowState.DONE)
                         .endStates(FlowState.DONE)
                         .output(ctx -> ctx.trail)
                         .build();
 
-        AtomicStateMachineExecutor<FlowContext, FlowState, Void, List<String>> executor =
-                new AtomicStateMachineExecutor<>("custom-ctx-test", stateMachine, 10);
+        try (AtomicStateMachineExecutor<FlowContext, FlowState, Void, List<String>> executor =
+                new AtomicStateMachineExecutor<>("custom-ctx-test", stateMachine, 10)) {
 
-        FlowContext initialCtx = new FlowContext();
-        initialCtx.trail.add("PRE_SEEDED");
+            FlowContext initialCtx = new FlowContext();
+            initialCtx.trail.add("PRE_SEEDED");
 
-        List<String> result = executor.dispatchSync(initialCtx, null);
-        assertIterableEquals(List.of("PRE_SEEDED", "VISITED_INIT"), result);
+            List<String> result = executor.dispatchSync(initialCtx, null);
+            assertIterableEquals(List.of("PRE_SEEDED", "VISITED_INIT"), result);
+        }
     }
 }

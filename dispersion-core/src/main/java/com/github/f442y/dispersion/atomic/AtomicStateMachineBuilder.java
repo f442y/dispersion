@@ -13,6 +13,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -157,7 +158,7 @@ public class AtomicStateMachineBuilder<
                 .initialState(initialState)
                 .endStates(endStates);
 
-        for (var entry : states.entrySet()) {
+        for (Map.Entry<STATE_KEY, State<CONTEXT, STATE_KEY>> entry : states.entrySet()) {
             stateMapBuilder.addState(entry.getKey(), entry.getValue());
         }
 

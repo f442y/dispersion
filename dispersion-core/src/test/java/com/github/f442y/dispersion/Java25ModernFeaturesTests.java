@@ -12,13 +12,16 @@ import com.github.f442y.dispersion.exception.MaxTransitionsExceededException;
 import com.github.f442y.dispersion.exception.StateMachineException;
 import com.github.f442y.dispersion.exception.TransitionException;
 import com.github.f442y.dispersion.orchestration.InMemoryCheckpointStore;
+import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
 import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import com.github.f442y.dispersion.state.StateKey;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -27,8 +30,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -59,6 +64,12 @@ public class Java25ModernFeaturesTests {
         public String correlationKey() {
             return paymentId;
         }
+
+        @Override
+        @NonNull
+        public String signalName() {
+            return "PaymentApprovedCommand";
+        }
     }
 
     /**
@@ -76,19 +87,9 @@ public class Java25ModernFeaturesTests {
                 new CompensationException("INVENTORY_STATE", "Rollback failed", null)
         );
 
-        List<String> classified = new ArrayList<>();
-
-        for (StateMachineException ex : exceptions) {
-            String classification = switch (ex) {
-                case ActionException ae -> "ACTION_FAILED[" + ae.getStateName() + "]";
-                case TransitionException te -> "TRANSITION_FAILED[" + te.getSourceStateName() + "->" + te.getTargetStateName() + "]";
-                case BackpressureException be -> "BACKPRESSURE[" + be.getMessage() + "]";
-                case MaxTransitionsExceededException mte -> "MAX_TRANSITIONS[" + mte.getMaxTransitions() + "]";
-                case MaxStateVisitsExceededException msve -> "MAX_VISITS[" + msve.getStateName() + ":" + msve.getMaxVisits() + "]";
-                case CompensationException ce -> "COMPENSATION_FAILED[" + ce.getStateName() + "]";
-            };
-            classified.add(classification);
-        }
+        List<String> classified = exceptions.stream()
+                .map(this::classifyException)
+                .toList();
 
         assertThat(classified).containsExactly(
                 "ACTION_FAILED[STATE_1]",
@@ -98,6 +99,17 @@ public class Java25ModernFeaturesTests {
                 "MAX_VISITS[RETRY_STATE:5]",
                 "COMPENSATION_FAILED[INVENTORY_STATE]"
         );
+    }
+
+    private String classifyException(StateMachineException ex) {
+        return switch (ex) {
+            case ActionException ae -> "ACTION_FAILED[" + ae.getStateName() + "]";
+            case TransitionException te -> "TRANSITION_FAILED[" + te.getSourceStateName() + "->" + te.getTargetStateName() + "]";
+            case BackpressureException be -> "BACKPRESSURE[" + be.getMessage() + "]";
+            case MaxTransitionsExceededException mte -> "MAX_TRANSITIONS[" + mte.getMaxTransitions() + "]";
+            case MaxStateVisitsExceededException msve -> "MAX_VISITS[" + msve.getStateName() + ":" + msve.getMaxVisits() + "]";
+            case CompensationException ce -> "COMPENSATION_FAILED[" + ce.getStateName() + "]";
+        };
     }
 
     /**
@@ -112,13 +124,7 @@ public class Java25ModernFeaturesTests {
                 cmdId, now, new PaymentApprovedCommand("PAY-99", 5000, "AUTH-OK")
         );
 
-        String result;
-        if (envelope instanceof CommandEnvelope(UUID id, Instant ts, PaymentApprovedCommand(String pid, int amt, String code))) {
-            result = "COMMAND_ID:" + id + " PID:" + pid + " AMT:" + amt + " CODE:" + code;
-        } else {
-            result = "UNKNOWN";
-        }
-
+        String result = deconstructEnvelope(envelope);
         assertThat(result).isEqualTo("COMMAND_ID:" + cmdId + " PID:PAY-99 AMT:5000 CODE:AUTH-OK");
 
         SignalMessage message = new SignalMessage(
@@ -131,14 +137,22 @@ public class Java25ModernFeaturesTests {
                 envelope
         );
 
-        String msgDeconstructed;
-        if (message instanceof SignalMessage(String dest, String sig, String corr, UUID msgId, Instant msgTs, Map<String, String> hdrs, Object payload)) {
-            msgDeconstructed = dest + "/" + sig + "/" + corr + "/" + hdrs.get("source");
-        } else {
-            msgDeconstructed = "NONE";
-        }
-
+        String msgDeconstructed = deconstructMessage(message);
         assertThat(msgDeconstructed).isEqualTo("payment-events/PaymentApprovedCommand/PAY-99/stripe-webhook");
+    }
+
+    private String deconstructEnvelope(Object envelope) {
+        if (envelope instanceof CommandEnvelope(UUID id, _, PaymentApprovedCommand(String pid, int amt, String code))) {
+            return "COMMAND_ID:" + id + " PID:" + pid + " AMT:" + amt + " CODE:" + code;
+        }
+        return "UNKNOWN";
+    }
+
+    private String deconstructMessage(Object message) {
+        if (message instanceof SignalMessage(String dest, String sig, String corr, _, _, Map<?, ?> hdrs, _) && hdrs != null) {
+            return dest + "/" + sig + "/" + corr + "/" + hdrs.get("source");
+        }
+        return "NONE";
     }
 
     /**
@@ -176,9 +190,10 @@ public class Java25ModernFeaturesTests {
         int taskCount = 1_000;
         CountDownLatch latch = new CountDownLatch(taskCount);
         Map<Integer, String> results = new ConcurrentHashMap<>();
+        List<Throwable> errors = new CopyOnWriteArrayList<>();
 
         try (ExecutorService vtExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
-             var smExecutor = new com.github.f442y.dispersion.atomic.AtomicStateMachineExecutor<>("vt-burst", machine, 200)) {
+             AtomicStateMachineExecutor<ModernContext, ModernState, Integer, String> smExecutor = new AtomicStateMachineExecutor<>("vt-burst", machine, 200)) {
 
             for (int i = 0; i < taskCount; i++) {
                 final int idx = i;
@@ -187,7 +202,7 @@ public class Java25ModernFeaturesTests {
                         String res = smExecutor.dispatchSync(idx);
                         results.put(idx, res);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        errors.add(e);
                     } finally {
                         latch.countDown();
                     }
@@ -196,6 +211,7 @@ public class Java25ModernFeaturesTests {
 
             boolean completed = latch.await(10, TimeUnit.SECONDS);
             assertTrue(completed, "All 1,000 tasks should finish within 10 seconds on Virtual Threads");
+            assertTrue(errors.isEmpty(), () -> "Exceptions occurred: " + errors);
             assertEquals(taskCount, results.size());
 
             for (int i = 0; i < taskCount; i++) {
@@ -212,7 +228,8 @@ public class Java25ModernFeaturesTests {
     public void testConcurrentDuplicateCommandDelivery() throws Exception {
         InMemoryCheckpointStore<ModernContext, ModernState> store = new InMemoryCheckpointStore<>();
 
-        var executor = OrchestrationStateMachineBuilder.<ModernContext, ModernState, String, String>create("ConcurrentIdemp", ModernState.class)
+        OrchestrationStateMachineExecutor<ModernContext, ModernState, String, String> executor =
+                OrchestrationStateMachineBuilder.<ModernContext, ModernState, String, String>create("ConcurrentIdemp", ModernState.class)
                 .context(ModernContext::new)
                 .initialState(ModernState.INIT)
                 .correlationKey(ctx -> ctx.data)
@@ -223,19 +240,21 @@ public class Java25ModernFeaturesTests {
                     .transition(ModernState.STEP_A)
                 .state(ModernState.STEP_A)
                     .waitForCommand(PaymentApprovedCommand.class, (ctx, cmd) -> {
-                        ctx.counter++;
-                        ctx.trail.add("AUTH:" + cmd.authCode());
+                        if (cmd != null) {
+                            ctx.counter++;
+                            ctx.trail.add("AUTH:" + cmd.authCode());
+                        }
                         return ctx;
                     })
                     .transition(ModernState.COMPLETED)
                 .endStates(ModernState.COMPLETED)
-                .output(ctx -> "Processed: " + ctx.counter)
+                .output(ctx -> "DONE:" + ctx.data)
                 .buildExecutor();
 
-        ModernContext ctx = new ModernContext();
-        ctx.data = "ORD-RACE-77";
+        ModernContext initial = new ModernContext();
+        initial.data = "ORD-RACE-77";
 
-        OrchestrationTurnResult<ModernContext, ModernState, String> turn1 = executor.dispatchTurnSync(null, "ORD-RACE-77");
+        OrchestrationTurnResult<ModernContext, ModernState, String> turn1 = executor.dispatchTurnSync(initial, "ORD-RACE-77");
         assertTrue(turn1.isSuspended());
 
         // Send 10 identical command envelopes concurrently
@@ -249,28 +268,30 @@ public class Java25ModernFeaturesTests {
         int threads = 10;
         CountDownLatch latch = new CountDownLatch(threads);
         List<OrchestrationTurnResult<ModernContext, ModernState, String>> results = Collections.synchronizedList(new ArrayList<>());
+        List<Throwable> errors = new CopyOnWriteArrayList<>();
 
         try (ExecutorService vtPool = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory())) {
             for (int i = 0; i < threads; i++) {
                 vtPool.submit(() -> {
                     try {
-                        var res = executor.handleCommand(envelope).get();
+                        OrchestrationTurnResult<ModernContext, ModernState, String> res = executor.handleCommand(envelope).get();
                         results.add(res);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        errors.add(e);
                     } finally {
                         latch.countDown();
                     }
                 });
             }
 
-            latch.await(5, TimeUnit.SECONDS);
+            assertTrue(latch.await(5, TimeUnit.SECONDS), "Concurrent command delivery latch timed out");
         }
 
+        assertTrue(errors.isEmpty(), () -> "Exceptions occurred: " + errors);
         assertEquals(threads, results.size());
 
         // Checkpoint verification: counter must be EXACTLY 1 despite 10 concurrent deliveries
-        var cp = store.findByCorrelationKey("ORD-RACE-77");
+        Optional<OrchestrationCheckpoint<ModernContext, ModernState>> cp = store.findByCorrelationKey("ORD-RACE-77");
         assertTrue(cp.isPresent());
         assertEquals(OrchestrationStatus.COMPLETED, cp.get().status());
         assertEquals(1, cp.get().contextSnapshot().counter);
@@ -284,8 +305,9 @@ public class Java25ModernFeaturesTests {
      */
     @Test
     @DisplayName("Should execute compensate() actions during Saga unwinding in LIFO order")
-    public void testSagaCompensationUnwinding() throws Exception {
-        var executor = OrchestrationStateMachineBuilder.<ModernContext, ModernState, Void, String>create("SagaTest", ModernState.class)
+    public void testSagaCompensationUnwinding() {
+        OrchestrationStateMachineExecutor<ModernContext, ModernState, Void, String> executor =
+                OrchestrationStateMachineBuilder.<ModernContext, ModernState, Void, String>create("SagaTest", ModernState.class)
                 .context(ModernContext::new)
                 .initialState(ModernState.INIT)
                 .state(ModernState.INIT)
@@ -309,7 +331,7 @@ public class Java25ModernFeaturesTests {
                     })
                     .transition(ModernState.STEP_B)
                 .state(ModernState.STEP_B)
-                    .action(ctx -> {
+                    .action(_ -> {
                         throw new RuntimeException("Simulated Step B Failure");
                     })
                     .transition(ModernState.COMPLETED)
@@ -334,7 +356,8 @@ public class Java25ModernFeaturesTests {
     @Test
     @DisplayName("Should execute 50,000 atomic state machine workflows with sub-microsecond latency")
     public void testUltraHighThroughputAtomicExecution() throws Exception {
-        var config = AtomicStateMachineBuilder.<ModernContext, ModernState, Integer, String>create(ModernState.class)
+        StateMachineConfiguration<ModernContext, ModernState, Integer, String> config =
+                AtomicStateMachineBuilder.<ModernContext, ModernState, Integer, String>create(ModernState.class)
                 .context(ModernContext::new)
                 .initialState(ModernState.INIT)
                 .input((ctx, val) -> {
@@ -363,7 +386,7 @@ public class Java25ModernFeaturesTests {
                 .output(ctx -> "VAL:" + ctx.counter)
                 .build();
 
-        try (var executor = new AtomicStateMachineExecutor<>("fast-atomic", config, 100_000)) {
+        try (AtomicStateMachineExecutor<ModernContext, ModernState, Integer, String> executor = new AtomicStateMachineExecutor<>("fast-atomic", config, 100_000)) {
             int iterations = 50_000;
             long start = System.nanoTime();
 

@@ -2,18 +2,22 @@ package com.github.f442y.dispersion.orchestration.messaging;
 
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.orchestration.InMemoryCheckpointStore;
+import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
 import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.state.StateKey;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -36,37 +40,41 @@ public class BrokerAgnosticMessagingTests {
 
     public static class ShippingContext implements StateMachineContext {
         public String shipmentId;
-        public String trackingNumber;
-        public String warehouseId;
         public boolean warehouseNotified = false;
         public boolean packagePicked = false;
         public boolean carrierDispatched = false;
+        public String warehouseId;
+        public String trackingNumber;
         public List<String> eventLog = new ArrayList<>();
     }
 
-    public record PackagePickedCommand(String shipmentId, String warehouseId) implements SignalCommand {
+    public record WarehouseNotificationCommand(String correlationKey, String warehouseCode) implements SignalCommand {
         @Override
-        public String correlationKey() {
-            return shipmentId;
+        @NonNull
+        public String signalName() {
+            return "WarehouseNotificationCommand";
         }
     }
 
-    public record CarrierDispatchedCommand(String shipmentId, String trackingNumber) implements SignalCommand {
+    public record PackagePickedCommand(String correlationKey, String warehouseId) implements SignalCommand {
         @Override
-        public String correlationKey() {
-            return shipmentId;
+        @NonNull
+        public String signalName() {
+            return "PackagePickedCommand";
         }
     }
 
-    public record WarehouseNotificationCommand(String shipmentId, String destination) implements SignalCommand {
+    public record CarrierDispatchedCommand(String correlationKey, String trackingNumber) implements SignalCommand {
         @Override
-        public String correlationKey() {
-            return shipmentId;
+        @NonNull
+        public String signalName() {
+            return "CarrierDispatchedCommand";
         }
     }
 
     /**
-     * Tests full end-to-end broker-agnostic pub/sub pipeline using {@link InMemorySignalBroker} and {@link SignalReceiver}.
+     * Tests decoupled event-driven orchestration coordinating outbound topic publishing
+     * and inbound broker signal consumption via the in-memory broker abstraction.
      */
     @Test
     public void testBrokerAgnosticPubSubWithInMemoryBroker() throws Exception {
@@ -74,13 +82,14 @@ public class BrokerAgnosticMessagingTests {
         InMemorySignalBroker broker = new InMemorySignalBroker();
         List<SignalMessage> publishedMessages = new CopyOnWriteArrayList<>();
 
-        // Capture all outbound published messages for assertion
-        broker.subscribeGlobal(msg -> {
-            publishedMessages.add(msg);
+        // Subscribe an audit tap to verify outbound messages published by orchestration steps
+        broker.subscribe("warehouse-notifications", message -> {
+            publishedMessages.add(message);
             return CompletableFuture.completedFuture(null);
         });
 
-        var executor = OrchestrationStateMachineBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("ShippingWorkflow", ShippingState.class)
+        OrchestrationStateMachineExecutor<ShippingContext, ShippingState, ShippingContext, String> executor =
+                OrchestrationStateMachineBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("ShippingWorkflow", ShippingState.class)
                 .context(ShippingContext::new)
                 .initialState(ShippingState.INITIALIZE)
                 .correlationKey(ctx -> ctx.shipmentId)
@@ -108,18 +117,22 @@ public class BrokerAgnosticMessagingTests {
                 // Inbound signal 1 from broker
                 .state(ShippingState.AWAIT_PICKED_SIGNAL)
                     .waitForCommand(PackagePickedCommand.class, (ctx, cmd) -> {
-                        ctx.packagePicked = true;
-                        ctx.warehouseId = cmd.warehouseId();
-                        ctx.eventLog.add("PICKED_AT_" + cmd.warehouseId());
+                        if (cmd != null) {
+                            ctx.packagePicked = true;
+                            ctx.warehouseId = cmd.warehouseId();
+                            ctx.eventLog.add("PICKED_AT_" + cmd.warehouseId());
+                        }
                         return ctx;
                     })
                     .transition(ShippingState.AWAIT_CARRIER_SIGNAL)
                 // Inbound signal 2 from broker
                 .state(ShippingState.AWAIT_CARRIER_SIGNAL)
                     .waitForCommand(CarrierDispatchedCommand.class, (ctx, cmd) -> {
-                        ctx.carrierDispatched = true;
-                        ctx.trackingNumber = cmd.trackingNumber();
-                        ctx.eventLog.add("DISPATCHED_" + cmd.trackingNumber());
+                        if (cmd != null) {
+                            ctx.carrierDispatched = true;
+                            ctx.trackingNumber = cmd.trackingNumber();
+                            ctx.eventLog.add("DISPATCHED_" + cmd.trackingNumber());
+                        }
                         return ctx;
                     })
                     .transition(ShippingState.COMPLETED)
@@ -144,8 +157,8 @@ public class BrokerAgnosticMessagingTests {
 
         // Verify outbound notification message was published onto the broker
         assertEquals(1, publishedMessages.size());
-        assertEquals("warehouse-notifications", publishedMessages.get(0).destination());
-        assertEquals("SHIP-8899", publishedMessages.get(0).correlationKey());
+        assertEquals("warehouse-notifications", publishedMessages.getFirst().destination());
+        assertEquals("SHIP-8899", publishedMessages.getFirst().correlationKey());
 
         // 2. External system publishes PackagePicked event to "warehouse-events" topic
         PackagePickedCommand pickedCommand = new PackagePickedCommand("SHIP-8899", "WH-NYC-01");
@@ -155,7 +168,7 @@ public class BrokerAgnosticMessagingTests {
         Thread.sleep(100);
 
         // Verify checkpoint progressed to AWAIT_CARRIER_SIGNAL
-        var cp2 = store.findByCorrelationKey("SHIP-8899");
+        Optional<OrchestrationCheckpoint<ShippingContext, ShippingState>> cp2 = store.findByCorrelationKey("SHIP-8899");
         assertTrue(cp2.isPresent());
         assertEquals(ShippingState.AWAIT_CARRIER_SIGNAL, cp2.get().currentStateKey());
         assertTrue(cp2.get().contextSnapshot().packagePicked);
@@ -171,7 +184,7 @@ public class BrokerAgnosticMessagingTests {
         Thread.sleep(100);
 
         // Verify completed
-        var cpFinal = store.findByCorrelationKey("SHIP-8899");
+        Optional<OrchestrationCheckpoint<ShippingContext, ShippingState>> cpFinal = store.findByCorrelationKey("SHIP-8899");
         assertTrue(cpFinal.isPresent());
         assertEquals(OrchestrationStatus.COMPLETED, cpFinal.get().status());
         assertTrue(cpFinal.get().contextSnapshot().carrierDispatched);
@@ -192,7 +205,8 @@ public class BrokerAgnosticMessagingTests {
     public void testKafkaOrSqsAdapterSimulation() throws Exception {
         InMemoryCheckpointStore<ShippingContext, ShippingState> store = new InMemoryCheckpointStore<>();
 
-        var executor = OrchestrationStateMachineBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("KafkaWorkflow", ShippingState.class)
+        OrchestrationStateMachineExecutor<ShippingContext, ShippingState, ShippingContext, String> executor =
+                OrchestrationStateMachineBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("KafkaWorkflow", ShippingState.class)
                 .context(ShippingContext::new)
                 .initialState(ShippingState.AWAIT_PICKED_SIGNAL)
                 .correlationKey(ctx -> ctx.shipmentId)
@@ -203,8 +217,10 @@ public class BrokerAgnosticMessagingTests {
                 })
                 .state(ShippingState.AWAIT_PICKED_SIGNAL)
                     .waitForCommand(PackagePickedCommand.class, (ctx, cmd) -> {
-                        ctx.packagePicked = true;
-                        ctx.warehouseId = cmd.warehouseId();
+                        if (cmd != null) {
+                            ctx.packagePicked = true;
+                            ctx.warehouseId = cmd.warehouseId();
+                        }
                         return ctx;
                     })
                     .transition(ShippingState.COMPLETED)

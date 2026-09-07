@@ -14,7 +14,8 @@
     <packaging>pom</packaging>
 
     <name>Dispersion :: BOM</name>
-    <description>Dispersion Bill of Materials (BOM) for dependency management</description>
+    <description>Dispersion Bill of Materials (BOM) for centralized dependency management</description>
+    <url>https://github.com/f442y/dispersion</url>
 
     <dependencyManagement>
         <dependencies>

@@ -18,7 +18,7 @@ public record SignalMessage(
         @Nullable String correlationKey,
         @NonNull UUID messageId,
         @NonNull Instant timestamp,
-        @NonNull Map<String, String> headers,
+        @Nullable Map<String, String> headers,
         @Nullable Object payload
 ) {
 

@@ -28,13 +28,9 @@ import java.util.Set;
  * <h2>Precomputed $O(1)$ Flat-Array Architecture</h2>
  * To eliminate hashing, boxing, and map traversal overhead on hot virtual thread execution paths:
  * <ul>
- *   <li><b>State Array ({@code statesByOrdinal}):</b> States are mapped into a dense array indexed by {@link Enum#ordinal()}.
- *       Retrievals via {@link #getStateFast(int)} execute as a single direct memory dereference.</li>
- *   <li><b>Terminal State Bitmask ({@code isEndState}):</b> Terminal states are pre-compiled into a flat boolean array.
- *       Checking whether a state is terminal via {@link #isEndStateFast(int)} requires exactly 1 CPU instruction.</li>
- *   <li><b>Feature Flags ({@code hasVisitLimits}, {@code hasAdjacencyConstraints}):</b> Graph structural characteristics
- *       are pre-calculated at build time so execution engines can conditionally bypass visit arrays and adjacency
- *       loops entirely when not configured.</li>
+ *   <li><b>State Array ({@code statesByOrdinal}):</b> States are mapped into a dense array indexed by {@link Enum#ordinal()}.\n *       Retrievals via {@link #getStateFast(int)} execute as a single direct memory dereference.</li>
+ *   <li><b>Terminal State Bitmask ({@code isEndState}):</b> Terminal states are pre-compiled into a flat boolean array.\n *       Checking whether a state is terminal via {@link #isEndStateFast(int)} requires exactly 1 CPU instruction.</li>
+ *   <li><b>Feature Flags ({@code hasVisitLimits}, {@code hasAdjacencyConstraints}):</b> Graph structural characteristics\n *       are pre-calculated at build time so execution engines can conditionally bypass visit arrays and adjacency\n *       loops entirely when not configured.</li>
  * </ul>
  *
  * @param <CONTEXT>   The concrete type of {@link StateMachineContext} managed by the state machine
@@ -79,11 +75,14 @@ public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY exten
         for (int i = 0; i < enumLength; i++) {
             STATE_KEY key = enumConstants[i];
             State<CONTEXT, STATE_KEY> node = stateMap.get(key);
-            this.statesByOrdinal[i] = node;
 
             if (this.endStates.contains(key)) {
                 this.isEndState[i] = true;
+                if (node == null) {
+                    node = State.terminal();
+                }
             }
+            this.statesByOrdinal[i] = node;
 
             if (node != null) {
                 if (node.maxVisits() > 0) {
@@ -148,9 +147,6 @@ public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY exten
             if (state != null) {
                 return state;
             }
-            if (isEndState[ordinal]) {
-                return State.terminal();
-            }
         }
         throw new NoSuchElementException("State with ordinal [" + ordinal + "] is not registered in this StateMap");
     }
@@ -160,6 +156,22 @@ public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY exten
      */
     public boolean isEndStateFast(int ordinal) {
         return ordinal >= 0 && ordinal < isEndState.length && isEndState[ordinal];
+    }
+
+    /**
+     * Fast-path $O(1)$ state existence check by enum ordinal.
+     */
+    public boolean containsStateFast(int ordinal) {
+        return ordinal >= 0 && ordinal < statesByOrdinal.length && statesByOrdinal[ordinal] != null;
+    }
+
+    /**
+     * Returns the total count of states in the state key enum domain.
+     *
+     * @return The state count
+     */
+    public int stateCount() {
+        return statesByOrdinal.length;
     }
 
     /**
@@ -189,8 +201,8 @@ public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY exten
      * Checks whether the state key is registered in this state map.
      */
     public boolean containsState(@NonNull STATE_KEY stateKey) {
-        int ord = stateKey.ordinal();
-        return (ord >= 0 && ord < statesByOrdinal.length && statesByOrdinal[ord] != null) || isEndStateFast(ord);
+        Objects.requireNonNull(stateKey, "stateKey must not be null");
+        return containsStateFast(stateKey.ordinal());
     }
 
     @NonNull
@@ -234,8 +246,9 @@ public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY exten
                 }
             }
 
-            if (stateNode.maxVisitsFallback() != null) {
-                sb.append("    ").append(source.name()).append(" --> ").append(stateNode.maxVisitsFallback().name())
+            STATE_KEY fallback = stateNode.maxVisitsFallback();
+            if (fallback != null) {
+                sb.append("    ").append(source.name()).append(" --> ").append(fallback.name())
                         .append(" : fallback (maxVisits exceeded)\n");
             }
         }

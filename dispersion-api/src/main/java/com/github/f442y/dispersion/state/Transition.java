@@ -38,7 +38,7 @@ public interface Transition<CONTEXT extends StateMachineContext, STATE_KEY exten
     @NonNull
     static <C extends StateMachineContext, S extends StateKey> Transition<C, S> to(@NonNull S nextState) {
         Objects.requireNonNull(nextState, "nextState must not be null");
-        return context -> nextState;
+        return _ -> nextState;
     }
 
     /**
@@ -83,7 +83,7 @@ public interface Transition<CONTEXT extends StateMachineContext, STATE_KEY exten
         INSTANCE;
 
         @Override
-        public @Nullable StateKey nextState(@NonNull StateMachineContext context) {
+        public @Nullable StateKey nextState(@NonNull StateMachineContext ignored) {
             return null;
         }
     }

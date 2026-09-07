@@ -49,6 +49,11 @@ public record RetryPolicy(
     }
 
     @NonNull
+    public static RetryPolicy none() {
+        return noRetries();
+    }
+
+    @NonNull
     public static RetryPolicy fixed(int maxAttempts, @NonNull Duration delay) {
         Objects.requireNonNull(delay, "delay must not be null");
         return new RetryPolicy(maxAttempts, delay, 1.0, delay);
@@ -62,5 +67,14 @@ public record RetryPolicy(
             @NonNull Duration maxDelay
     ) {
         return new RetryPolicy(maxAttempts, initialDelay, multiplier, maxDelay);
+    }
+
+    @NonNull
+    public static RetryPolicy exponentialBackoff(
+            int maxAttempts,
+            @NonNull Duration initialDelay,
+            double multiplier
+    ) {
+        return exponential(maxAttempts, initialDelay, multiplier, initialDelay.multipliedBy(100));
     }
 }

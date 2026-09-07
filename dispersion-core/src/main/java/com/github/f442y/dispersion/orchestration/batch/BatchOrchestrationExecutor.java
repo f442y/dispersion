@@ -58,7 +58,7 @@ public class BatchOrchestrationExecutor<
     @NonNull
     public BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> dispatchSync(
             @NonNull ITEM_CONTEXT singleItem
-    ) throws Exception {
+    ) {
         return dispatchBatchSync(batchContextSupplier.get(), List.of(singleItem));
     }
 
@@ -69,7 +69,7 @@ public class BatchOrchestrationExecutor<
     public BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> dispatchSync(
             @NonNull BATCH_CONTEXT initialBatchContext,
             @NonNull ITEM_CONTEXT singleItem
-    ) throws Exception {
+    ) {
         return dispatchBatchSync(initialBatchContext, List.of(singleItem));
     }
 
@@ -81,13 +81,17 @@ public class BatchOrchestrationExecutor<
             @NonNull ITEM_CONTEXT singleItem
     ) {
         CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> future = new CompletableFuture<>();
-        executorService.submit(() -> {
-            try {
-                future.complete(dispatchSync(singleItem));
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
-            }
-        });
+        try {
+            executorService.submit(() -> {
+                try {
+                    future.complete(dispatchSync(singleItem));
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
         return future;
     }
 
@@ -97,7 +101,7 @@ public class BatchOrchestrationExecutor<
     @NonNull
     public BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> dispatchBatchSync(
             @NonNull List<ITEM_CONTEXT> items
-    ) throws Exception {
+    ) {
         return dispatchBatchSync(batchContextSupplier.get(), items);
     }
 
@@ -108,7 +112,7 @@ public class BatchOrchestrationExecutor<
     public BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> dispatchBatchSync(
             @NonNull BATCH_CONTEXT initialBatchContext,
             @NonNull List<ITEM_CONTEXT> items
-    ) throws Exception {
+    ) {
         UUID batchId = UUID.randomUUID();
         BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
                 BatchOrchestrationStepDriver.executeBatchTurn(
@@ -131,13 +135,17 @@ public class BatchOrchestrationExecutor<
             @NonNull List<ITEM_CONTEXT> items
     ) {
         CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> future = new CompletableFuture<>();
-        executorService.submit(() -> {
-            try {
-                future.complete(dispatchBatchSync(items));
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
-            }
-        });
+        try {
+            executorService.submit(() -> {
+                try {
+                    future.complete(dispatchBatchSync(items));
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
         return future;
     }
 
@@ -160,16 +168,20 @@ public class BatchOrchestrationExecutor<
         }
 
         CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> future = new CompletableFuture<>();
-        executorService.submit(() -> {
-            try {
-                BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
-                        BatchOrchestrationStepDriver.resumeBatchTurn(configuration, cp, itemKey, signalPayload, null, executorService);
-                saveCheckpointFromResult(result);
-                future.complete(result);
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
-            }
-        });
+        try {
+            executorService.submit(() -> {
+                try {
+                    BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
+                            BatchOrchestrationStepDriver.resumeBatchTurn(configuration, cp, itemKey, signalPayload, null, executorService);
+                    saveCheckpointFromResult(result);
+                    future.complete(result);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
         return future;
     }
 
@@ -190,22 +202,23 @@ public class BatchOrchestrationExecutor<
         }
 
         CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> future = new CompletableFuture<>();
-        executorService.submit(() -> {
-            try {
-                BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
-                        BatchOrchestrationStepDriver.resumeBatchTurn(configuration, cp, null, null, signalPayload, executorService);
-                saveCheckpointFromResult(result);
-                future.complete(result);
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
-            }
-        });
+        try {
+            executorService.submit(() -> {
+                try {
+                    BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
+                            BatchOrchestrationStepDriver.resumeBatchTurn(configuration, cp, null, null, signalPayload, executorService);
+                    saveCheckpointFromResult(result);
+                    future.complete(result);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
         return future;
     }
 
-    /**
-     * Handles any singular or itemized command.
-     */
     @NonNull
     public CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> handleCommand(
             @NonNull SignalCommand command
@@ -219,13 +232,10 @@ public class BatchOrchestrationExecutor<
             return sendBatchSignal(corrKey, command.signalName(), command);
         }
         CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> failed = new CompletableFuture<>();
-        failed.completeExceptionally(new IllegalArgumentException("SignalCommand must provide a correlationKey or implement ItemSignalCommand"));
+        failed.completeExceptionally(new IllegalArgumentException("SignalCommand must be an ItemSignalCommand or provide a non-empty correlationKey"));
         return failed;
     }
 
-    /**
-     * Handles an idempotent command envelope.
-     */
     @NonNull
     public CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> handleCommand(
             @NonNull CommandEnvelope<? extends SignalCommand> envelope

@@ -7,7 +7,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -43,11 +42,11 @@ public record BatchOrchestrationCheckpoint<
         Objects.requireNonNull(batchName, "batchName must not be null");
         Objects.requireNonNull(batchKey, "batchKey must not be null");
         Objects.requireNonNull(status, "status must not be null");
-        itemStates = (itemStates != null) ? Map.copyOf(itemStates) : Collections.emptyMap();
-        itemContexts = (itemContexts != null) ? Map.copyOf(itemContexts) : Collections.emptyMap();
         Objects.requireNonNull(batchContext, "batchContext must not be null");
-        arrivedBarrierItemKeys = (arrivedBarrierItemKeys != null) ? Set.copyOf(arrivedBarrierItemKeys) : Collections.emptySet();
-        processedCommandIds = (processedCommandIds != null) ? Set.copyOf(processedCommandIds) : Collections.emptySet();
-        timestamp = (timestamp != null) ? timestamp : Instant.now();
+        Objects.requireNonNull(timestamp, "timestamp must not be null");
+        itemStates = Map.copyOf(Objects.requireNonNull(itemStates, "itemStates must not be null"));
+        itemContexts = Map.copyOf(Objects.requireNonNull(itemContexts, "itemContexts must not be null"));
+        arrivedBarrierItemKeys = Set.copyOf(Objects.requireNonNull(arrivedBarrierItemKeys, "arrivedBarrierItemKeys must not be null"));
+        processedCommandIds = Set.copyOf(Objects.requireNonNull(processedCommandIds, "processedCommandIds must not be null"));
     }
 }

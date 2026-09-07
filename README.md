@@ -1,4 +1,4 @@
-# Dispersion 🌀
+﻿# Dispersion 🌀
 
 [![Java 25](https://img.shields.io/badge/Java-25+-orange.svg?style=flat-square&logo=openjdk)](https://openjdk.org/projects/jdk/25/)
 [![Virtual Threads](https://img.shields.io/badge/Virtual%20Threads-Project%20Loom-blue.svg?style=flat-square)](https://openjdk.org/jeps/444)
@@ -16,6 +16,7 @@
 - [Two-Tiered Architecture (Micro vs Macro)](#-two-tiered-architecture-micro-vs-macro)
 - [Fundamental Building Blocks & Definitions](#-fundamental-building-blocks--definitions)
 - [Installation & Dependency Management](#-installation--dependency-management)
+- [Java Platform Module System (JPMS) Support](#-java-platform-module-system-jpms-support)
 - [Step-by-Step Examples & Design Patterns](#-step-by-step-examples--design-patterns)
   - [1. The Simplest State Machine: Coffee Machine FSM](#1-the-simplest-state-machine-coffee-machine-fsm)
   - [2. Dynamic Decision Branching: User Onboarding](#2-dynamic-decision-branching-user-onboarding)
@@ -53,25 +54,25 @@ graph TD
     subgraph Macro["Tier 2: Macro Orchestration State Machine (Durable / Turn-Based)"]
         START([Start Turn]) --> V1[Validate Order]
         V1 --> PARALLEL{Fork-Join Parallel}
-        
+
         subgraph "Virtual Thread Concurrent Branches"
             PARALLEL --> B1[Reserve Inventory]
             PARALLEL --> B2[Fraud Analysis]
             PARALLEL --> B3[Calculate Tax]
         end
-        
+
         B1 & B2 & B3 --> JOIN{Join}
         JOIN --> CHILD_FSM[Atomic Micro-FSM]
-        
+
         subgraph Micro["Tier 1: Atomic Micro-FSM (Thread-Confined)"]
             CHILD_FSM --> A1[Tokenize Card] --> A2[Authorize] --> A3[Capture]
         end
-        
+
         CHILD_FSM --> PUB[Publish Outbound Request]
         PUB --> WAIT_SIG{Wait for Inbound Signal}
         WAIT_SIG -.->|Suspend & Persist| STORE[(Checkpoint Store)]
         STORE -.->|Signal Arrives: Rehydrate| FULFILL[Fulfill Order]
-        
+
         FULFILL -->|Success| ORCH_END([Completed])
         FULFILL -->|Failure| SAGA[Automated LIFO Saga Rollback]
     end
@@ -168,6 +169,26 @@ dependencies {
 
 ---
 
+## ☕ Java Platform Module System (JPMS) Support
+
+All Dispersion JARs declare automatic module names in their manifests for first-class JPMS integration:
+
+| Maven Module | JAR Artifact | JPMS Automatic Module Name | Primary Role |
+| :--- | :--- | :--- | :--- |
+| `dispersion-api` | `dispersion-api.jar` | `com.github.f442y.dispersion.api` | Contracts, exceptions, records, SPIs (Zero runtime dependencies) |
+| `dispersion-core` | `dispersion-core.jar` | `com.github.f442y.dispersion.core` | Virtual-thread execution runtime, builders, sagas, messaging |
+| `dispersion-examples` | `dispersion-examples.jar` | `com.github.f442y.dispersion.examples` | Reference architectures, end-to-end showcases, and pipelines |
+
+In your `module-info.java`:
+
+```java
+module com.example.myapp {
+    requires com.github.f442y.dispersion.core;
+}
+```
+
+---
+
 ## 🚀 Step-by-Step Examples & Design Patterns
 
 ---
@@ -179,6 +200,7 @@ Let's build a simple, complete state machine that grinds beans, heats water, bre
 ```java
 import com.github.f442y.dispersion.atomic.AtomicStateMachineBuilder;
 import com.github.f442y.dispersion.atomic.AtomicStateMachineExecutor;
+import com.github.f442y.dispersion.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.state.StateKey;
 
@@ -198,7 +220,7 @@ public class CoffeeContext implements StateMachineContext {
 }
 
 // Step 3: Build the state machine topology with the fluent builder
-var coffeeMachineConfig = AtomicStateMachineBuilder
+StateMachineConfiguration<CoffeeContext, CoffeeState, String, String> coffeeMachineConfig = AtomicStateMachineBuilder
     // <ContextType, StateEnumType, InputPayloadType, OutputReturnType>
     .<CoffeeContext, CoffeeState, String, String>create(CoffeeState.class)
     // Factory that provides a clean context instance for each new execution
@@ -240,7 +262,7 @@ var coffeeMachineConfig = AtomicStateMachineBuilder
     .build();
 
 // Step 4: Execute synchronously on a dedicated Virtual Thread
-try (var executor = new AtomicStateMachineExecutor<>("coffee-machine", coffeeMachineConfig)) {
+try (AtomicStateMachineExecutor<CoffeeContext, CoffeeState, String, String> executor = new AtomicStateMachineExecutor<>("coffee-machine", coffeeMachineConfig)) {
     String cupOfCoffee = executor.dispatchSync("French Dark Roast");
     System.out.println("Result: " + cupOfCoffee);
     // Output: Freshly brewed hot cup of French Dark Roast!
@@ -268,6 +290,7 @@ graph LR
 
 ```java
 import com.github.f442y.dispersion.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.atomic.AtomicStateMachineExecutor;
 import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.state.StateKey;
 import java.util.Set;
@@ -289,48 +312,52 @@ public class OnboardingContext implements StateMachineContext {
 
 public record OnboardingRequest(String userId, boolean isVip) {}
 
-var onboardingConfig = AtomicStateMachineBuilder
-    .<OnboardingContext, OnboardingState, OnboardingRequest, String>create(OnboardingState.class)
-    .context(OnboardingContext::new)
-    .initialState(OnboardingState.REGISTER_USER)
-    .input((ctx, req) -> {
-        ctx.userId = req.userId();
-        ctx.isVip = req.isVip();
-        return ctx;
-    })
-    .state(OnboardingState.REGISTER_USER)
-        .action(ctx -> {
-            System.out.println("Registering user: " + ctx.userId);
+try (AtomicStateMachineExecutor<OnboardingContext, OnboardingState, OnboardingRequest, String> onboardingExecutor = AtomicStateMachineBuilder
+        .<OnboardingContext, OnboardingState, OnboardingRequest, String>create(OnboardingState.class)
+        .context(OnboardingContext::new)
+        .initialState(OnboardingState.REGISTER_USER)
+        .input((ctx, req) -> {
+            ctx.userId = req.userId();
+            ctx.isVip = req.isVip();
             return ctx;
         })
-        // Dynamic Branching: VIPs skip manual identity verification!
-        .transitionsTo(
-            Set.of(OnboardingState.VIP_FAST_TRACK, OnboardingState.VERIFY_IDENTITY),
-            ctx -> ctx.isVip ? OnboardingState.VIP_FAST_TRACK : OnboardingState.VERIFY_IDENTITY
-        )
-    .state(OnboardingState.VERIFY_IDENTITY)
-        .action(ctx -> {
-            ctx.identityVerified = true;
-            System.out.println("Performing standard KYC verification...");
-            return ctx;
-        })
-        .transition(OnboardingState.ACTIVATE_ACCOUNT)
-    .state(OnboardingState.VIP_FAST_TRACK)
-        .action(ctx -> {
-            ctx.identityVerified = true; // Auto-verified for VIPs
-            System.out.println("Applying VIP instant verification bypass.");
-            return ctx;
-        })
-        .transition(OnboardingState.ACTIVATE_ACCOUNT)
-    .state(OnboardingState.ACTIVATE_ACCOUNT)
-        .action(ctx -> {
-            ctx.status = "ACTIVE";
-            return ctx;
-        })
-        .transition(OnboardingState.ACCOUNT_READY)
-    .endStates(OnboardingState.ACCOUNT_READY)
-    .output(ctx -> "User " + ctx.userId + " is now " + ctx.status)
-    .buildExecutor("user-onboarding");
+        .state(OnboardingState.REGISTER_USER)
+            .action(ctx -> {
+                System.out.println("Registering user: " + ctx.userId);
+                return ctx;
+            })
+            // Dynamic Branching: VIPs skip manual identity verification!
+            .transitionsTo(
+                Set.of(OnboardingState.VIP_FAST_TRACK, OnboardingState.VERIFY_IDENTITY),
+                ctx -> ctx.isVip ? OnboardingState.VIP_FAST_TRACK : OnboardingState.VERIFY_IDENTITY
+            )
+        .state(OnboardingState.VERIFY_IDENTITY)
+            .action(ctx -> {
+                ctx.identityVerified = true;
+                System.out.println("Performing standard KYC verification...");
+                return ctx;
+            })
+            .transition(OnboardingState.ACTIVATE_ACCOUNT)
+        .state(OnboardingState.VIP_FAST_TRACK)
+            .action(ctx -> {
+                ctx.identityVerified = true; // Auto-verified for VIPs
+                System.out.println("Applying VIP instant verification bypass.");
+                return ctx;
+            })
+            .transition(OnboardingState.ACTIVATE_ACCOUNT)
+        .state(OnboardingState.ACTIVATE_ACCOUNT)
+            .action(ctx -> {
+                ctx.status = "ACTIVE";
+                return ctx;
+            })
+            .transition(OnboardingState.ACCOUNT_READY)
+        .endStates(OnboardingState.ACCOUNT_READY)
+        .output(ctx -> "User " + ctx.userId + " is now " + ctx.status)
+        .buildExecutor("user-onboarding")) {
+
+    String result = onboardingExecutor.dispatchSync(new OnboardingRequest("USER-42", true));
+    System.out.println(result); // User USER-42 is now ACTIVE
+}
 ```
 
 ---
@@ -342,9 +369,13 @@ Real-world business processes often span minutes, hours, or days (e.g. waiting f
 With **Orchestration State Machines**, the workflow executes until hitting a `.waitForSignal(...)` state, snapshots its state to a `CheckpointStore`, and **releases its virtual thread**. When the external signal arrives, Dispersion rehydrates the exact state machine by its **correlation key** and resumes execution.
 
 ```java
+import com.github.f442y.dispersion.context.StateMachineContext;
+import com.github.f442y.dispersion.orchestration.CheckpointStore;
 import com.github.f442y.dispersion.orchestration.InMemoryCheckpointStore;
 import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.state.StateKey;
 
 public enum LoanState implements StateKey {
     SUBMIT_APPLICATION,
@@ -364,63 +395,64 @@ public class LoanContext implements StateMachineContext {
 public record LoanApprovalSignal(String loanId, String managerName, boolean approved) {}
 
 // Checkpoint store persists the state snapshot while the workflow is suspended
-var checkpointStore = new InMemoryCheckpointStore<LoanContext, LoanState>();
+CheckpointStore<LoanContext, LoanState> checkpointStore = new InMemoryCheckpointStore<>();
 
-var loanExecutor = OrchestrationStateMachineBuilder
-    .<LoanContext, LoanState, LoanContext, String>create("LoanWorkflow", LoanState.class)
-    .context(LoanContext::new)
-    .initialState(LoanState.SUBMIT_APPLICATION)
-    .checkpointStore(checkpointStore)
-    // The correlation key allows incoming signals to locate this suspended instance
-    .correlationKey(ctx -> ctx.loanId)
-    .input((ctx, input) -> {
-        ctx.loanId = input.loanId;
-        ctx.amount = input.amount;
-        return ctx;
-    })
-    .state(LoanState.SUBMIT_APPLICATION)
-        .action(ctx -> {
-            System.out.println("Loan application submitted: " + ctx.loanId + " for $" + ctx.amount);
+try (OrchestrationStateMachineExecutor<LoanContext, LoanState, LoanContext, String> loanExecutor = OrchestrationStateMachineBuilder
+        .<LoanContext, LoanState, LoanContext, String>create("LoanWorkflow", LoanState.class)
+        .context(LoanContext::new)
+        .initialState(LoanState.SUBMIT_APPLICATION)
+        .checkpointStore(checkpointStore)
+        // The correlation key allows incoming signals to locate this suspended instance
+        .correlationKey(ctx -> ctx.loanId)
+        .input((ctx, input) -> {
+            ctx.loanId = input.loanId;
+            ctx.amount = input.amount;
             return ctx;
         })
-        .transition(LoanState.AWAIT_MANAGER_APPROVAL)
-    // 🛑 SUSPENSION POINT: Workflow pauses here, saves checkpoint, and yields thread
-    .state(LoanState.AWAIT_MANAGER_APPROVAL)
-        .waitForSignal("LoanApproval", LoanApprovalSignal.class, (ctx, signal) -> {
-            System.out.println("Received approval signal from: " + signal.managerName());
-            ctx.approvedBy = signal.managerName();
-            return ctx;
-        })
-        .transition(LoanState.DISBURSE_FUNDS)
-    .state(LoanState.DISBURSE_FUNDS)
-        .action(ctx -> {
-            ctx.disbursed = true;
-            System.out.println("Disbursing $" + ctx.amount + " approved by " + ctx.approvedBy);
-            return ctx;
-        })
-        .transition(LoanState.LOAN_COMPLETED)
-    .endStates(LoanState.LOAN_COMPLETED)
-    .output(ctx -> "Loan " + ctx.loanId + " disbursed ($" + ctx.amount + ")")
-    .buildExecutor();
+        .state(LoanState.SUBMIT_APPLICATION)
+            .action(ctx -> {
+                System.out.println("Loan application submitted: " + ctx.loanId + " for $" + ctx.amount);
+                return ctx;
+            })
+            .transition(LoanState.AWAIT_MANAGER_APPROVAL)
+        // 🛑 SUSPENSION POINT: Workflow pauses here, saves checkpoint, and yields thread
+        .state(LoanState.AWAIT_MANAGER_APPROVAL)
+            .waitForSignal("LoanApproval", LoanApprovalSignal.class, (ctx, signal) -> {
+                System.out.println("Received approval signal from: " + signal.managerName());
+                ctx.approvedBy = signal.managerName();
+                return ctx;
+            })
+            .transition(LoanState.DISBURSE_FUNDS)
+        .state(LoanState.DISBURSE_FUNDS)
+            .action(ctx -> {
+                ctx.disbursed = true;
+                System.out.println("Disbursing $" + ctx.amount + " approved by " + ctx.approvedBy);
+                return ctx;
+            })
+            .transition(LoanState.LOAN_COMPLETED)
+        .endStates(LoanState.LOAN_COMPLETED)
+        .output(ctx -> "Loan " + ctx.loanId + " disbursed ($" + ctx.amount + ")")
+        .buildExecutor()) {
 
-// --- TURN 1: Initial submission ---
-LoanContext loan = new LoanContext();
-loan.loanId = "LOAN-1002";
-loan.amount = 50000;
+    // --- TURN 1: Initial submission ---
+    LoanContext loan = new LoanContext();
+    loan.loanId = "LOAN-1002";
+    loan.amount = 50000;
 
-OrchestrationTurnResult<LoanContext, LoanState, String> turn1 = loanExecutor.dispatchTurnSync(null, loan);
-System.out.println("Is Suspended? " + turn1.isSuspended()); // true
-System.out.println("Current State: " + turn1.currentStateKey()); // AWAIT_MANAGER_APPROVAL
+    OrchestrationTurnResult<LoanContext, LoanState, String> turn1 = loanExecutor.dispatchTurnSync(null, loan);
+    System.out.println("Is Suspended? " + turn1.isSuspended()); // true
+    System.out.println("Current State: " + turn1.currentStateKey()); // AWAIT_MANAGER_APPROVAL
 
-// --- TURN 2: External Manager Approves via Webhook hours later ---
-OrchestrationTurnResult<LoanContext, LoanState, String> turn2 = loanExecutor.sendSignalByCorrelationKey(
-    "LOAN-1002",
-    "LoanApproval",
-    new LoanApprovalSignal("LOAN-1002", "Sarah Connor", true)
-).get();
+    // --- TURN 2: External Manager Approves via Webhook hours later ---
+    OrchestrationTurnResult<LoanContext, LoanState, String> turn2 = loanExecutor.sendSignalByCorrelationKey(
+        "LOAN-1002",
+        "LoanApproval",
+        new LoanApprovalSignal("LOAN-1002", "Sarah Connor", true)
+    ).get();
 
-System.out.println("Is Completed? " + turn2.isCompleted()); // true
-System.out.println("Result: " + turn2.output()); // Loan LOAN-1002 disbursed ($50000)
+    System.out.println("Is Completed? " + turn2.isCompleted()); // true
+    System.out.println("Result: " + turn2.output()); // Loan LOAN-1002 disbursed ($50000)
+}
 ```
 
 ---
@@ -436,13 +468,16 @@ graph TD
     S1[1. RESERVE_INVENTORY] -->|Compensate: Release Stock| S1_UNDO[Undo Stock]
     S2[2. CHARGE_PAYMENT] -->|Compensate: Refund Card| S2_UNDO[Undo Payment]
     S3[3. BOOK_COURIER - FAILS!] --> ROLLBACK{Trigger LIFO Saga Rollback}
-    
+
     ROLLBACK --> S2_UNDO
     S2_UNDO --> S1_UNDO
 ```
 
 ```java
+import com.github.f442y.dispersion.context.StateMachineContext;
 import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.state.StateKey;
 
 public enum CheckoutState implements StateKey {
     RESERVE_INVENTORY,
@@ -458,61 +493,62 @@ public class CheckoutContext implements StateMachineContext {
     public boolean deliveryBooked;
 }
 
-var checkoutExecutor = OrchestrationStateMachineBuilder
-    .<CheckoutContext, CheckoutState, String, String>create("CheckoutSaga", CheckoutState.class)
-    .context(CheckoutContext::new)
-    .initialState(CheckoutState.RESERVE_INVENTORY)
-    .input((ctx, id) -> { ctx.orderId = id; return ctx; })
-    
-    // Step 1: Reserve Inventory
-    .state(CheckoutState.RESERVE_INVENTORY)
-        .action(ctx -> {
-            ctx.stockReserved = true;
-            System.out.println("Step 1: Inventory reserved.");
-            return ctx;
-        })
-        .compensate(ctx -> {
-            ctx.stockReserved = false;
-            System.out.println("ROLLBACK: Releasing reserved inventory.");
-            return ctx;
-        })
-        .transition(CheckoutState.CHARGE_PAYMENT)
-        
-    // Step 2: Charge Payment
-    .state(CheckoutState.CHARGE_PAYMENT)
-        .action(ctx -> {
-            ctx.paymentCharged = true;
-            System.out.println("Step 2: Credit card charged.");
-            return ctx;
-        })
-        .compensate(ctx -> {
-            ctx.paymentCharged = false;
-            System.out.println("COMPENSATION: Refunding credit card charge.");
-            return ctx;
-        })
-        .transition(CheckoutState.SCHEDULE_DELIVERY)
-        
-    // Step 3: Schedule Delivery (Simulate unexpected failure)
-    .state(CheckoutState.SCHEDULE_DELIVERY)
-        .action(ctx -> {
-            System.out.println("Step 3: Attempting to book delivery courier...");
-            throw new IllegalStateException("Courier service unavailable in delivery zone!");
-        })
-        .transition(CheckoutState.COMPLETED)
-        
-    .endStates(CheckoutState.COMPLETED)
-    .buildExecutor();
+try (OrchestrationStateMachineExecutor<CheckoutContext, CheckoutState, String, String> checkoutExecutor = OrchestrationStateMachineBuilder
+        .<CheckoutContext, CheckoutState, String, String>create("CheckoutSaga", CheckoutState.class)
+        .context(CheckoutContext::new)
+        .initialState(CheckoutState.RESERVE_INVENTORY)
+        .input((ctx, id) -> { ctx.orderId = id; return ctx; })
 
-try {
-    checkoutExecutor.dispatchSync("ORD-8822");
-} catch (Exception e) {
-    System.out.println("Checkout failed: " + e.getMessage());
-    // Console output automatically shows:
-    // Step 1: Inventory reserved.
-    // Step 2: Credit card charged.
-    // Step 3: Attempting to book delivery courier...
-    // COMPENSATION: Refunding credit card charge. (LIFO Step 2 Compensation)
-    // COMPENSATION: Releasing reserved inventory.   (LIFO Step 1 Compensation)
+        // Step 1: Reserve Inventory
+        .state(CheckoutState.RESERVE_INVENTORY)
+            .action(ctx -> {
+                ctx.stockReserved = true;
+                System.out.println("Step 1: Inventory reserved.");
+                return ctx;
+            })
+            .compensate(ctx -> {
+                ctx.stockReserved = false;
+                System.out.println("ROLLBACK: Releasing reserved inventory.");
+                return ctx;
+            })
+            .transition(CheckoutState.CHARGE_PAYMENT)
+
+        // Step 2: Charge Payment
+        .state(CheckoutState.CHARGE_PAYMENT)
+            .action(ctx -> {
+                ctx.paymentCharged = true;
+                System.out.println("Step 2: Credit card charged.");
+                return ctx;
+            })
+            .compensate(ctx -> {
+                ctx.paymentCharged = false;
+                System.out.println("COMPENSATION: Refunding credit card charge.");
+                return ctx;
+            })
+            .transition(CheckoutState.SCHEDULE_DELIVERY)
+
+        // Step 3: Schedule Delivery (Simulate unexpected failure)
+        .state(CheckoutState.SCHEDULE_DELIVERY)
+            .action(ctx -> {
+                System.out.println("Step 3: Attempting to book delivery courier...");
+                throw new IllegalStateException("Courier service unavailable in delivery zone!");
+            })
+            .transition(CheckoutState.COMPLETED)
+
+        .endStates(CheckoutState.COMPLETED)
+        .buildExecutor()) {
+
+    try {
+        checkoutExecutor.dispatchSync("ORD-8822");
+    } catch (Exception e) {
+        System.out.println("Checkout failed: " + e.getMessage());
+        // Console output automatically shows:
+        // Step 1: Inventory reserved.
+        // Step 2: Credit card charged.
+        // Step 3: Attempting to book delivery courier...
+        // COMPENSATION: Refunding credit card charge. (LIFO Step 2 Compensation)
+        // COMPENSATION: Releasing reserved inventory.   (LIFO Step 1 Compensation)
+    }
 }
 ```
 
@@ -596,6 +632,8 @@ Dispersion's `CommandEnvelope<T>` guarantees **exactly-once execution**:
 ```java
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import java.time.Instant;
+import java.util.UUID;
 
 // 1. Define domain command implementing SignalCommand
 public record ApproveOrderCommand(String orderId, String managerId) implements SignalCommand {
@@ -625,36 +663,40 @@ executor.handleCommand(envelope).get();
 Connect state machines directly to message brokers (Apache Kafka, AWS SQS, RabbitMQ, or in-memory virtual thread channels):
 
 ```java
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
 import com.github.f442y.dispersion.orchestration.messaging.InMemorySignalBroker;
 import com.github.f442y.dispersion.orchestration.messaging.SignalReceiver;
 
 // 1. In-Memory broker on Virtual Threads (or swap with Kafka / SQS adapter)
-InMemorySignalBroker broker = new InMemorySignalBroker();
+try (InMemorySignalBroker broker = new InMemorySignalBroker()) {
 
-// 2. Build state machine with outbound publication and inbound command wait
-var executor = OrchestrationStateMachineBuilder
-    .<ShippingContext, ShippingState, Void, String>create("ShippingWorkflow", ShippingState.class)
-    .context(ShippingContext::new)
-    .initialState(ShippingState.INIT)
-    .checkpointStore(store)
-    .correlationKey(ctx -> ctx.shipmentId)
-    .state(ShippingState.INIT)
-        // Publishes outbound message to broker destination "warehouse-dispatch-requests"
-        .publish(broker, "warehouse-dispatch-requests", ctx -> new DispatchRequest(ctx.shipmentId))
-        .transition(ShippingState.AWAIT_PICKED)
-    .state(ShippingState.AWAIT_PICKED)
-        // Waits for inbound command from warehouse
-        .waitForCommand(PackagePickedCommand.class, (ctx, cmd) -> {
-            ctx.picked = true;
-            return ctx;
-        })
-        .transition(ShippingState.COMPLETED)
-    .endStates(ShippingState.COMPLETED)
-    .buildExecutor();
+    // 2. Build state machine with outbound publication and inbound command wait
+    try (OrchestrationStateMachineExecutor<ShippingContext, ShippingState, Void, String> executor = OrchestrationStateMachineBuilder
+            .<ShippingContext, ShippingState, Void, String>create("ShippingWorkflow", ShippingState.class)
+            .context(ShippingContext::new)
+            .initialState(ShippingState.INIT)
+            .checkpointStore(store)
+            .correlationKey(ctx -> ctx.shipmentId)
+            .state(ShippingState.INIT)
+                // Publishes outbound message to broker destination "warehouse-dispatch-requests"
+                .publish(broker, "warehouse-dispatch-requests", ctx -> new DispatchRequest(ctx.shipmentId))
+                .transition(ShippingState.AWAIT_PICKED)
+            .state(ShippingState.AWAIT_PICKED)
+                // Waits for inbound command from warehouse
+                .waitForCommand(PackagePickedCommand.class, (ctx, cmd) -> {
+                    ctx.picked = true;
+                    return ctx;
+                })
+                .transition(ShippingState.COMPLETED)
+            .endStates(ShippingState.COMPLETED)
+            .buildExecutor()) {
 
-// 3. Connect broker subscription to the state machine via SignalReceiver
-SignalReceiver receiver = SignalReceiver.forExecutor(executor);
-broker.subscribe("warehouse-events", receiver);
+        // 3. Connect broker subscription to the state machine via SignalReceiver
+        SignalReceiver receiver = SignalReceiver.forExecutor(executor);
+        broker.subscribe("warehouse-events", receiver);
+    }
+}
 ```
 
 ---
@@ -664,8 +706,11 @@ broker.subscribe("warehouse-events", receiver);
 Process collections of items where individual items stream independently on Virtual Threads and synchronize at dynamic barriers:
 
 ```java
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStateMachineBuilder;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationExecutor;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.state.StateKey;
+import java.util.List;
 
 public enum BatchState implements StateKey {
     INSPECT_ITEM,
@@ -674,35 +719,40 @@ public enum BatchState implements StateKey {
     COMPLETED
 }
 
-var batchExecutor = BatchOrchestrationStateMachineBuilder
-    .<BatchContext, ItemContext, BatchState, String>create("PalletBatch", BatchState.class)
-    .batchContext(BatchContext::new)
-    .batchKey(ctx -> ctx.batchId)
-    .itemKey(item -> item.itemId)
-    .initialState(BatchState.INSPECT_ITEM)
-    // Step 1: Items stream and inspect independently
-    .itemState(BatchState.INSPECT_ITEM)
-        .action(item -> {
-            item.inspected = true;
-            return item;
-        })
-        .transition(BatchState.HOLD_AT_BATCH_BARRIER)
-    // Step 2: BARRIER - Items wait until ALL items in the batch arrive here
-    .itemState(BatchState.HOLD_AT_BATCH_BARRIER)
-        .barrier(BarrierPolicy.ALL_ITEMS_ARRIVED)
-        .transition(BatchState.DISPATCH_PALLET)
-    // Step 3: All items unlock simultaneously and dispatch together
-    .itemState(BatchState.DISPATCH_PALLET)
-        .action(item -> {
-            item.dispatched = true;
-            return item;
-        })
-        .transition(BatchState.COMPLETED)
-    .endStates(BatchState.COMPLETED)
-    .buildExecutor();
+try (BatchOrchestrationExecutor<BatchContext, ItemContext, BatchState, String> batchExecutor = BatchOrchestrationStateMachineBuilder
+        .<BatchContext, ItemContext, BatchState, String>create("PalletBatch", BatchState.class)
+        .batchContext(BatchContext::new)
+        .batchKey(ctx -> ctx.batchId)
+        .itemKey(item -> item.itemId)
+        .initialState(BatchState.INSPECT_ITEM)
+        // Step 1: Items stream and inspect independently
+        .itemState(BatchState.INSPECT_ITEM)
+            .action(item -> {
+                item.inspected = true;
+                return item;
+            })
+            .transition(BatchState.HOLD_AT_BATCH_BARRIER)
+        // Step 2: BARRIER - Items wait until ALL items in the batch arrive here
+        .itemState(BatchState.HOLD_AT_BATCH_BARRIER)
+            .barrier(BarrierPolicy.ALL_ITEMS_ARRIVED)
+            .transition(BatchState.DISPATCH_PALLET)
+        // Step 3: All items unlock simultaneously and dispatch together
+        .itemState(BatchState.DISPATCH_PALLET)
+            .action(item -> {
+                item.dispatched = true;
+                return item;
+            })
+            .transition(BatchState.COMPLETED)
+        .endStates(BatchState.COMPLETED)
+        .buildExecutor()) {
 
-// Dispatch 500 items concurrently on Virtual Threads
-batchExecutor.dispatchBatchSync(itemsList);
+    BatchContext batch = new BatchContext();
+    batch.batchId = "PALLET-404";
+    List<ItemContext> itemsList = List.of(new ItemContext("ITEM-1"), new ItemContext("ITEM-2"));
+
+    // Dispatch items concurrently on Virtual Threads
+    batchExecutor.dispatchBatchSync(batch, itemsList);
+}
 ```
 
 ---
@@ -768,7 +818,7 @@ Prevent memory saturation during massive traffic spikes:
 // Buffer up to 10,000 concurrent virtual threads; reject immediately if capacity is exceeded
 AdmissionController admission = AdmissionController.rejectImmediately(10_000);
 
-var executor = new BufferedStateMachineExecutor<>(
+BufferedStateMachineExecutor<MyContext, String, String> executor = new BufferedStateMachineExecutor<>(
     "buffered-executor",
     machineConfig,
     admission
@@ -791,9 +841,9 @@ System.out.println(mermaid);
 ```
 dispersion/
 ├── dispersion-bom/          # Centralized Bill of Materials POM
-├── dispersion-api/          # Interfaces, Sealed Exceptions, Records, SPIs
-├── dispersion-core/         # Execution Engines, Virtual Thread Executors, Sagas
-└── dispersion-examples/     # Real-world Distributed Saga Reference Implementations
+├── dispersion-api/          # Interfaces, Sealed Exceptions, Records, SPIs (com.github.f442y.dispersion.api)
+├── dispersion-core/         # Execution Engines, Virtual Thread Executors, Sagas (com.github.f442y.dispersion.core)
+└── dispersion-examples/     # Real-world Distributed Saga Reference Implementations (com.github.f442y.dispersion.examples)
 ```
 
 ---
@@ -801,16 +851,16 @@ dispersion/
 ## 🛠️ Building & Testing
 
 ### Prerequisites
-- **JDK 25+** (e.g. OpenJDK 25 / Azul Zulu 25)
+- **JDK 25+** (e.g. OpenJDK 25 / Azul Zulu 25 / Liberica JDK 25)
 - **Maven 3.9+** (or use the included `./mvnw`)
 
-### Build & Run Test Suite
+### Build & Run Complete Test Matrix
 
 ```bash
-# Build all modules
-./mvnw clean compile
+# Build all modules and verify packages
+./mvnw clean verify
 
-# Run complete test suite across all modules
+# Run complete multi-module test suite
 ./mvnw clean test
 ```
 

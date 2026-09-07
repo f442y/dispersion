@@ -47,7 +47,9 @@ public class NestedStateMachineTests {
                         .context(ChildContext::new)
                         .initialState(ChildState.AUTH)
                         .input((ctx, req) -> {
-                            ctx.txId = "TX-" + req.orderId();
+                            if (req != null) {
+                                ctx.txId = "TX-" + req.orderId();
+                            }
                             return ctx;
                         })
                         .state(ChildState.AUTH)
@@ -55,10 +57,10 @@ public class NestedStateMachineTests {
                                 ctx.authorized = true;
                                 return ctx;
                             })
-                            .transition(ctx -> ChildState.CAPTURE)
+                            .transition(ChildState.CAPTURE)
                         .state(ChildState.CAPTURE)
                             .action(ctx -> ctx)
-                            .transition(ctx -> ChildState.COMPLETED)
+                            .transition(ChildState.COMPLETED)
                         .endStates(ChildState.COMPLETED)
                         .output(ctx -> new PaymentResponse(ctx.txId, ctx.authorized))
                         .build();
@@ -69,8 +71,10 @@ public class NestedStateMachineTests {
                         .context(ParentContext::new)
                         .initialState(ParentState.VALIDATE)
                         .input((ctx, req) -> {
-                            ctx.orderId = req.orderId();
-                            ctx.amount = req.amount();
+                            if (req != null) {
+                                ctx.orderId = req.orderId();
+                                ctx.amount = req.amount();
+                            }
                             ctx.logs.add("PARENT:VALIDATE");
                             return ctx;
                         })
@@ -79,7 +83,7 @@ public class NestedStateMachineTests {
                                 ctx.logs.add("VALIDATED");
                                 return ctx;
                             })
-                            .transition(ctx -> ParentState.EXECUTE_CHILD)
+                            .transition(ParentState.EXECUTE_CHILD)
                         .state(ParentState.EXECUTE_CHILD)
                             .subStateMachine(
                                     childStateMachine,
@@ -90,22 +94,23 @@ public class NestedStateMachineTests {
                                         return parentCtx;
                                     }
                             )
-                            .transition(ctx -> ParentState.FINALIZE)
+                            .transition(ParentState.FINALIZE)
                         .state(ParentState.FINALIZE)
                             .action(ctx -> {
                                 ctx.logs.add("FINALIZED");
                                 return ctx;
                             })
-                            .transition(ctx -> ParentState.DONE)
+                            .transition(ParentState.DONE)
                         .endStates(ParentState.DONE)
                         .output(ctx -> "Processed order=" + ctx.orderId + ", tx=" + ctx.paymentTxId)
                         .build();
 
-        AtomicStateMachineExecutor<ParentContext, ParentState, PaymentRequest, String> executor =
-                new AtomicStateMachineExecutor<>("nested-test", parentStateMachine, 10);
+        try (AtomicStateMachineExecutor<ParentContext, ParentState, PaymentRequest, String> executor =
+                new AtomicStateMachineExecutor<>("nested-test", parentStateMachine, 10)) {
 
-        String result = executor.dispatchSync(new PaymentRequest("ORD-12345", 999));
-        assertEquals("Processed order=ORD-12345, tx=TX-ORD-12345", result);
+            String result = executor.dispatchSync(new PaymentRequest("ORD-12345", 999));
+            assertEquals("Processed order=ORD-12345, tx=TX-ORD-12345", result);
+        }
     }
 
     @Test
@@ -116,12 +121,12 @@ public class NestedStateMachineTests {
                         .context(ChildContext::new)
                         .initialState(ChildState.AUTH)
                         .state(ChildState.AUTH)
-                            .action(ctx -> {
+                            .action(_ -> {
                                 throw new IllegalStateException("Payment gateway unreachable");
                             })
-                            .transition(ctx -> ChildState.COMPLETED)
+                            .transition(ChildState.COMPLETED)
                         .endStates(ChildState.COMPLETED)
-                        .output(ctx -> null)
+                        .output(_ -> null)
                         .build();
 
         // Parent embedding failing child
@@ -132,17 +137,18 @@ public class NestedStateMachineTests {
                         .state(ParentState.EXECUTE_CHILD)
                             .subStateMachine(
                                     failingChildMachine,
-                                    ctx -> null,
-                                    (ctx, res) -> ctx
+                                    _ -> null,
+                                    (ctx, _) -> ctx
                             )
-                            .transition(ctx -> ParentState.DONE)
+                            .transition(ParentState.DONE)
                         .endStates(ParentState.DONE)
-                        .output(ctx -> "OK")
+                        .output(_ -> "OK")
                         .build();
 
-        AtomicStateMachineExecutor<ParentContext, ParentState, Void, String> executor =
-                new AtomicStateMachineExecutor<>("failing-nested-test", parentStateMachine, 10);
+        try (AtomicStateMachineExecutor<ParentContext, ParentState, Void, String> executor =
+                new AtomicStateMachineExecutor<>("failing-nested-test", parentStateMachine, 10)) {
 
-        assertThrows(ActionException.class, () -> executor.dispatchSync(null));
+            assertThrows(ActionException.class, () -> executor.dispatchSync(null));
+        }
     }
 }

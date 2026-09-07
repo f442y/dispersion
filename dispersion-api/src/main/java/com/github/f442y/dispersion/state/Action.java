@@ -33,7 +33,21 @@ public interface Action<CONTEXT extends StateMachineContext> {
      * @return An identity {@link Action} instance
      */
     @NonNull
+    @SuppressWarnings("unchecked")
     static <CONTEXT_TYPE extends StateMachineContext> Action<CONTEXT_TYPE> identity() {
-        return context -> context;
+        return (Action<CONTEXT_TYPE>) IdentityAction.INSTANCE;
+    }
+
+    /**
+     * Singleton identity action implementation.
+     */
+    enum IdentityAction implements Action<StateMachineContext> {
+        INSTANCE;
+
+        @NonNull
+        @Override
+        public StateMachineContext execute(@NonNull StateMachineContext context) {
+            return context;
+        }
     }
 }

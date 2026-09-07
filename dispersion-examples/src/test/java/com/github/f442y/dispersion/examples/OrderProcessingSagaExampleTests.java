@@ -72,15 +72,17 @@ public class OrderProcessingSagaExampleTests {
                         .build();
 
         // 2. Parent Orchestration Machine
-        OrchestrationStateMachineExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
+        try (OrchestrationStateMachineExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
                 OrchestrationStateMachineBuilder.<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String>create("CheckoutSaga", OrderWorkflowState.class)
                         .context(OrderWorkflowContext::new)
                         .initialState(OrderWorkflowState.VALIDATE_ORDER)
                         .input((ctx, req) -> {
-                            ctx.orderId = req.orderId();
-                            ctx.customerId = req.customerId();
-                            ctx.amountCents = req.amountCents();
-                            ctx.forcePaymentFailure = req.forcePaymentFailure();
+                            if (req != null) {
+                                ctx.orderId = req.orderId();
+                                ctx.customerId = req.customerId();
+                                ctx.amountCents = req.amountCents();
+                                ctx.forcePaymentFailure = req.forcePaymentFailure();
+                            }
                             ctx.auditTrail.add("ORDER_VALIDATED");
                             return ctx;
                         })
@@ -132,13 +134,14 @@ public class OrderProcessingSagaExampleTests {
 
                         .endStates(OrderWorkflowState.COMPLETED, OrderWorkflowState.FAILED)
                         .output(ctx -> "Order " + ctx.orderId + " completed successfully with audit: " + String.join(" -> ", ctx.auditTrail))
-                        .buildExecutor();
+                        .buildExecutor()) {
 
-        OrderRequest request = new OrderRequest("ORD-1001", "CUST-42", 5999, false);
-        String summary = executor.dispatchSync(request);
+            OrderRequest request = new OrderRequest("ORD-1001", "CUST-42", 5999, false);
+            String summary = executor.dispatchSync(request);
 
-        assertThat(summary).contains("Order ORD-1001 completed successfully");
-        assertThat(summary).contains("ORDER_VALIDATED -> INVENTORY_RESERVED -> PAYMENT_SETTLED -> ORDER_CONFIRMED");
+            assertThat(summary).contains("Order ORD-1001 completed successfully");
+            assertThat(summary).contains("ORDER_VALIDATED -> INVENTORY_RESERVED -> PAYMENT_SETTLED -> ORDER_CONFIRMED");
+        }
     }
 
     @Test
@@ -163,13 +166,15 @@ public class OrderProcessingSagaExampleTests {
         List<String> compensationAudit = new ArrayList<>();
 
         // 2. Parent Orchestration Machine
-        OrchestrationStateMachineExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
+        try (OrchestrationStateMachineExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
                 OrchestrationStateMachineBuilder.<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String>create("FailingCheckoutSaga", OrderWorkflowState.class)
                         .context(OrderWorkflowContext::new)
                         .initialState(OrderWorkflowState.VALIDATE_ORDER)
                         .input((ctx, req) -> {
-                            ctx.orderId = req.orderId();
-                            ctx.forcePaymentFailure = req.forcePaymentFailure();
+                            if (req != null) {
+                                ctx.orderId = req.orderId();
+                                ctx.forcePaymentFailure = req.forcePaymentFailure();
+                            }
                             return ctx;
                         })
                         .state(OrderWorkflowState.VALIDATE_ORDER)
@@ -189,20 +194,21 @@ public class OrderProcessingSagaExampleTests {
                             .transition(OrderWorkflowState.PROCESS_PAYMENT)
 
                         .state(OrderWorkflowState.PROCESS_PAYMENT)
-                            .action(ctx -> {
+                            .action(_ -> {
                                 throw new RuntimeException("Card expired or declined");
                             })
                             .transition(OrderWorkflowState.COMPLETED)
 
                         .endStates(OrderWorkflowState.COMPLETED, OrderWorkflowState.FAILED)
-                        .buildExecutor();
+                        .buildExecutor()) {
 
-        OrderRequest request = new OrderRequest("ORD-9999", "CUST-00", 1200, true);
+            OrderRequest request = new OrderRequest("ORD-9999", "CUST-00", 1200, true);
 
-        assertThatThrownBy(() -> executor.dispatchSync(request))
-                .hasMessageContaining("Card expired or declined");
+            assertThatThrownBy(() -> executor.dispatchSync(request))
+                    .hasMessageContaining("Card expired or declined");
 
-        // Verify LIFO compensation order: Reserve Inventory was compensated before Validate Order
-        assertThat(compensationAudit).containsExactly("RELEASE_INVENTORY", "COMPENSATE_VALIDATION");
+            // Verify LIFO compensation order: Reserve Inventory was compensated before Validate Order
+            assertThat(compensationAudit).containsExactly("RELEASE_INVENTORY", "COMPENSATE_VALIDATION");
+        }
     }
 }

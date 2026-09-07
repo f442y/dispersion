@@ -24,7 +24,7 @@ public class AtomicStateMachineCallable<
         OUTPUT> extends AbstractStateMachineCallable<CONTEXT, STATE_KEY, INPUT, OUTPUT> {
 
     public AtomicStateMachineCallable(
-            @NonNull UUID uuid,
+            @Nullable UUID uuid,
             @NonNull StateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration,
             @Nullable CONTEXT initialContext,
             @Nullable INPUT input

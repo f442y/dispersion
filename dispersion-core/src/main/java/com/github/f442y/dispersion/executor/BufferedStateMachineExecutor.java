@@ -8,8 +8,6 @@ import com.github.f442y.dispersion.exception.BackpressureException;
 import com.github.f442y.dispersion.state.StateKey;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -35,7 +33,7 @@ import java.util.concurrent.Executors;
  *       concurrent runs according to configurable policies (immediate rejection, blocking, or timed timeouts).</li>
  * </ul>
  *
- * @param <CONTEXT>   The concrete type of {@link StateMachineContext}
+ * @param <CONTEXT>   The concrete type of {@link StateMachineContext} managed by the state machine
  * @param <STATE_KEY> The state identifier enum type
  * @param <INPUT>     The input payload type
  * @param <OUTPUT>    The output return type
@@ -45,8 +43,6 @@ public class BufferedStateMachineExecutor<
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
         INPUT,
         OUTPUT> implements StateMachineExecutor<CONTEXT, INPUT, OUTPUT> {
-
-    private static final Logger log = LoggerFactory.getLogger(BufferedStateMachineExecutor.class);
 
     private final String name;
     private final StateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration;
@@ -146,16 +142,22 @@ public class BufferedStateMachineExecutor<
         UUID executionId = UUID.randomUUID();
         CompletableFuture<OUTPUT> future = new CompletableFuture<>();
 
-        virtualThreadExecutor.submit(() -> {
-            try {
-                OUTPUT result = AbstractStateMachineCallable.executeDirect(executionId, configuration, initialContext, input);
-                future.complete(result);
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
-            } finally {
-                admissionController.release();
-            }
-        });
+        try {
+            virtualThreadExecutor.submit(() -> {
+                try {
+                    OUTPUT result = AbstractStateMachineCallable.executeDirect(executionId, configuration, initialContext, input);
+                    future.complete(result);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                } finally {
+                    admissionController.release();
+                }
+            });
+        } catch (Throwable t) {
+            admissionController.release();
+            future.completeExceptionally(t);
+            throw t;
+        }
 
         return new StateMachineFuture<>(executionId, future);
     }

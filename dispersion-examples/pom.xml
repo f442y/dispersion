@@ -15,8 +15,10 @@
 
     <name>Dispersion :: Examples</name>
     <description>Showcase and runnable examples illustrating Dispersion patterns and best practices</description>
+    <url>https://github.com/f442y/dispersion</url>
 
     <dependencies>
+        <!-- Internal Dispersion Modules -->
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-api</artifactId>
@@ -26,18 +28,16 @@
             <artifactId>dispersion-core</artifactId>
         </dependency>
 
+        <!-- Logging Facade -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
+
+        <!-- Testing Framework & Test Runtime Logger -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -51,4 +51,20 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>com.github.f442y.dispersion.examples</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>
