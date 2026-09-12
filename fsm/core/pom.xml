@@ -1,44 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-parent</artifactId>
         <version>${revision}</version>
-        <relativePath>../pom.xml</relativePath>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>dispersion-control-core</artifactId>
+    <artifactId>dispersion-fsm-core</artifactId>
     <packaging>jar</packaging>
-    <name>Dispersion :: Control Core</name>
-    <description>Universal Control Plane engine for workflow observation, telemetry aggregation, and signal dispatch</description>
+
+    <name>Dispersion :: FSM Core</name>
+    <description>Virtual-thread execution engine and builders for Tier 1 Atomic Finite State Machines</description>
+    <url>https://github.com/f442y/dispersion</url>
 
     <dependencies>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-control-api</artifactId>
+            <artifactId>dispersion-fsm-api</artifactId>
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-event-core</artifactId>
         </dependency>
+
         <dependency>
-            <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-fsm-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-orchestration-core</artifactId>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
-        <!-- Test Dependencies -->
+        <!-- Test dependencies -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -55,4 +54,20 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>com.github.f442y.dispersion.fsm.core</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

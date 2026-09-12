@@ -1,4 +1,4 @@
-﻿# Dispersion 🌀
+﻿﻿# Dispersion 🌀
 
 [![Java 25](https://img.shields.io/badge/Java-25+-orange.svg?style=flat-square&logo=openjdk)](https://openjdk.org/projects/jdk/25/)
 [![Virtual Threads](https://img.shields.io/badge/Virtual%20Threads-Project%20Loom-blue.svg?style=flat-square)](https://openjdk.org/jeps/444)
@@ -260,16 +260,20 @@ dispersion/
 │   ├── distributed-messaging-and-batching.md
 │   ├── observability-and-control-plane.md
 │   └── java-25-features.md
-├── dispersion-bom/                  # Centralized Bill of Materials POM
-├── dispersion-event-api/            # Sealed telemetry events hierarchy & listener SPI
-├── dispersion-event-core/           # Asynchronous Virtual-Thread event dispatcher
-├── dispersion-fsm-api/              # Atomic FSM contracts, exceptions, builders & executor SPIs
-├── dispersion-fsm-core/             # Atomic FSM engine, admission controller & virtual-thread runtime
-├── dispersion-orchestration-api/    # Turn-based workflow contracts, sagas, batching & messaging SPI
-├── dispersion-orchestration-core/   # Saga engine, checkpoint store, parallel branches, signal broker
-├── dispersion-control-api/          # Control plane query SPI & machine descriptor models
-├── dispersion-control-core/         # Default control plane aggregator & live telemetry listener
-└── dispersion-examples/             # Real-world Distributed Saga & High-Throughput Showcases
+├── bom/                             # Centralized Bill of Materials POM (dispersion-bom)
+├── event/
+│   ├── api/                         # Sealed telemetry events hierarchy & listener SPI (dispersion-event-api)
+│   └── core/                        # Asynchronous Virtual-Thread event dispatcher (dispersion-event-core)
+├── fsm/
+│   ├── api/                         # Atomic FSM contracts, exceptions & executor SPI (dispersion-fsm-api)
+│   └── core/                        # Atomic FSM engine, admission controller & virtual-thread runtime (dispersion-fsm-core)
+├── orchestration/
+│   ├── api/                         # Turn-based workflow contracts, sagas, batching & messaging SPI (dispersion-orchestration-api)
+│   └── core/                        # Saga engine, checkpoint store, parallel branches, signal broker (dispersion-orchestration-core)
+├── control/
+│   ├── api/                         # Control plane query SPI & machine descriptor models (dispersion-control-api)
+│   └── core/                        # Default control plane aggregator & live telemetry listener (dispersion-control-core)
+└── examples/                        # Real-world Distributed Saga & High-Throughput Showcases (dispersion-examples)
 ```
 
 ---

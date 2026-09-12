@@ -41,16 +41,16 @@
     </issueManagement>
 
     <modules>
-        <module>dispersion-bom</module>
-        <module>dispersion-event-api</module>
-        <module>dispersion-event-core</module>
-        <module>dispersion-fsm-api</module>
-        <module>dispersion-fsm-core</module>
-        <module>dispersion-orchestration-api</module>
-        <module>dispersion-orchestration-core</module>
-        <module>dispersion-control-api</module>
-        <module>dispersion-control-core</module>
-        <module>dispersion-examples</module>
+        <module>bom</module>
+        <module>event/api</module>
+        <module>event/core</module>
+        <module>fsm/api</module>
+        <module>fsm/core</module>
+        <module>orchestration/api</module>
+        <module>orchestration/core</module>
+        <module>control/api</module>
+        <module>control/core</module>
+        <module>examples</module>
     </modules>
 
     <properties>

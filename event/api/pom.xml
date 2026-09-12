@@ -8,24 +8,17 @@
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-parent</artifactId>
         <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>dispersion-orchestration-api</artifactId>
+    <artifactId>dispersion-event-api</artifactId>
     <packaging>jar</packaging>
 
-    <name>Dispersion :: Orchestration API</name>
-    <description>Contracts, commands, messaging, batching, and checkpoint interfaces for Tier 2 Saga Orchestration</description>
+    <name>Dispersion :: Event API</name>
+    <description>Sealed execution telemetry events and functional listener contracts for Dispersion</description>
     <url>https://github.com/f442y/dispersion</url>
 
     <dependencies>
-        <dependency>
-            <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-fsm-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-event-api</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.jspecify</groupId>
             <artifactId>jspecify</artifactId>
@@ -40,7 +33,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>com.github.f442y.dispersion.orchestration.api</Automatic-Module-Name>
+                            <Automatic-Module-Name>com.github.f442y.dispersion.event.api</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

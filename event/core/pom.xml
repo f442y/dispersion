@@ -8,23 +8,20 @@
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-parent</artifactId>
         <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>dispersion-fsm-core</artifactId>
+    <artifactId>dispersion-event-core</artifactId>
     <packaging>jar</packaging>
 
-    <name>Dispersion :: FSM Core</name>
-    <description>Virtual-thread execution engine and builders for Tier 1 Atomic Finite State Machines</description>
+    <name>Dispersion :: Event Core</name>
+    <description>Bounded virtual-thread ring-buffer dispatcher implementation for Dispersion execution events</description>
     <url>https://github.com/f442y/dispersion</url>
 
     <dependencies>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-fsm-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-event-core</artifactId>
+            <artifactId>dispersion-event-api</artifactId>
         </dependency>
 
         <dependency>
@@ -62,7 +59,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>com.github.f442y.dispersion.fsm.core</Automatic-Module-Name>
+                            <Automatic-Module-Name>com.github.f442y.dispersion.event.core</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>
