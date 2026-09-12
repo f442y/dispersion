@@ -1,4 +1,4 @@
-name: CI Build & Test
+name: CI
 
 on:
   push:
@@ -12,13 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Java 25 Matrix (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, windows-latest ]
+  test:
+    name: Build & Test (Java 25)
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Codebase
@@ -31,38 +27,22 @@ jobs:
           distribution: 'zulu'
           cache: 'maven'
 
-      - name: Ensure Maven Wrapper Executable
-        if: runner.os != 'Windows'
+      - name: Make Maven Wrapper Executable
         run: chmod +x mvnw
 
-      - name: Build & Package Reactor (Linux)
-        if: runner.os != 'Windows'
+      - name: Build & Package
         run: ./mvnw install -DskipTests -B -ntp -T 1C
 
-      - name: Build & Package Reactor (Windows)
-        if: runner.os == 'Windows'
-        run: .\mvnw.cmd install -DskipTests -B -ntp -T 1C
-
-      - name: Run Unit Tests (Linux)
-        if: runner.os != 'Windows'
+      - name: Run Unit Tests
         run: ./mvnw test -pl '!examples' -B -ntp -T 1C
 
-      - name: Run Unit Tests (Windows)
-        if: runner.os == 'Windows'
-        run: .\mvnw.cmd test -pl "!examples" -B -ntp -T 1C
-
-      - name: Run Integration Tests (Linux)
-        if: runner.os != 'Windows'
+      - name: Run Integration Tests
         run: ./mvnw test -pl examples -B -ntp -T 1C
 
-      - name: Run Integration Tests (Windows)
-        if: runner.os == 'Windows'
-        run: .\mvnw.cmd test -pl examples -B -ntp -T 1C
-
-      - name: Upload Surefire Test Reports on Failure
+      - name: Upload Test Reports on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: surefire-reports-${{ matrix.os }}
+          name: surefire-reports
           path: '**/target/surefire-reports/*'
           if-no-files-found: ignore
