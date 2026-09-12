@@ -42,8 +42,14 @@
 
     <modules>
         <module>dispersion-bom</module>
-        <module>dispersion-api</module>
-        <module>dispersion-core</module>
+        <module>dispersion-event-api</module>
+        <module>dispersion-event-core</module>
+        <module>dispersion-fsm-api</module>
+        <module>dispersion-fsm-core</module>
+        <module>dispersion-orchestration-api</module>
+        <module>dispersion-orchestration-core</module>
+        <module>dispersion-control-api</module>
+        <module>dispersion-control-core</module>
         <module>dispersion-examples</module>
     </modules>
 
@@ -86,12 +92,42 @@
             <!-- Dispersion Internal Modules -->
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-api</artifactId>
+                <artifactId>dispersion-event-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-core</artifactId>
+                <artifactId>dispersion-event-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-fsm-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-fsm-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-control-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-control-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

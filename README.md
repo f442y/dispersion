@@ -4,7 +4,7 @@
 [![Virtual Threads](https://img.shields.io/badge/Virtual%20Threads-Project%20Loom-blue.svg?style=flat-square)](https://openjdk.org/jeps/444)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg?style=flat-square)](https://opensource.org/licenses/Apache-2.0)
 [![CI Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg?style=flat-square&logo=githubactions)](https://github.com/f442y/dispersion/actions)
-[![Null Safety: JSpecify](https://img.shields.io/badge/Null%20Safety-JSpecify-purple.svg?style=flat-square)](https://jspecify.dev/)
+[![Null Safety: JSpecify](https://img.shields.io/badge/Null%20Safety-JSpecify-purple.svg?style=flat-square)](https://jspecify.dev//)
 
 > **High-Throughput Finite State Machine and Distributed Saga Orchestration Engine natively engineered for Java 25+ Virtual Threads.**
 
@@ -68,10 +68,10 @@ graph TD
 
 ### 1. Build an Atomic (Micro) State Machine
 ```java
-import com.github.f442y.dispersion.atomic.AtomicStateMachineBuilder;
-import com.github.f442y.dispersion.atomic.AtomicStateMachineExecutor;
-import com.github.f442y.dispersion.context.StateMachineContext;
-import com.github.f442y.dispersion.state.StateKey;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.state.StateKey;
 
 // Define states and context
 enum CoffeeState implements StateKey { GRIND, BREW, SERVED }
@@ -81,7 +81,7 @@ class CoffeeContext implements StateMachineContext { String type; String cup; }
 try (var executor = AtomicStateMachineBuilder.<CoffeeContext, CoffeeState, String, String>create(CoffeeState.class)
         .context(CoffeeContext::new)
         .initialState(CoffeeState.GRIND)
-        .input((ctx, type) -> { ctx.type = type; return ctx; })
+        .input((ctx, type) -> { ctx.type = type; return ctx; })\
         .state(CoffeeState.GRIND)
             .action(ctx -> { System.out.println("Grinding " + ctx.type); return ctx; })
             .transition(CoffeeState.BREW)
@@ -99,9 +99,11 @@ try (var executor = AtomicStateMachineBuilder.<CoffeeContext, CoffeeState, Strin
 
 ### 2. Build a Suspendable Orchestration Saga with Rollback
 ```java
-import com.github.f442y.dispersion.orchestration.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.state.StateKey;
 
 enum OrderState implements StateKey { RESERVE_STOCK, WAIT_PAYMENT, COMPLETE }
 class OrderContext implements StateMachineContext { String orderId; boolean reserved; }
@@ -154,7 +156,7 @@ Explore our modular documentation guides for detailed explanations, patterns, an
 
 ## 📦 Installation & Dependency Management
 
-Dispersion publishes a centralized Bill of Materials (**BOM**) for streamlined dependency management.
+Dispersion publishes a centralized Bill of Materials (**BOM**) for streamlined dependency management across all fine-grained topic modules.
 
 ### Maven BOM Setup
 
@@ -176,20 +178,32 @@ Add the BOM to your root `pom.xml`:
 
 ### Module Dependencies
 
-Add the required modules to your application:
+Add the specific modules your application requires:
 
 ```xml
 <dependencies>
-    <!-- Core runtime engine (Virtual Threads, Executors, Builders, Sagas, Control Plane) -->
+    <!-- Atomic FSM engine (Virtual Threads, lock-free dispatch, backpressure) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-core</artifactId>
+        <artifactId>dispersion-fsm-core</artifactId>
     </dependency>
 
-    <!-- (Optional) API interfaces only (for domain / contract modules) -->
+    <!-- Turn-based Orchestration & Distributed Sagas (Checkpoints, parallel branches, broker-agnostic messaging) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-api</artifactId>
+        <artifactId>dispersion-orchestration-core</artifactId>
+    </dependency>
+
+    <!-- (Optional) Real-time event telemetry dispatcher -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-event-core</artifactId>
+    </dependency>
+
+    <!-- (Optional) Control plane aggregator & query SPI -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-control-core</artifactId>
     </dependency>
 </dependencies>
 ```
@@ -200,7 +214,8 @@ Add the required modules to your application:
 // build.gradle
 dependencies {
     implementation platform('com.github.f442y.dispersion:dispersion-bom:DEVELOP-SNAPSHOT')
-    implementation 'com.github.f442y.dispersion:dispersion-core'
+    implementation 'com.github.f442y.dispersion:dispersion-fsm-core'
+    implementation 'com.github.f442y.dispersion:dispersion-orchestration-core'
 }
 ```
 
@@ -212,15 +227,22 @@ All Dispersion JARs declare automatic module names in their manifests:
 
 | Maven Module | JAR Artifact | JPMS Automatic Module Name | Primary Role |
 | :--- | :--- | :--- | :--- |
-| `dispersion-api` | `dispersion-api.jar` | `com.github.f442y.dispersion.api` | Contracts, sealed exceptions, records, SPIs (Zero runtime dependencies) |
-| `dispersion-core` | `dispersion-core.jar` | `com.github.f442y.dispersion.core` | Virtual-thread execution runtime, builders, sagas, messaging, control plane |
-| `dispersion-examples` | `dispersion-examples.jar` | `com.github.f442y.dispersion.examples` | Reference architectures, distributed sagas, high-throughput pipelines |
+| `dispersion-event-api` | `dispersion-event-api.jar` | `com.github.f442y.dispersion.event.api` | Sealed telemetry events hierarchy & listener SPI (Zero dependencies) |
+| `dispersion-event-core` | `dispersion-event-core.jar` | `com.github.f442y.dispersion.event.core` | Lock-free, non-blocking asynchronous event dispatcher with Virtual Threads |
+| `dispersion-fsm-api` | `dispersion-fsm-api.jar` | `com.github.f442y.dispersion.fsm.api` | Atomic state machine contracts, sealed exceptions, builders & executor SPIs |
+| `dispersion-fsm-core` | `dispersion-fsm-core.jar` | `com.github.f442y.dispersion.fsm.core` | Atomic FSM engine, admission controller, virtual-thread execution |
+| `dispersion-orchestration-api` | `dispersion-orchestration-api.jar` | `com.github.f442y.dispersion.orchestration.api` | Long-running turn-based workflow contracts, sagas, batching & messaging SPI |
+| `dispersion-orchestration-core` | `dispersion-orchestration-core.jar` | `com.github.f442y.dispersion.orchestration.core` | Saga execution engine, checkpoint persistence, signal routing, parallel branches |
+| `dispersion-control-api` | `dispersion-control-api.jar` | `com.github.f442y.dispersion.control.api` | Control plane query SPI & machine descriptor models |
+| `dispersion-control-core` | `dispersion-control-core.jar` | `com.github.f442y.dispersion.control.core` | Default control plane registry & live telemetry aggregator |
+| `dispersion-examples` | `dispersion-examples.jar` | `com.github.f442y.dispersion.examples` | End-to-end distributed sagas, high-throughput pipelines, and showcases |
 
 In your `module-info.java`:
 
 ```java
 module com.example.myapp {
-    requires com.github.f442y.dispersion.core;
+    requires com.github.f442y.dispersion.fsm.core;
+    requires com.github.f442y.dispersion.orchestration.core;
 }
 ```
 
@@ -230,18 +252,24 @@ module com.example.myapp {
 
 ```
 dispersion/
-├── NEXT_STEPS.md                 # Project roadmap & next steps for UI / Gateway
-├── docs/                        # Complete in-depth architectural guides & documentation
+├── NEXT_STEPS.md                     # Project roadmap & next steps for UI / Gateway
+├── docs/                            # Complete in-depth architectural guides & documentation
 │   ├── architecture-and-concepts.md
 │   ├── tier-1-atomic-machines.md
 │   ├── tier-2-orchestration-sagas.md
 │   ├── distributed-messaging-and-batching.md
 │   ├── observability-and-control-plane.md
 │   └── java-25-features.md
-├── dispersion-bom/              # Centralized Bill of Materials POM
-├── dispersion-api/              # Interfaces, Sealed Exceptions, Records, SPIs
-├── dispersion-core/             # Virtual-Thread Executors, Builders, Sagas, Control Plane
-└── dispersion-examples/         # Real-world Distributed Saga Reference Implementations
+├── dispersion-bom/                  # Centralized Bill of Materials POM
+├── dispersion-event-api/            # Sealed telemetry events hierarchy & listener SPI
+├── dispersion-event-core/           # Asynchronous Virtual-Thread event dispatcher
+├── dispersion-fsm-api/              # Atomic FSM contracts, exceptions, builders & executor SPIs
+├── dispersion-fsm-core/             # Atomic FSM engine, admission controller & virtual-thread runtime
+├── dispersion-orchestration-api/    # Turn-based workflow contracts, sagas, batching & messaging SPI
+├── dispersion-orchestration-core/   # Saga engine, checkpoint store, parallel branches, signal broker
+├── dispersion-control-api/          # Control plane query SPI & machine descriptor models
+├── dispersion-control-core/         # Default control plane aggregator & live telemetry listener
+└── dispersion-examples/             # Real-world Distributed Saga & High-Throughput Showcases
 ```
 
 ---

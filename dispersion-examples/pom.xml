@@ -21,11 +21,19 @@
         <!-- Internal Dispersion Modules -->
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-api</artifactId>
+            <artifactId>dispersion-event-core</artifactId>
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-core</artifactId>
+            <artifactId>dispersion-fsm-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-orchestration-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-control-core</artifactId>
         </dependency>
 
         <!-- Logging Facade -->
@@ -51,20 +59,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <configuration>
-                    <archive>
-                        <manifestEntries>
-                            <Automatic-Module-Name>com.github.f442y.dispersion.examples</Automatic-Module-Name>
-                        </manifestEntries>
-                    </archive>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 </project>
