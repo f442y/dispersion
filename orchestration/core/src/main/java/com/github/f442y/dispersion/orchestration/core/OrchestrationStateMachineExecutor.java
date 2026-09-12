@@ -8,10 +8,21 @@ import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfig
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.control.InspectableMachine;
+import com.github.f442y.dispersion.control.MachineDescriptor;
+import com.github.f442y.dispersion.control.MachineType;
+import com.github.f442y.dispersion.control.SignalDeliveryResult;
+import com.github.f442y.dispersion.orchestration.CheckpointStore;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -195,8 +206,94 @@ public class OrchestrationStateMachineExecutor<
         return configuration;
     }
 
+    /**
+     * Adapts this orchestration state machine into an {@link InspectableMachine} SPI instance
+     * for monitoring, topology discovery, checkpoint inspection, and signal routing in the Control Plane.
+     */
+    @NonNull
+    public InspectableMachine asInspectableMachine() {
+        String machineName = configuration.getMachineName();
+        var stateMap = configuration.getStateMap();
+        String initialState = stateMap.getInitialState().name();
+        Set<String> endStates = stateMap.getEndStates().stream()
+                .map(Enum::name)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Set<String> allStateNames = new LinkedHashSet<>();
+        stateMap.getAllStates().keySet().forEach(k -> allStateNames.add(k.name()));
+        stateMap.getEndStates().forEach(k -> allStateNames.add(k.name()));
+        List<String> allStates = List.copyOf(allStateNames);
+
+        String mermaid = stateMap.toMermaid();
+
+        MachineDescriptor descriptor = new MachineDescriptor(
+                machineName,
+                MachineType.ORCHESTRATION,
+                initialState,
+                endStates,
+                allStates,
+                mermaid
+        );
+
+        return new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                return sendSignalByCorrelationKey(correlationKey, signalName, payload != null ? payload : new Object())
+                        .handle((turnResult, throwable) -> {
+                            if (throwable != null) {
+                                return SignalDeliveryResult.failure(machineName, correlationKey, signalName,
+                                        "Error executing turn upon signal delivery: " + throwable.getMessage());
+                            }
+                            if (turnResult == null) {
+                                return SignalDeliveryResult.failure(machineName, correlationKey, signalName,
+                                        "No execution turn result returned");
+                            }
+                            String resultingState = turnResult.currentStateKey() != null
+                                    ? turnResult.currentStateKey().name()
+                                    : null;
+                            String errorMessage = turnResult.error() != null
+                                    ? turnResult.error().getMessage()
+                                    : null;
+                            return new SignalDeliveryResult(
+                                    true,
+                                    "Signal delivered successfully",
+                                    machineName,
+                                    correlationKey,
+                                    signalName,
+                                    turnResult.isCompleted(),
+                                    turnResult.isSuspended(),
+                                    resultingState,
+                                    errorMessage
+                            );
+                        });
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                CheckpointStore<CONTEXT, STATE_KEY> store = configuration.getCheckpointStore();
+                if (store == null) {
+                    return Optional.empty();
+                }
+                return store.findByCorrelationKey(correlationKey).map(cp -> (Object) cp);
+            }
+        };
+    }
+
     @Override
     public void close() {
         virtualThreadExecutor.close();
     }
 }
+

@@ -7,18 +7,25 @@ import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.ItemSignalCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.control.InspectableMachine;
+import com.github.f442y.dispersion.control.MachineDescriptor;
+import com.github.f442y.dispersion.control.MachineType;
+import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStepDriver.BatchConfiguration;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -289,6 +296,113 @@ public class BatchOrchestrationExecutor<
     @NonNull
     public Map<String, BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> getActiveCheckpoints() {
         return Collections.unmodifiableMap(activeCheckpoints);
+    }
+
+    /**
+     * Adapts this batch orchestration executor into an {@link InspectableMachine} SPI instance
+     * for monitoring, topology discovery, checkpoint inspection, and signal routing in the Control Plane.
+     */
+    @NonNull
+    public InspectableMachine asInspectableMachine() {
+        String machineName = configuration.batchName;
+
+        String initialState = configuration.initialStateKey != null ? configuration.initialStateKey.name() : "INITIAL";
+        Set<String> endStates = configuration.endStates.stream()
+                .map(Enum::name)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Set<String> allStateNames = new LinkedHashSet<>();
+        allStateNames.add(initialState);
+        configuration.stateDefinitions.keySet().forEach(k -> allStateNames.add(k.name()));
+        endStates.forEach(allStateNames::add);
+        List<String> allStates = List.copyOf(allStateNames);
+
+        StringBuilder sb = new StringBuilder("stateDiagram-v2\n");
+        sb.append("    [*] --> ").append(initialState).append("\n");
+        for (Map.Entry<STATE_KEY, BatchOrchestrationStepDriver.ItemStateDefinition<ITEM_CONTEXT, STATE_KEY>> entry : configuration.stateDefinitions.entrySet()) {
+            STATE_KEY source = entry.getKey();
+            var def = entry.getValue();
+            if (def.isBarrier) {
+                sb.append("    note right of ").append(source.name()).append(" : Barrier (").append(def.barrierPolicy).append(")\n");
+            }
+            if (def.expectedSignal != null) {
+                sb.append("    note right of ").append(source.name()).append(" : Awaits signal [").append(def.expectedSignal).append("]\n");
+            }
+        }
+        for (String endState : endStates) {
+            sb.append("    ").append(endState).append(" --> [*]\n");
+        }
+        String mermaid = sb.toString();
+
+        MachineDescriptor descriptor = new MachineDescriptor(
+                machineName,
+                MachineType.BATCH,
+                initialState,
+                endStates,
+                allStates,
+                mermaid
+        );
+
+        return new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> batchFuture;
+                if (payload instanceof SignalCommand cmd) {
+                    batchFuture = handleCommand(cmd);
+                } else if (payload instanceof CommandEnvelope<?> env && env.command() instanceof SignalCommand) {
+                    @SuppressWarnings("unchecked")
+                    CommandEnvelope<? extends SignalCommand> typedEnv = (CommandEnvelope<? extends SignalCommand>) env;
+                    batchFuture = handleCommand(typedEnv);
+                } else {
+                    batchFuture = sendBatchSignal(correlationKey, signalName, payload);
+                }
+
+                return batchFuture.handle((turnResult, throwable) -> {
+                    if (throwable != null) {
+                        return SignalDeliveryResult.failure(machineName, correlationKey, signalName,
+                                "Error executing batch turn upon signal delivery: " + throwable.getMessage());
+                    }
+                    if (turnResult == null) {
+                        return SignalDeliveryResult.failure(machineName, correlationKey, signalName,
+                                "No batch execution turn result returned");
+                    }
+                    String resultingState = turnResult.currentBatchStateKey() != null
+                            ? turnResult.currentBatchStateKey().name()
+                            : null;
+                    String errorMessage = turnResult.error() != null
+                            ? turnResult.error().getMessage()
+                            : null;
+                    return new SignalDeliveryResult(
+                            turnResult.error() == null,
+                            turnResult.error() != null ? turnResult.error().getMessage() : "Signal delivered to batch successfully",
+                            machineName,
+                            correlationKey,
+                            signalName,
+                            turnResult.isCompleted(),
+                            turnResult.isSuspended(),
+                            resultingState,
+                            errorMessage
+                    );
+                });
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                return getCheckpoint(correlationKey).map(cp -> (Object) cp);
+            }
+        };
     }
 
     @Override

@@ -6,23 +6,9 @@ import com.github.f442y.dispersion.control.InspectableMachine;
 import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
+import com.github.f442y.dispersion.control.test.FakeInspectableMachine;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
-import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
-import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
-import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
-import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
-import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationCheckpoint;
-import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
-import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
-import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationExecutor;
-import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStateMachineBuilder;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
@@ -49,37 +35,6 @@ class DefaultControlPlaneTests {
 
     private DefaultControlPlane controlPlane;
 
-    public enum AtomicFlowState implements StateKey {
-        IDLE,
-        PROCESSING,
-        FINISHED
-    }
-
-    public static final class FlowContext implements StateMachineContext {
-        public String orderId = "ORD-999";
-        public int count = 0;
-        public String status = "NEW";
-    }
-
-    public enum OrchestrationFlowState implements StateKey {
-        INIT,
-        WAIT_APPROVAL,
-        DISPATCH,
-        COMPLETED
-    }
-
-    public record ApprovalSignal(
-            String correlationKey,
-            String approver,
-            boolean approved
-    ) implements SignalCommand {
-        @Override
-        @NonNull
-        public String signalName() {
-            return "ApprovalSignal";
-        }
-    }
-
     @BeforeEach
     void setUp() {
         controlPlane = new DefaultControlPlane();
@@ -95,39 +50,35 @@ class DefaultControlPlaneTests {
     @Test
     @DisplayName("Should register machine topologies and generate valid Mermaid diagrams")
     void testMachineRegistrationAndTopologyInspection() {
-        AtomicStateMachineExecutor<FlowContext, AtomicFlowState, Integer, String> atomicExecutor =
-                AtomicStateMachineBuilder.<FlowContext, AtomicFlowState, Integer, String>create("PaymentValidationMachine", AtomicFlowState.class)
-                        .context(FlowContext::new)
-                        .initialState(AtomicFlowState.IDLE)
-                        .endStates(AtomicFlowState.FINISHED)
-                        .state(AtomicFlowState.IDLE)
-                            .action(ctx -> ctx)
-                            .transition(AtomicFlowState.PROCESSING)
-                        .state(AtomicFlowState.PROCESSING)
-                            .action(ctx -> ctx)
-                            .transition(AtomicFlowState.FINISHED)
-                        .output(ctx -> "OK")
-                        .buildExecutor();
+        MachineDescriptor desc = new MachineDescriptor(
+                "PaymentValidationMachine",
+                MachineType.ATOMIC,
+                "IDLE",
+                Set.of("FINISHED"),
+                List.of("IDLE", "PROCESSING", "FINISHED"),
+                "stateDiagram-v2\n    [*] --> IDLE\n    IDLE --> PROCESSING\n    PROCESSING --> FINISHED\n    FINISHED --> [*]\n"
+        );
+        FakeInspectableMachine atomicMachine = new FakeInspectableMachine(desc);
 
-        controlPlane.register(atomicExecutor);
+        controlPlane.register(atomicMachine);
 
         List<MachineDescriptor> machines = controlPlane.listMachines();
         assertEquals(1, machines.size());
 
-        MachineDescriptor desc = machines.getFirst();
-        assertEquals("PaymentValidationMachine", desc.name());
-        assertEquals(MachineType.ATOMIC, desc.type());
-        assertEquals("IDLE", desc.initialState());
-        assertEquals(Set.of("FINISHED"), desc.endStates());
-        assertTrue(desc.allStates().containsAll(List.of("IDLE", "PROCESSING", "FINISHED")));
-        assertTrue(desc.mermaidGraph().startsWith("stateDiagram-v2"));
-        assertTrue(desc.mermaidGraph().contains("[*] --> IDLE"));
-        assertTrue(desc.mermaidGraph().contains("IDLE --> PROCESSING"));
+        MachineDescriptor found = machines.getFirst();
+        assertEquals("PaymentValidationMachine", found.name());
+        assertEquals(MachineType.ATOMIC, found.type());
+        assertEquals("IDLE", found.initialState());
+        assertEquals(Set.of("FINISHED"), found.endStates());
+        assertTrue(found.allStates().containsAll(List.of("IDLE", "PROCESSING", "FINISHED")));
+        assertTrue(found.mermaidGraph().startsWith("stateDiagram-v2"));
+        assertTrue(found.mermaidGraph().contains("[*] --> IDLE"));
+        assertTrue(found.mermaidGraph().contains("IDLE --> PROCESSING"));
 
         // Direct lookup
         Optional<MachineDescriptor> lookup = controlPlane.getMachine("PaymentValidationMachine");
         assertTrue(lookup.isPresent());
-        assertEquals(desc, lookup.get());
+        assertEquals(found, lookup.get());
 
         // Unregister
         assertTrue(controlPlane.unregister("PaymentValidationMachine"));
@@ -136,36 +87,15 @@ class DefaultControlPlaneTests {
 
     @Test
     @DisplayName("Should track atomic machine execution lifecycle in real-time")
-    void testAtomicExecutionTracking() throws Exception {
-        AtomicStateMachineExecutor<FlowContext, AtomicFlowState, Integer, String> atomicExecutor =
-                AtomicStateMachineBuilder.<FlowContext, AtomicFlowState, Integer, String>create("OrderFulfillmentFSM", AtomicFlowState.class)
-                        .context(FlowContext::new)
-                        .initialState(AtomicFlowState.IDLE)
-                        .endStates(AtomicFlowState.FINISHED)
-                        .eventListener(controlPlane.getEventListener())
-                        .input((ctx, in) -> {
-                            ctx.count = in != null ? in : 0;
-                            return ctx;
-                        })
-                        .state(AtomicFlowState.IDLE)
-                            .action(ctx -> {
-                                ctx.count += 5;
-                                return ctx;
-                            })
-                            .transition(AtomicFlowState.PROCESSING)
-                        .state(AtomicFlowState.PROCESSING)
-                            .action(ctx -> {
-                                ctx.count *= 3;
-                                return ctx;
-                            })
-                            .transition(AtomicFlowState.FINISHED)
-                        .output(ctx -> "TOTAL=" + ctx.count)
-                        .buildExecutor();
+    void testAtomicExecutionTracking() {
+        UUID execId = UUID.randomUUID();
+        Instant now = Instant.now();
 
-        controlPlane.register(atomicExecutor);
-
-        String result = atomicExecutor.dispatchSync(10);
-        assertEquals("TOTAL=45", result);
+        // Simulate execution telemetry emitted into Control Plane
+        controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(execId, "OrderFulfillmentFSM", "ORD-10", now));
+        controlPlane.onEvent(new ExecutionEvent.TransitionEvaluatedEvent(execId, "OrderFulfillmentFSM", "IDLE", "PROCESSING", now));
+        controlPlane.onEvent(new ExecutionEvent.TransitionEvaluatedEvent(execId, "OrderFulfillmentFSM", "PROCESSING", "FINISHED", now));
+        controlPlane.onEvent(new ExecutionEvent.TurnCompletedEvent(execId, "OrderFulfillmentFSM", "FINISHED", "ORD-10", Duration.ofMillis(10), now));
 
         List<ExecutionSummary> executions = controlPlane.listExecutions("OrderFulfillmentFSM", null, 10);
         assertEquals(1, executions.size());
@@ -190,53 +120,32 @@ class DefaultControlPlaneTests {
     @Test
     @DisplayName("Should track suspended orchestration, inspect checkpoints, and deliver external signals")
     void testOrchestrationSuspensionAndSignalDelivery() throws Exception {
-        InMemoryCheckpointStore<FlowContext, OrchestrationFlowState> checkpointStore = new InMemoryCheckpointStore<>();
+        record OrderCheckpoint(String correlationKey, String currentStateKey) {}
+        OrderCheckpoint checkpoint = new OrderCheckpoint("ORD-4200", "WAIT_APPROVAL");
 
-        OrchestrationStateMachineExecutor<FlowContext, OrchestrationFlowState, FlowContext, String> orchExecutor =
-                OrchestrationStateMachineBuilder.<FlowContext, OrchestrationFlowState, FlowContext, String>create("OrderApprovalWorkflow", OrchestrationFlowState.class)
-                        .context(FlowContext::new)
-                        .initialState(OrchestrationFlowState.INIT)
-                        .endStates(OrchestrationFlowState.COMPLETED)
-                        .eventListener(controlPlane.getEventListener())
-                        .checkpointStore(checkpointStore)
-                        .correlationKey(ctx -> ctx.orderId)
-                        .input((ctx, in) -> {
-                            if (in != null) {
-                                ctx.orderId = in.orderId;
-                                ctx.status = in.status;
-                            }
-                            return ctx;
-                        })
-                        .state(OrchestrationFlowState.INIT)
-                            .action(ctx -> {
-                                ctx.status = "SUBMITTED";
-                                return ctx;
-                            })
-                            .transition(OrchestrationFlowState.WAIT_APPROVAL)
-                        .state(OrchestrationFlowState.WAIT_APPROVAL)
-                            .waitForCommand(ApprovalSignal.class, (ctx, sig) -> {
-                                ctx.status = sig.approved() ? "APPROVED_BY_" + sig.approver() : "REJECTED";
-                                return ctx;
-                            })
-                            .transition(OrchestrationFlowState.DISPATCH)
-                        .state(OrchestrationFlowState.DISPATCH)
-                            .action(ctx -> {
-                                ctx.status += "->DISPATCHED";
-                                return ctx;
-                            })
-                            .transition(OrchestrationFlowState.COMPLETED)
-                        .output(ctx -> ctx.status)
-                        .buildExecutor();
+        FakeInspectableMachine orchMachine = new FakeInspectableMachine("OrderApprovalWorkflow", MachineType.ORCHESTRATION)
+                .withCheckpoint("ORD-4200", checkpoint)
+                .withSignalHandler(sig -> new SignalDeliveryResult(
+                        true,
+                        "Signal delivered successfully",
+                        "OrderApprovalWorkflow",
+                        sig.correlationKey(),
+                        sig.signalName(),
+                        true,
+                        false,
+                        "COMPLETED",
+                        null
+                ));
 
-        controlPlane.register(orchExecutor);
+        controlPlane.register(orchMachine);
 
-        // 1. Initial execution -> Suspends at WAIT_APPROVAL
-        FlowContext input = new FlowContext();
-        input.orderId = "ORD-4200";
-
-        OrchestrationTurnResult<FlowContext, OrchestrationFlowState, String> turn1 = orchExecutor.dispatchTurnSync(null, input);
-        assertTrue(turn1.isSuspended());
-        assertEquals(OrchestrationFlowState.WAIT_APPROVAL, turn1.currentStateKey());
+        // 1. Telemetry indicates workflow suspended at WAIT_APPROVAL
+        UUID execId = UUID.randomUUID();
+        Instant now = Instant.now();
+        controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(execId, "OrderApprovalWorkflow", "ORD-4200", now));
+        controlPlane.onEvent(new ExecutionEvent.TurnSuspendedEvent(
+                execId, "OrderApprovalWorkflow", "WAIT_APPROVAL", "ApprovalSignal", "ORD-4200", Duration.ofMillis(10), now
+        ));
 
         // Verify Control Plane sees suspended execution
         List<ExecutionSummary> suspendedList = controlPlane.listExecutions("OrderApprovalWorkflow", ExecutionStatus.SUSPENDED, 10);
@@ -249,18 +158,17 @@ class DefaultControlPlaneTests {
         assertEquals("ApprovalSignal", suspendedSummary.suspendedSignal());
 
         // 2. Checkpoint inspection via Control Plane
-        Optional<OrchestrationCheckpoint<?, ?>> checkpointOpt = controlPlane.getCheckpoint("OrderApprovalWorkflow", "ORD-4200");
+        Optional<OrderCheckpoint> checkpointOpt = controlPlane.inspectCheckpoint("OrderApprovalWorkflow", "ORD-4200", OrderCheckpoint.class);
         assertTrue(checkpointOpt.isPresent());
         assertEquals("ORD-4200", checkpointOpt.get().correlationKey());
-        assertEquals(OrchestrationFlowState.WAIT_APPROVAL, checkpointOpt.get().currentStateKey());
+        assertEquals("WAIT_APPROVAL", checkpointOpt.get().currentStateKey());
 
         // 3. Deliver signal via Control Plane
-        ApprovalSignal signal = new ApprovalSignal("ORD-4200", "AliceMgr", true);
         CompletableFuture<SignalDeliveryResult> signalFuture = controlPlane.sendSignal(
                 "OrderApprovalWorkflow",
                 "ORD-4200",
                 "ApprovalSignal",
-                signal
+                "ApprovedByAlice"
         );
 
         SignalDeliveryResult deliveryResult = signalFuture.get();
@@ -268,8 +176,11 @@ class DefaultControlPlaneTests {
         assertTrue(deliveryResult.completed(), "Turn must complete workflow");
         assertFalse(deliveryResult.suspended());
         assertEquals("COMPLETED", deliveryResult.resultingState());
+        orchMachine.assertSignalReceived("ApprovalSignal", "ORD-4200");
 
-        // 4. Verify updated status in Control Plane
+        // 4. Telemetry indicates turn completion
+        controlPlane.onEvent(new ExecutionEvent.TurnCompletedEvent(execId, "OrderApprovalWorkflow", "COMPLETED", "ORD-4200", Duration.ofMillis(10), now));
+
         Optional<ExecutionSummary> completedSummaryOpt = controlPlane.getExecution(suspendedSummary.executionId());
         assertTrue(completedSummaryOpt.isPresent());
         assertEquals(ExecutionStatus.COMPLETED, completedSummaryOpt.get().status());
@@ -293,18 +204,11 @@ class DefaultControlPlaneTests {
     @Test
     @DisplayName("Should reject signal delivery to atomic state machines")
     void testSignalDeliveryToAtomicMachine() throws Exception {
-        AtomicStateMachineExecutor<FlowContext, AtomicFlowState, Integer, String> atomicExecutor =
-                AtomicStateMachineBuilder.<FlowContext, AtomicFlowState, Integer, String>create("ReadOnlyAtomic", AtomicFlowState.class)
-                        .context(FlowContext::new)
-                        .initialState(AtomicFlowState.IDLE)
-                        .endStates(AtomicFlowState.FINISHED)
-                        .state(AtomicFlowState.IDLE)
-                            .action(ctx -> ctx)
-                            .transition(AtomicFlowState.FINISHED)
-                        .output(ctx -> "DONE")
-                        .buildExecutor();
+        FakeInspectableMachine atomicMachine = new FakeInspectableMachine("ReadOnlyAtomic", MachineType.ATOMIC)
+                .withSignalHandler(sig -> SignalDeliveryResult.failure("ReadOnlyAtomic", sig.correlationKey(), sig.signalName(),
+                        "Atomic state machines do not support external signal suspension or delivery"));
 
-        controlPlane.register(atomicExecutor);
+        controlPlane.register(atomicMachine);
 
         CompletableFuture<SignalDeliveryResult> future = controlPlane.sendSignal(
                 "ReadOnlyAtomic",
@@ -464,47 +368,28 @@ class DefaultControlPlaneTests {
         }
     }
 
-    public enum BatchTestState implements StateKey {
-        LOAD,
-        PROCESS,
-        AWAIT_APPROVAL,
-        DONE
-    }
-
-    public static final class BatchTestCtx implements StateMachineContext {
-        public String batchId = "BATCH-001";
-    }
-
-    public static final class ItemTestCtx implements StateMachineContext {
-        public String itemId;
-        public String status = "INIT";
-        public ItemTestCtx() {}
-        public ItemTestCtx(String itemId) { this.itemId = itemId; }
-    }
-
     @Test
-    @DisplayName("Should register BatchOrchestrationExecutor, inspect descriptor, send signal, and retrieve checkpoint")
+    @DisplayName("Should register batch machine, inspect descriptor, send signal, and retrieve checkpoint")
     void testRegisterBatchOrchestrationExecutor() throws Exception {
-        BatchOrchestrationExecutor<BatchTestCtx, ItemTestCtx, BatchTestState, String> batchExecutor =
-                BatchOrchestrationStateMachineBuilder.<BatchTestCtx, ItemTestCtx, BatchTestState, String>create("DocumentBatch", BatchTestState.class)
-                        .batchContext(BatchTestCtx::new)
-                        .batchKey(ctx -> ctx.batchId)
-                        .itemKey(ctx -> ctx.itemId)
-                        .initialState(BatchTestState.LOAD)
-                        .endStates(BatchTestState.DONE)
-                        .output(ctx -> "BATCH_FINISHED:" + ctx.batchId)
-                        .itemState(BatchTestState.LOAD)
-                            .action(ctx -> { ctx.status = "LOADED"; return ctx; })
-                            .transition(BatchTestState.PROCESS)
-                        .itemState(BatchTestState.PROCESS)
-                            .barrier(BarrierPolicy.ALL_ITEMS_ARRIVED)
-                            .transition(BatchTestState.AWAIT_APPROVAL)
-                        .itemState(BatchTestState.AWAIT_APPROVAL)
-                            .barrier(BarrierPolicy.SIGNAL_TRIGGERED)
-                            .transition(BatchTestState.DONE)
-                        .buildExecutor();
+        MachineDescriptor batchDesc = new MachineDescriptor(
+                "DocumentBatch",
+                MachineType.BATCH,
+                "LOAD",
+                Set.of("DONE"),
+                List.of("LOAD", "PROCESS", "AWAIT_APPROVAL", "DONE"),
+                "stateDiagram-v2\n    [*] --> LOAD\n    note right of PROCESS : Barrier (ALL_ITEMS_ARRIVED)\n    note right of AWAIT_APPROVAL : Barrier (SIGNAL_TRIGGERED)\n    DONE --> [*]\n"
+        );
+        record BatchCheckpoint(String batchName, String batchKey, String state) {}
+        BatchCheckpoint batchCp = new BatchCheckpoint("DocumentBatch", "BATCH-001", "AWAIT_APPROVAL");
 
-        controlPlane.register(batchExecutor);
+        FakeInspectableMachine batchMachine = new FakeInspectableMachine(batchDesc)
+                .withCheckpoint("BATCH-001", batchCp)
+                .withSignalHandler(sig -> new SignalDeliveryResult(
+                        true, "Signal delivered to batch successfully", "DocumentBatch", sig.correlationKey(), sig.signalName(),
+                        true, false, "DONE", null
+                ));
+
+        controlPlane.register(batchMachine);
 
         // 1. Inspect descriptor
         Optional<MachineDescriptor> descOpt = controlPlane.getMachine("DocumentBatch");
@@ -517,28 +402,21 @@ class DefaultControlPlaneTests {
         assertTrue(desc.mermaidGraph().contains("Barrier (ALL_ITEMS_ARRIVED)"));
         assertTrue(desc.mermaidGraph().contains("Barrier (SIGNAL_TRIGGERED)"));
 
-
-        // 2. Dispatch batch turn (reaches AWAIT_APPROVAL and suspends)
-        List<ItemTestCtx> items = List.of(new ItemTestCtx("ITEM-1"), new ItemTestCtx("ITEM-2"));
-        BatchTurnResult<BatchTestCtx, ItemTestCtx, BatchTestState, String> result = batchExecutor.dispatchBatchSync(items);
-        assertTrue(result.isSuspended());
-
-        // 3. Inspect checkpoint through Control Plane
-        Optional<BatchOrchestrationCheckpoint<BatchTestCtx, ItemTestCtx, BatchTestState>> cpOpt =
-                controlPlane.getBatchCheckpoint("DocumentBatch", "BATCH-001");
+        // 2. Inspect checkpoint through Control Plane
+        Optional<BatchCheckpoint> cpOpt =
+                controlPlane.inspectCheckpoint("DocumentBatch", "BATCH-001", BatchCheckpoint.class);
         assertTrue(cpOpt.isPresent());
         assertEquals("DocumentBatch", cpOpt.get().batchName());
-        assertEquals(BatchTestState.AWAIT_APPROVAL, cpOpt.get().currentBatchStateKey());
+        assertEquals("AWAIT_APPROVAL", cpOpt.get().state());
 
-        // 4. Send signal through Control Plane
+        // 3. Send signal through Control Plane
         CompletableFuture<SignalDeliveryResult> signalFuture =
                 controlPlane.sendSignal("DocumentBatch", "BATCH-001", "APPROVE_BATCH", "payload");
         SignalDeliveryResult deliveryResult = signalFuture.get();
         assertTrue(deliveryResult.delivered());
         assertTrue(deliveryResult.completed());
         assertEquals("DONE", deliveryResult.resultingState());
-
-        batchExecutor.close();
+        batchMachine.assertSignalReceived("APPROVE_BATCH", "BATCH-001");
     }
 
     @Test
@@ -588,4 +466,3 @@ class DefaultControlPlaneTests {
         }
     }
 }
-

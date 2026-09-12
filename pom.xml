@@ -44,12 +44,17 @@
         <module>bom</module>
         <module>event/api</module>
         <module>event/core</module>
+        <module>event/test</module>
         <module>fsm/api</module>
         <module>fsm/core</module>
+        <module>fsm/test</module>
         <module>orchestration/api</module>
         <module>orchestration/core</module>
+        <module>orchestration/test</module>
         <module>control/api</module>
         <module>control/core</module>
+        <module>control/test</module>
+        <module>testing</module>
         <module>examples</module>
     </modules>
 
@@ -129,6 +134,31 @@
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-control-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-event-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-fsm-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-control-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-testing</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

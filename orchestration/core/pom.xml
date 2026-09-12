@@ -25,6 +25,10 @@
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-control-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-fsm-core</artifactId>
         </dependency>
 

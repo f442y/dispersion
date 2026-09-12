@@ -121,6 +121,28 @@ public interface ControlPlane extends AutoCloseable {
     Optional<Object> inspectCheckpoint(@NonNull String machineName, @NonNull String correlationKey);
 
     /**
+     * Inspects a saved checkpoint snapshot for a specific machine and correlation key,
+     * casting to the expected type if present and matching.
+     *
+     * @param machineName    The state machine name
+     * @param correlationKey The correlation key
+     * @param checkpointType The expected checkpoint class
+     * @param <T>            The checkpoint type
+     * @return Optional containing the typed checkpoint if found and of expected type
+     */
+    @NonNull
+    default <T> Optional<T> inspectCheckpoint(
+            @NonNull String machineName,
+            @NonNull String correlationKey,
+            @NonNull Class<T> checkpointType
+    ) {
+        java.util.Objects.requireNonNull(checkpointType, "checkpointType must not be null");
+        return inspectCheckpoint(machineName, correlationKey)
+                .filter(checkpointType::isInstance)
+                .map(checkpointType::cast);
+    }
+
+    /**
      * Opens a real-time, pull-based {@link EventStream} for observing lifecycle events of a specific execution.
      *
      * @param executionId The execution UUID

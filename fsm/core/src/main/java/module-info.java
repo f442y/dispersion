@@ -2,6 +2,7 @@ module com.github.f442y.dispersion.fsm.core {
     requires static org.jspecify;
     requires org.slf4j;
     requires transitive com.github.f442y.dispersion.fsm.api;
+    requires transitive com.github.f442y.dispersion.control.api;
 
     exports com.github.f442y.dispersion.fsm.core;
     exports com.github.f442y.dispersion.fsm.core.atomic;

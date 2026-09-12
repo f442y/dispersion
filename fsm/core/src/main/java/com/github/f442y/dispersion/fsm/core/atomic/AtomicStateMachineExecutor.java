@@ -1,11 +1,23 @@
 package com.github.f442y.dispersion.fsm.core.atomic;
 
+import com.github.f442y.dispersion.control.InspectableMachine;
+import com.github.f442y.dispersion.control.MachineDescriptor;
+import com.github.f442y.dispersion.control.MachineType;
+import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.executor.AdmissionController;
 import com.github.f442y.dispersion.fsm.core.executor.BufferedStateMachineExecutor;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * High-throughput Atomic (Micro) State Machine Executor dispatching lightweight execution graphs
@@ -53,4 +65,62 @@ public class AtomicStateMachineExecutor<
     ) {
         super(name, configuration, admissionController);
     }
+
+    /**
+     * Adapts this atomic state machine into an {@link InspectableMachine} SPI instance
+     * for monitoring and topology discovery in the Control Plane.
+     */
+    @NonNull
+    public InspectableMachine asInspectableMachine() {
+        String machineName = getName();
+        var stateMap = getConfiguration().getStateMap();
+        String initialState = stateMap.getInitialState().name();
+        Set<String> endStates = stateMap.getEndStates().stream()
+                .map(Enum::name)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Set<String> allStateNames = new LinkedHashSet<>();
+        stateMap.getAllStates().keySet().forEach(k -> allStateNames.add(k.name()));
+        stateMap.getEndStates().forEach(k -> allStateNames.add(k.name()));
+        List<String> allStates = List.copyOf(allStateNames);
+
+        String mermaid = stateMap.toMermaid();
+
+        MachineDescriptor descriptor = new MachineDescriptor(
+                machineName,
+                MachineType.ATOMIC,
+                initialState,
+                endStates,
+                allStates,
+                mermaid
+        );
+
+        return new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                return CompletableFuture.completedFuture(
+                        SignalDeliveryResult.failure(machineName, correlationKey, signalName,
+                                "Atomic state machines do not support external signal suspension or delivery")
+                );
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                return Optional.empty();
+            }
+        };
+    }
 }
+
