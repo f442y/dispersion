@@ -11,29 +11,36 @@ import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
-import com.github.f442y.dispersion.event.OverflowPolicy;
-import com.github.f442y.dispersion.event.bus.VirtualThreadEventBus;
-import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
@@ -81,7 +88,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     private final AtomicInteger recentCount = new AtomicInteger(0);
 
     // Live streaming hub
-    private final VirtualThreadEventBus streamBus;
+    private final List<ControlPlaneStream> activeStreams = new CopyOnWriteArrayList<>();
 
     private final int maxTrackedExecutions;
     private final int maxTimelineEventsPerExecution;
@@ -112,13 +119,6 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         for (int i = 0; i < executionLocks.length; i++) {
             executionLocks[i] = new Object();
         }
-
-        this.streamBus = VirtualThreadEventBus.builder()
-                .bufferCapacity(8_192)
-                .historyCapacity(0) // ControlPlane manages recentEvents directly
-                .streamDefaultCapacity(512)
-                .overflowPolicy(OverflowPolicy.DROP_OLDEST)
-                .build();
     }
 
     // =========================================================================
@@ -187,13 +187,6 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         Objects.requireNonNull(eventBus, "eventBus must not be null");
         eventBus.subscribe(this);
         return this;
-    }
-
-    /**
-     * Wires this Control Plane directly as a listener to the given event dispatcher.
-     */
-    public DefaultControlPlane attachTo(@NonNull AsyncExecutionEventDispatcher dispatcher) {
-        return attachTo((EventBus) dispatcher);
     }
 
     // =========================================================================
@@ -321,14 +314,20 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     @NonNull
     public EventStream watchExecution(@NonNull String executionId) {
         Objects.requireNonNull(executionId, "executionId must not be null");
-        return streamBus.openStream(event -> executionId.equals(event.machineId().toString()));
+        return openStream(event -> executionId.equals(event.machineId().toString()));
     }
 
     @Override
     @NonNull
     public EventStream watchMachine(@NonNull String machineName) {
         Objects.requireNonNull(machineName, "machineName must not be null");
-        return streamBus.openStream(event -> machineName.equals(event.machineName()));
+        return openStream(event -> machineName.equals(event.machineName()));
+    }
+
+    private EventStream openStream(Predicate<ExecutionEvent> filter) {
+        ControlPlaneStream stream = new ControlPlaneStream(filter, activeStreams::remove);
+        activeStreams.add(stream);
+        return stream;
     }
 
     // =========================================================================
@@ -380,8 +379,10 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         // 3. Update execution summary snapshot with partitioned O(1) eviction
         updateExecutionSummary(event);
 
-        // 4. Publish to internal Virtual Thread event stream hub
-        streamBus.onEvent(event);
+        // 4. Publish to active live streams
+        for (ControlPlaneStream stream : activeStreams) {
+            stream.offer(event);
+        }
     }
 
     private void updateExecutionSummary(@NonNull ExecutionEvent event) {
@@ -742,8 +743,10 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         terminalCount.set(0);
         executionTimelines.clear();
         recentEvents.clear();
-        recentCount.set(0);
-        streamBus.close();
+        for (ControlPlaneStream stream : activeStreams) {
+            stream.close();
+        }
+        activeStreams.clear();
     }
 
     // =========================================================================
@@ -757,5 +760,80 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                 String signalName,
                 Object payload
         );
+    }
+
+    // =========================================================================
+    // Internal EventStream Implementation
+    // =========================================================================
+
+    private static class ControlPlaneStream implements EventStream {
+        private final Predicate<ExecutionEvent> filter;
+        private final Consumer<ControlPlaneStream> onClose;
+        private final BlockingQueue<ExecutionEvent> queue = new LinkedBlockingQueue<>(1_024);
+        private final AtomicBoolean closed = new AtomicBoolean(false);
+
+        ControlPlaneStream(Predicate<ExecutionEvent> filter, Consumer<ControlPlaneStream> onClose) {
+            this.filter = filter;
+            this.onClose = onClose;
+        }
+
+        void offer(ExecutionEvent event) {
+            if (!closed.get() && filter.test(event)) {
+                while (!queue.offer(event)) {
+                    queue.poll(); // drop oldest on backpressure to protect memory
+                }
+            }
+        }
+
+        @Override
+        @Nullable
+        public ExecutionEvent poll(@NonNull Duration timeout) throws InterruptedException {
+            if (closed.get() && queue.isEmpty()) {
+                return null;
+            }
+            return queue.poll(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        }
+
+        @Override
+        @NonNull
+        public ExecutionEvent take() throws InterruptedException {
+            if (closed.get() && queue.isEmpty()) {
+                throw new IllegalStateException("EventStream is closed");
+            }
+            return queue.take();
+        }
+
+        @Override
+        public boolean isClosed() {
+            return closed.get();
+        }
+
+        @Override
+        public void close() {
+            if (closed.compareAndSet(false, true)) {
+                onClose.accept(this);
+            }
+        }
+
+        @Override
+        @NonNull
+        public Iterator<ExecutionEvent> iterator() {
+            return new Iterator<>() {
+                @Override
+                public boolean hasNext() {
+                    return !isClosed() || !queue.isEmpty();
+                }
+
+                @Override
+                public ExecutionEvent next() {
+                    try {
+                        return take();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new NoSuchElementException("Stream interrupted");
+                    }
+                }
+            };
+        }
     }
 }
