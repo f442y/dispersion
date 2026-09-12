@@ -55,7 +55,7 @@
 
     <properties>
         <!-- Project Versioning (CI Friendly) -->
-        <revision>DEVELOP${changelist}</revision>
+        <revision>0.1.0${changelist}</revision>
         <changelist>-SNAPSHOT</changelist>
 
         <!-- Java Runtime & Encoding -->

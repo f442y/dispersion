@@ -1,4 +1,4 @@
-﻿﻿# Dispersion 🌀
+﻿# Dispersion 🌀
 
 [![Java 25](https://img.shields.io/badge/Java-25+-orange.svg?style=flat-square&logo=openjdk)](https://openjdk.org/projects/jdk/25/)
 [![Virtual Threads](https://img.shields.io/badge/Virtual%20Threads-Project%20Loom-blue.svg?style=flat-square)](https://openjdk.org/jeps/444)
@@ -81,7 +81,7 @@ class CoffeeContext implements StateMachineContext { String type; String cup; }
 try (var executor = AtomicStateMachineBuilder.<CoffeeContext, CoffeeState, String, String>create(CoffeeState.class)
         .context(CoffeeContext::new)
         .initialState(CoffeeState.GRIND)
-        .input((ctx, type) -> { ctx.type = type; return ctx; })\
+        .input((ctx, type) -> { ctx.type = type; return ctx; })
         .state(CoffeeState.GRIND)
             .action(ctx -> { System.out.println("Grinding " + ctx.type); return ctx; })
             .transition(CoffeeState.BREW)
@@ -168,7 +168,7 @@ Add the BOM to your root `pom.xml`:
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-bom</artifactId>
-            <version>DEVELOP-SNAPSHOT</version>
+            <version>0.1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -213,7 +213,7 @@ Add the specific modules your application requires:
 ```groovy
 // build.gradle
 dependencies {
-    implementation platform('com.github.f442y.dispersion:dispersion-bom:DEVELOP-SNAPSHOT')
+    implementation platform('com.github.f442y.dispersion:dispersion-bom:0.1.0-SNAPSHOT')
     implementation 'com.github.f442y.dispersion:dispersion-fsm-core'
     implementation 'com.github.f442y.dispersion:dispersion-orchestration-core'
 }
@@ -223,11 +223,11 @@ dependencies {
 
 ## ☕ Java Platform Module System (JPMS) Support
 
-All Dispersion JARs declare automatic module names in their manifests:
+All Dispersion JARs are first-class JPMS modules declaring explicit `module-info` descriptors with strong encapsulation:
 
-| Maven Module | JAR Artifact | JPMS Automatic Module Name | Primary Role |
+| Maven Module | JAR Artifact | JPMS Module Name | Primary Role |
 | :--- | :--- | :--- | :--- |
-| `dispersion-event-api` | `dispersion-event-api.jar` | `com.github.f442y.dispersion.event.api` | Sealed telemetry events hierarchy & listener SPI (Zero dependencies) |
+| `dispersion-event-api` | `dispersion-event-api.jar` | `com.github.f442y.dispersion.event.api` | Sealed telemetry events hierarchy & listener SPI (Zero runtime dependencies) |
 | `dispersion-event-core` | `dispersion-event-core.jar` | `com.github.f442y.dispersion.event.core` | Lock-free, non-blocking asynchronous event dispatcher with Virtual Threads |
 | `dispersion-fsm-api` | `dispersion-fsm-api.jar` | `com.github.f442y.dispersion.fsm.api` | Atomic state machine contracts, sealed exceptions, builders & executor SPIs |
 | `dispersion-fsm-core` | `dispersion-fsm-core.jar` | `com.github.f442y.dispersion.fsm.core` | Atomic FSM engine, admission controller, virtual-thread execution |
@@ -237,7 +237,7 @@ All Dispersion JARs declare automatic module names in their manifests:
 | `dispersion-control-core` | `dispersion-control-core.jar` | `com.github.f442y.dispersion.control.core` | Default control plane registry & live telemetry aggregator |
 | `dispersion-examples` | `dispersion-examples.jar` | `com.github.f442y.dispersion.examples` | End-to-end distributed sagas, high-throughput pipelines, and showcases |
 
-In your `module-info.java`:
+In your application's `module-info.java`:
 
 ```java
 module com.example.myapp {
