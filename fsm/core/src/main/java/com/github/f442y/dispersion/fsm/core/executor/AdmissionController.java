@@ -1,9 +1,7 @@
 package com.github.f442y.dispersion.fsm.core.executor;
 
+import com.github.f442y.dispersion.fsm.exception.BackpressureException;
 import com.github.f442y.dispersion.fsm.executor.BackpressureStrategy;
-import com.github.f442y.dispersion.fsm.exception.BackpressureException;
-
-import com.github.f442y.dispersion.fsm.exception.BackpressureException;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 

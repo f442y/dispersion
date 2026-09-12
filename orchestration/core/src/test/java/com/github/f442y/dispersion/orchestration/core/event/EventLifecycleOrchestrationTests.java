@@ -1,25 +1,17 @@
 package com.github.f442y.dispersion.orchestration.core.event;
 
-import com.github.f442y.dispersion.fsm.StateMachine;
-import com.github.f442y.dispersion.fsm.StateMachineFuture;
-import com.github.f442y.dispersion.fsm.config.*;
-import com.github.f442y.dispersion.fsm.context.*;
-import com.github.f442y.dispersion.fsm.exception.*;
-import com.github.f442y.dispersion.fsm.executor.*;
-import com.github.f442y.dispersion.fsm.state.*;
-import com.github.f442y.dispersion.fsm.core.*;
-import com.github.f442y.dispersion.fsm.core.atomic.*;
-import com.github.f442y.dispersion.fsm.core.builder.*;
-import com.github.f442y.dispersion.event.*;
-import com.github.f442y.dispersion.event.dispatcher.*;
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-import com.github.f442y.dispersion.orchestration.core.*;
-import com.github.f442y.dispersion.orchestration.core.batch.*;
-import com.github.f442y.dispersion.orchestration.core.messaging.*;
-
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
+import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -269,6 +261,7 @@ class EventLifecycleOrchestrationTests {
                 new ExecutionEvent.TurnSuspendedEvent(id, "TestM", "WAIT", "Sig1", "CORR", dur, now),
                 new ExecutionEvent.TurnCompletedEvent(id, "TestM", "DONE", "CORR", dur, now),
                 new ExecutionEvent.TurnCompensatedEvent(id, "TestM", "FAIL", List.of("WAIT"), new RuntimeException(), "CORR", dur, now),
+                new ExecutionEvent.TurnFailedEvent(id, "TestM", "FAIL", new RuntimeException(), "CORR", dur, now),
                 new ExecutionEvent.StateEnteredEvent(id, "TestM", "STATE_A", now),
                 new ExecutionEvent.StateExitedEvent(id, "TestM", "STATE_A", dur, now),
                 new ExecutionEvent.TransitionEvaluatedEvent(id, "TestM", "STATE_A", "STATE_B", now),
@@ -286,6 +279,7 @@ class EventLifecycleOrchestrationTests {
                 case ExecutionEvent.TurnSuspendedEvent tse -> "SUSPENDED: " + tse.stateName();
                 case ExecutionEvent.TurnCompletedEvent tce -> "COMPLETED: " + tce.finalStateName();
                 case ExecutionEvent.TurnCompensatedEvent tce -> "COMPENSATED: " + tce.failedStateName();
+                case ExecutionEvent.TurnFailedEvent tfe -> "FAILED: " + tfe.failedStateName();
                 case ExecutionEvent.StateEnteredEvent see -> "ENTERED: " + see.stateName();
                 case ExecutionEvent.StateExitedEvent see -> "EXITED: " + see.stateName();
                 case ExecutionEvent.TransitionEvaluatedEvent tee -> "TRANSITION: " + tee.sourceState() + "->" + tee.targetState();
@@ -297,5 +291,65 @@ class EventLifecycleOrchestrationTests {
             };
             assertNotNull(description);
         }
+    }
+
+    @Test
+    @DisplayName("Should capture TurnFailedEvent when Orchestration fails without compensation")
+    void testUncompensatedFailureEmitsTurnFailedEvent() {
+        List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
+
+        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, Void, String> executor =
+                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, Void, String>create("UncompensatedFaultMachine", OrchFlowState.class)
+                        .context(SimpleContext::new)
+                        .initialState(OrchFlowState.INIT)
+                        .endStates(OrchFlowState.DONE)
+                        .eventListener(events::add)
+                        .state(OrchFlowState.INIT)
+                            .action(_ -> {
+                                throw new IllegalStateException("Immediate failure without compensation");
+                            })
+                            .transition(OrchFlowState.DONE)
+                        .buildExecutor()) {
+
+            assertThrows(Exception.class, () -> executor.dispatchSync(null));
+
+            // Must emit TurnFailedEvent and NOT TurnCompensatedEvent
+            boolean hasTurnFailed = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnFailedEvent tfe
+                    && tfe.failedStateName().equals("INIT")
+                    && tfe.cause().getMessage().contains("Immediate failure without compensation"));
+            boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompensatedEvent);
+
+            assertTrue(hasTurnFailed, "TurnFailedEvent must be emitted for uncompensated failure");
+            assertFalse(hasTurnCompensated, "TurnCompensatedEvent must NOT be emitted when no compensation executed");
+        }
+    }
+
+    @Test
+    @DisplayName("Should capture TurnFailedEvent when Atomic State Machine fails")
+    void testAtomicFsmFailureEmitsTurnFailedEvent() {
+        List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
+
+        StateMachineConfiguration<SimpleContext, SimpleState, Integer, String> machine =
+                AtomicStateMachineBuilder.<SimpleContext, SimpleState, Integer, String>create("FailingAtomicMachine", SimpleState.class)
+                        .context(SimpleContext::new)
+                        .initialState(SimpleState.START)
+                        .endStates(SimpleState.COMPLETED)
+                        .eventListener(events::add)
+                        .state(SimpleState.START)
+                            .action(_ -> {
+                                throw new IllegalArgumentException("Action failed in atomic machine");
+                            })
+                            .transition(SimpleState.COMPLETED)
+                        .build();
+
+        assertThrows(Exception.class, () -> AbstractStateMachineCallable.executeDirect(UUID.randomUUID(), machine, null, 1));
+
+        boolean hasTurnFailed = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnFailedEvent tfe
+                && tfe.failedStateName().equals("START")
+                && tfe.cause().getMessage().contains("Action failed in atomic machine"));
+        boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompensatedEvent);
+
+        assertTrue(hasTurnFailed, "Atomic machine failure must emit TurnFailedEvent");
+        assertFalse(hasTurnCompensated, "Atomic machine failure must NOT emit TurnCompensatedEvent");
     }
 }

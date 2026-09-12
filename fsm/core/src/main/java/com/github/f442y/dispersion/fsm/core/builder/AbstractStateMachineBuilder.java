@@ -1,10 +1,10 @@
 package com.github.f442y.dispersion.fsm.core.builder;
 
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.fsm.config.InputFunction;
 import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
-import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import org.jspecify.annotations.NonNull;

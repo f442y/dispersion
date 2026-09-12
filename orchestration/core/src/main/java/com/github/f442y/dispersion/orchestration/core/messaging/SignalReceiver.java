@@ -1,14 +1,11 @@
 package com.github.f442y.dispersion.orchestration.core.messaging;
 
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.messaging.SignalConsumer;
+import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

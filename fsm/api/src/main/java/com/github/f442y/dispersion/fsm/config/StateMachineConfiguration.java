@@ -1,9 +1,8 @@
 package com.github.f442y.dispersion.fsm.config;
 
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
-import com.github.f442y.dispersion.event.ExecutionEventListener;
-import com.github.f442y.dispersion.fsm.exception.StateMachineException;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
 import org.jspecify.annotations.NonNull;
@@ -110,12 +109,12 @@ public class StateMachineConfiguration<
     }
 
     @Nullable
-    public InputFunction<CONTEXT, INPUT> inputFunction() throws StateMachineException {
+    public InputFunction<CONTEXT, INPUT> inputFunction() {
         return inputFunction;
     }
 
     @Nullable
-    public OutputFunction<CONTEXT, OUTPUT> outputFunction() throws StateMachineException {
+    public OutputFunction<CONTEXT, OUTPUT> outputFunction() {
         return outputFunction;
     }
 

@@ -1,25 +1,29 @@
 package com.github.f442y.dispersion.orchestration.core;
 
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-
-import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.fsm.config.InputFunction;
 import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
-import com.github.f442y.dispersion.event.ExecutionEvent;
-import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
+import com.github.f442y.dispersion.fsm.state.State;
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.fsm.state.StateMap;
+import com.github.f442y.dispersion.orchestration.CompensationAction;
+import com.github.f442y.dispersion.orchestration.ContextRecoverer;
+import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.OrchestrationState;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
+import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.RetryPolicy;
+import com.github.f442y.dispersion.orchestration.SignalHandler;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
-import com.github.f442y.dispersion.fsm.state.State;
-import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.fsm.state.StateMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -286,9 +290,15 @@ public final class OrchestrationStepDriver {
                 if (orchState != null && orchState.hasChildStateMachine()) {
                     context = executeChildMachineWithRetry(machineId, orchState, context);
                 }
-                // 4. Parallel Fork-Join Execution
+                // 4. Parallel Fork-Join Execution with optional context isolation and reduction
                 else if (orchState != null && orchState.isParallelState()) {
-                    ParallelStateExecutor.executeParallel(orchState.parallelBranches(), context, virtualThreadExecutor);
+                    context = ParallelStateExecutor.executeParallel(
+                            orchState.parallelBranches(),
+                            context,
+                            orchState.parallelContextCloner(),
+                            orchState.parallelContextReducer(),
+                            virtualThreadExecutor
+                    );
                 }
                 // 5. Standard Action
                 else {
@@ -419,23 +429,38 @@ public final class OrchestrationStepDriver {
                 }
             }
 
+            boolean hasCompensations = !compStateNames.isEmpty();
+            OrchestrationStatus finalStatus = hasCompensations ? OrchestrationStatus.COMPENSATED : OrchestrationStatus.FAILED;
+
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnCompensatedEvent(
-                        machineId,
-                        config.getMachineName(),
-                        (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
-                        compStateNames,
-                        t,
-                        correlationKey,
-                        Duration.ofNanos(System.nanoTime() - turnStartNanos),
-                        Instant.now()
-                ));
+                if (hasCompensations) {
+                    safeNotify(eventListener, new ExecutionEvent.TurnCompensatedEvent(
+                            machineId,
+                            config.getMachineName(),
+                            (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
+                            compStateNames,
+                            t,
+                            correlationKey,
+                            Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                            Instant.now()
+                    ));
+                } else {
+                    safeNotify(eventListener, new ExecutionEvent.TurnFailedEvent(
+                            machineId,
+                            config.getMachineName(),
+                            (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
+                            t,
+                            correlationKey,
+                            Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                            Instant.now()
+                    ));
+                }
             }
 
-            OrchestrationCheckpoint<CONTEXT, STATE_KEY> compensatedCheckpoint = new OrchestrationCheckpoint<>(
+            OrchestrationCheckpoint<CONTEXT, STATE_KEY> terminalErrorCheckpoint = new OrchestrationCheckpoint<>(
                     machineId,
                     config.getMachineName(),
-                    OrchestrationStatus.COMPENSATED,
+                    finalStatus,
                     currentStateKey,
                     completedStates,
                     context,
@@ -445,7 +470,7 @@ public final class OrchestrationStepDriver {
                     t,
                     Instant.now()
             );
-            persistCheckpoint(config, compensatedCheckpoint);
+            persistCheckpoint(config, terminalErrorCheckpoint);
 
             if (t instanceof Exception e) {
                 throw e;

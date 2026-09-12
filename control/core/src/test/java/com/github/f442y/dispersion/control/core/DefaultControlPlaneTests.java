@@ -1,28 +1,42 @@
 package com.github.f442y.dispersion.control.core;
 
-import com.github.f442y.dispersion.control.*;
-import com.github.f442y.dispersion.event.*;
-import com.github.f442y.dispersion.event.dispatcher.*;
-import com.github.f442y.dispersion.fsm.context.*;
-import com.github.f442y.dispersion.fsm.core.atomic.*;
-import com.github.f442y.dispersion.fsm.state.*;
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.core.*;
+import com.github.f442y.dispersion.control.ExecutionStatus;
+import com.github.f442y.dispersion.control.ExecutionSummary;
+import com.github.f442y.dispersion.control.InspectableMachine;
+import com.github.f442y.dispersion.control.MachineDescriptor;
+import com.github.f442y.dispersion.control.MachineType;
+import com.github.f442y.dispersion.control.SignalDeliveryResult;
+import com.github.f442y.dispersion.event.EventStream;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("Control Plane Registry & Inspection API Tests")
@@ -296,5 +310,152 @@ class DefaultControlPlaneTests {
         SignalDeliveryResult result = future.get();
         assertFalse(result.delivered());
         assertTrue(result.message().contains("Atomic state machines do not support"));
+    }
+
+    @Test
+    @DisplayName("Should register custom InspectableMachine via SPI and route signals and checkpoints")
+    void testInspectableMachineSpiRegistration() throws Exception {
+        MachineDescriptor desc = new MachineDescriptor(
+                "CustomSpiMachine",
+                MachineType.ORCHESTRATION,
+                "START",
+                Set.of("SUCCESS", "FAILED"),
+                List.of("START", "STEP_A", "SUCCESS", "FAILED"),
+                "stateDiagram-v2\n[*] --> START"
+        );
+
+        InspectableMachine customMachine = new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return desc;
+            }
+
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                return CompletableFuture.completedFuture(
+                        new SignalDeliveryResult(true, "Custom handled", "CustomSpiMachine", correlationKey, signalName, true, false, "SUCCESS", null)
+                );
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                return Optional.of("MOCK_CHECKPOINT_FOR_" + correlationKey);
+            }
+        };
+
+        controlPlane.register(customMachine);
+
+        // Verify descriptor lookup
+        Optional<MachineDescriptor> found = controlPlane.getMachine("CustomSpiMachine");
+        assertTrue(found.isPresent());
+        assertEquals(desc, found.get());
+
+        // Verify signal routing
+        SignalDeliveryResult sigResult = controlPlane.sendSignal("CustomSpiMachine", "CORR-77", "TestSig", "payload").get();
+        assertTrue(sigResult.delivered());
+        assertEquals("SUCCESS", sigResult.resultingState());
+
+        // Verify checkpoint inspection
+        Optional<Object> cp = controlPlane.inspectCheckpoint("CustomSpiMachine", "CORR-77");
+        assertTrue(cp.isPresent());
+        assertEquals("MOCK_CHECKPOINT_FOR_CORR-77", cp.get());
+    }
+
+    @Test
+    @DisplayName("Segmented O(1) eviction should strictly protect active/suspended workflows while capping terminal executions")
+    void testSegmentedO1EvictionProtectsActiveWorkflows() {
+        // Capacity: 2 terminal executions
+        try (DefaultControlPlane boundedCp = new DefaultControlPlane(2, 50, 100)) {
+            UUID activeId = UUID.randomUUID();
+            UUID term1 = UUID.randomUUID();
+            UUID term2 = UUID.randomUUID();
+            UUID term3 = UUID.randomUUID();
+
+            Instant now = Instant.now();
+
+            // 1. Emit active suspended workflow
+            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(activeId, "WorkflowA", "CORR-ACTIVE", now));
+            boundedCp.onEvent(new ExecutionEvent.TurnSuspendedEvent(activeId, "WorkflowA", "WAIT_INPUT", "UserApprovalSig", "CORR-ACTIVE", Duration.ofMillis(10), now));
+
+            // Verify active workflow is tracked as SUSPENDED
+            Optional<ExecutionSummary> activeSummary = boundedCp.getExecution(activeId.toString());
+            assertTrue(activeSummary.isPresent());
+            assertEquals(ExecutionStatus.SUSPENDED, activeSummary.get().status());
+
+            // 2. Emit terminal execution 1
+            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(term1, "WorkflowA", "CORR-1", now));
+            boundedCp.onEvent(new ExecutionEvent.TurnCompletedEvent(term1, "WorkflowA", "DONE", "CORR-1", Duration.ofMillis(10), now));
+
+            // 3. Emit terminal execution 2 (reaches capacity 2)
+            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(term2, "WorkflowA", "CORR-2", now));
+            boundedCp.onEvent(new ExecutionEvent.TurnCompletedEvent(term2, "WorkflowA", "DONE", "CORR-2", Duration.ofMillis(10), now));
+
+            // Both term1 and term2 present
+            assertTrue(boundedCp.getExecution(term1.toString()).isPresent());
+            assertTrue(boundedCp.getExecution(term2.toString()).isPresent());
+
+            // 4. Emit terminal execution 3 (exceeds capacity -> term1 evicted via O(1) FIFO)
+            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(term3, "WorkflowA", "CORR-3", now));
+            boundedCp.onEvent(new ExecutionEvent.TurnCompletedEvent(term3, "WorkflowA", "DONE", "CORR-3", Duration.ofMillis(10), now));
+
+            // term1 must be evicted
+            assertFalse(boundedCp.getExecution(term1.toString()).isPresent(), "Oldest terminal execution must be evicted");
+            assertTrue(boundedCp.getExecution(term2.toString()).isPresent());
+            assertTrue(boundedCp.getExecution(term3.toString()).isPresent());
+
+            // CRITICAL: activeId must NEVER be evicted!
+            Optional<ExecutionSummary> activeStillPresent = boundedCp.getExecution(activeId.toString());
+            assertTrue(activeStillPresent.isPresent(), "Active/Suspended executions must never be evicted by terminal limits");
+            assertEquals(ExecutionStatus.SUSPENDED, activeStillPresent.get().status());
+        }
+    }
+
+    @Test
+    @DisplayName("Should live-stream execution and machine events via Virtual Thread event streams")
+    void testLiveStreamingWatchExecutionAndWatchMachine() throws Exception {
+        UUID targetExecId = UUID.randomUUID();
+        UUID otherExecId = UUID.randomUUID();
+        Instant now = Instant.now();
+
+        try (EventStream execStream = controlPlane.watchExecution(targetExecId.toString());
+             EventStream machineStream = controlPlane.watchMachine("TargetMachine")) {
+
+            // Emit event for target machine and target execution
+            controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(targetExecId, "TargetMachine", "CORR-TARGET", now));
+
+            // Emit event for target machine but DIFFERENT execution
+            controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(otherExecId, "TargetMachine", "CORR-OTHER", now));
+
+            // Emit event for DIFFERENT machine
+            controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(UUID.randomUUID(), "OtherMachine", "CORR-X", now));
+
+            // execStream should only receive targetExecId event
+            ExecutionEvent execEvent = execStream.poll(Duration.ofSeconds(2));
+            assertNotNull(execEvent);
+            assertEquals(targetExecId, execEvent.machineId());
+            // Should have no more events
+            ExecutionEvent nextExecEvent = execStream.poll(Duration.ofMillis(100));
+            assertNull(nextExecEvent);
+
+            // machineStream should receive both TargetMachine events
+            ExecutionEvent mEvent1 = machineStream.poll(Duration.ofSeconds(2));
+            assertNotNull(mEvent1);
+            assertEquals("TargetMachine", mEvent1.machineName());
+
+            ExecutionEvent mEvent2 = machineStream.poll(Duration.ofSeconds(2));
+            assertNotNull(mEvent2);
+            assertEquals("TargetMachine", mEvent2.machineName());
+
+            // No third event (OtherMachine was filtered out)
+            ExecutionEvent mEvent3 = machineStream.poll(Duration.ofMillis(100));
+            assertNull(mEvent3);
+        }
     }
 }

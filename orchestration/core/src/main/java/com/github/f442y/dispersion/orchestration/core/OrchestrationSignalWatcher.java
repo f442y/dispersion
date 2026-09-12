@@ -1,14 +1,13 @@
 package com.github.f442y.dispersion.orchestration.core;
 
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.orchestration.CheckpointStore;
+import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.fsm.state.StateKey;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -55,14 +54,17 @@ public class OrchestrationSignalWatcher<
         }
     }
 
+    /**
+     * Obtains the stripe lock corresponding to a specific workflow machine ID.
+     * <p>
+     * <b>Concurrency Invariant:</b> All operations mutating a specific workflow instance
+     * MUST acquire this lock keyed strictly by {@link UUID} machineId. Keying locks by domain
+     * correlation keys (Strings) is strictly avoided because a String's hashCode and a UUID's
+     * hashCode map to different stripes, which would cause concurrent signal deliveries for the
+     * same machine to execute without mutual exclusion.
+     */
     private ReentrantLock lockFor(UUID machineId) {
         int hash = machineId.hashCode();
-        int index = Math.abs(hash & STRIPE_MASK);
-        return locks[index];
-    }
-
-    private ReentrantLock lockFor(String correlationKey) {
-        int hash = correlationKey.hashCode();
         int index = Math.abs(hash & STRIPE_MASK);
         return locks[index];
     }
@@ -109,6 +111,16 @@ public class OrchestrationSignalWatcher<
         return sendSignalByCorrelationKey(correlationKey, signalName, signalPayload);
     }
 
+    /**
+     * Resumes a suspended workflow identified by its domain correlation key.
+     * <p>
+     * <b>Lock Unification &amp; Linearizability:</b>
+     * To prevent data races between callers referencing the workflow via {@code UUID} and callers
+     * referencing it via {@code correlationKey}, this method first resolves the canonical {@code machineId}
+     * from the secondary index, then acquires the machine's primary stripe lock ({@link #lockFor(UUID)}).
+     * Inside the lock, it re-queries {@link CheckpointStore#findById(UUID)} to guarantee that the turn
+     * resumes from the most up-to-date checkpoint state.
+     */
     @NonNull
     public CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> sendSignalByCorrelationKey(
             @NonNull String correlationKey,
@@ -118,15 +130,28 @@ public class OrchestrationSignalWatcher<
         Objects.requireNonNull(correlationKey, "correlationKey must not be null");
         Objects.requireNonNull(signalName, "signalName must not be null");
 
-        return executeUnderLock(lockFor(correlationKey), () -> {
-            CheckpointStore<CONTEXT, STATE_KEY> store = configuration.getCheckpointStore();
-            if (store == null) {
-                throw new IllegalStateException("CheckpointStore must be configured to process signals via OrchestrationSignalWatcher");
-            }
+        CheckpointStore<CONTEXT, STATE_KEY> store = configuration.getCheckpointStore();
+        if (store == null) {
+            CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new IllegalStateException("CheckpointStore must be configured to process signals via OrchestrationSignalWatcher"));
+            return failed;
+        }
 
-            Optional<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> cpOpt = store.findByCorrelationKey(correlationKey);
+        Optional<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> initialLookup = store.findByCorrelationKey(correlationKey);
+        if (initialLookup.isEmpty()) {
+            CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new NoSuchElementException("No checkpoint found for correlationKey: " + correlationKey));
+            return failed;
+        }
+
+        UUID machineId = initialLookup.get().machineId();
+
+        // Lock using the canonical machineId stripe to prevent race with sendSignal(machineId)
+        return executeUnderLock(lockFor(machineId), () -> {
+            // Re-read latest checkpoint state inside lock to prevent reading stale data if another signal just ran
+            Optional<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> cpOpt = store.findById(machineId);
             if (cpOpt.isEmpty()) {
-                throw new NoSuchElementException("No checkpoint found for correlationKey: " + correlationKey);
+                throw new NoSuchElementException("No checkpoint found for machineId: " + machineId + " (correlationKey: " + correlationKey + ")");
             }
 
             return OrchestrationStepDriver.resumeTurn(configuration, cpOpt.get(), signalPayload, virtualThreadExecutor);

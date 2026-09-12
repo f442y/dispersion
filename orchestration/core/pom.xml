@@ -27,10 +27,6 @@
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-fsm-core</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-event-core</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>org.jspecify</groupId>
@@ -42,6 +38,11 @@
         </dependency>
 
         <!-- Test dependencies -->
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-event-core</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

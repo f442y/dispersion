@@ -1,13 +1,13 @@
 package com.github.f442y.dispersion.fsm.core.atomic;
 
-import com.github.f442y.dispersion.fsm.core.builder.AbstractStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.core.builder.AbstractStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.core.state.SubStateMachineAction;
 import com.github.f442y.dispersion.fsm.state.Action;
 import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
-import com.github.f442y.dispersion.fsm.core.state.SubStateMachineAction;
 import com.github.f442y.dispersion.fsm.state.Transition;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;

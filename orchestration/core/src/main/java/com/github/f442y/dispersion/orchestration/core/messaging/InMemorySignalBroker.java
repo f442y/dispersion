@@ -1,9 +1,8 @@
 package com.github.f442y.dispersion.orchestration.core.messaging;
 
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
+import com.github.f442y.dispersion.orchestration.messaging.SignalConsumer;
+import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
+import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;

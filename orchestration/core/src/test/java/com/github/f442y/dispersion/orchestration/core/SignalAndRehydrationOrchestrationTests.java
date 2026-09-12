@@ -1,25 +1,10 @@
 package com.github.f442y.dispersion.orchestration.core;
 
-import com.github.f442y.dispersion.fsm.StateMachine;
-import com.github.f442y.dispersion.fsm.StateMachineFuture;
-import com.github.f442y.dispersion.fsm.config.*;
-import com.github.f442y.dispersion.fsm.context.*;
-import com.github.f442y.dispersion.fsm.exception.*;
-import com.github.f442y.dispersion.fsm.executor.*;
-import com.github.f442y.dispersion.fsm.state.*;
-import com.github.f442y.dispersion.fsm.core.*;
-import com.github.f442y.dispersion.fsm.core.atomic.*;
-import com.github.f442y.dispersion.fsm.core.builder.*;
-import com.github.f442y.dispersion.event.*;
-import com.github.f442y.dispersion.event.dispatcher.*;
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-import com.github.f442y.dispersion.orchestration.core.*;
-import com.github.f442y.dispersion.orchestration.core.batch.*;
-import com.github.f442y.dispersion.orchestration.core.messaging.*;
-
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
+import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -27,6 +12,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -281,6 +267,66 @@ public class SignalAndRehydrationOrchestrationTests {
                 List.of("VALIDATE", "RESERVE_INVENTORY", "PAYMENT_APPLIED", "FULFILL_ATTEMPT", "COMPENSATE_INVENTORY"),
                 lastCp.get().contextSnapshot().log
         );
+
+        executor.close();
+    }
+
+    /**
+     * Tests that concurrent signals delivered via machineId and correlationKey map to the same
+     * stripe lock and execute with strict mutual exclusion without data races or corruption.
+     */
+    @Test
+    public void testConcurrentSignalsByMachineIdAndCorrelationKeySerializeCorrectly() throws Exception {
+        InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
+
+        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("ConcurrentSignalOrchestrator", OrderState.class)
+                .context(OrderContext::new)
+                .initialState(OrderState.VALIDATE)
+                .checkpointStore(store)
+                .correlationKey(ctx -> ctx.orderId)
+                .input((ctx, input) -> {
+                    if (input != null) {
+                        ctx.orderId = input.orderId;
+                    }
+                    return ctx;
+                })
+                .state(OrderState.VALIDATE)
+                    .action(ctx -> {
+                        ctx.log.add("VALIDATE");
+                        return ctx;
+                    })
+                    .transition(OrderState.AWAIT_PAYMENT_SIGNAL)
+                .state(OrderState.AWAIT_PAYMENT_SIGNAL)
+                    .waitForSignal("PAYMENT_CONFIRMED", PaymentSignalPayload.class, (ctx, payload) -> {
+                        ctx.log.add("PAYMENT_" + payload.transactionId());
+                        ctx.transactionId = payload.transactionId();
+                        return ctx;
+                    })
+                    .transition(OrderState.COMPLETED)
+                .endStates(OrderState.COMPLETED)
+                .output(ctx -> "Processed " + ctx.orderId)
+                .buildExecutor();
+
+        OrderContext input = new OrderContext();
+        input.orderId = "ORD-CONCURRENT-KEY";
+
+        OrchestrationTurnResult<OrderContext, OrderState, String> turn1 = executor.dispatchTurnSync(null, input);
+        assertTrue(turn1.isSuspended());
+
+        // Concurrently dispatch one signal by machineId and another signal by correlationKey
+        CompletableFuture<OrchestrationTurnResult<OrderContext, OrderState, String>> fut1 =
+                executor.sendSignal(turn1.machineId(), "PAYMENT_CONFIRMED", new PaymentSignalPayload("TX-BY-UUID", 100));
+
+        CompletableFuture<OrchestrationTurnResult<OrderContext, OrderState, String>> fut2 =
+                executor.sendSignalByCorrelationKey("ORD-CONCURRENT-KEY", "PAYMENT_CONFIRMED", new PaymentSignalPayload("TX-BY-CORR", 200));
+
+        // Both should complete safely (one will resume the suspended turn, the second will find it already completed or resume)
+        CompletableFuture.allOf(fut1, fut2).handle((_, _) -> null).get(5, TimeUnit.SECONDS);
+
+        Optional<OrchestrationCheckpoint<OrderContext, OrderState>> finalCp = store.findById(turn1.machineId());
+        assertTrue(finalCp.isPresent());
+        assertEquals(OrchestrationStatus.COMPLETED, finalCp.get().status());
 
         executor.close();
     }

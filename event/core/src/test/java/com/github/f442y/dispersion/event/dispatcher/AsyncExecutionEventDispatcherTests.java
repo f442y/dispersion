@@ -1,6 +1,8 @@
 package com.github.f442y.dispersion.event.dispatcher;
 
+import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.OverflowPolicy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +13,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -30,7 +31,7 @@ class AsyncExecutionEventDispatcherTests {
 
         try (AsyncExecutionEventDispatcher dispatcher = AsyncExecutionEventDispatcher.builder()
                 .capacity(100)
-                .overflowPolicy(AsyncExecutionEventDispatcher.OverflowPolicy.DROP_OLDEST)
+                .overflowPolicy(OverflowPolicy.DROP_OLDEST)
                 .build()) {
 
             dispatcher.addListener(event -> {
@@ -55,36 +56,25 @@ class AsyncExecutionEventDispatcherTests {
     }
 
     @Test
-    @DisplayName("Should publish events to reactive Flow.Subscriber with backpressure request tracking")
-    void testReactiveFlowSubscriber() throws Exception {
+    @DisplayName("Should pull events via EventStream on dedicated Virtual Thread")
+    void testEventStreamVirtualThreadConsumption() throws Exception {
         CountDownLatch receivedLatch = new CountDownLatch(2);
-        CountDownLatch completeLatch = new CountDownLatch(1);
-        List<ExecutionEvent> flowEvents = Collections.synchronizedList(new ArrayList<>());
+        List<ExecutionEvent> streamEvents = Collections.synchronizedList(new ArrayList<>());
 
-        try (AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatcher(50, AsyncExecutionEventDispatcher.OverflowPolicy.DROP_OLDEST)) {
+        try (AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatcher(50, OverflowPolicy.DROP_OLDEST)) {
+            EventStream stream = dispatcher.openStream();
 
-            dispatcher.subscribe(new Flow.Subscriber<>() {
-                private Flow.Subscription subscription;
-
-                @Override
-                public void onSubscribe(Flow.Subscription subscription) {
-                    this.subscription = subscription;
-                    // Request 2 events
-                    subscription.request(2);
-                }
-
-                @Override
-                public void onNext(ExecutionEvent item) {
-                    flowEvents.add(item);
-                    receivedLatch.countDown();
-                }
-
-                @Override
-                public void onError(Throwable throwable) {}
-
-                @Override
-                public void onComplete() {
-                    completeLatch.countDown();
+            Thread reader = Thread.ofVirtual().start(() -> {
+                try {
+                    while (!stream.isClosed()) {
+                        ExecutionEvent item = stream.poll(Duration.ofSeconds(2));
+                        if (item != null) {
+                            streamEvents.add(item);
+                            receivedLatch.countDown();
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
             });
 
@@ -93,19 +83,20 @@ class AsyncExecutionEventDispatcherTests {
             dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "FlowMachine", "STEP_1", Instant.now()));
 
             boolean receivedInTime = receivedLatch.await(3, TimeUnit.SECONDS);
-            assertTrue(receivedInTime, "Subscriber should receive 2 requested items");
-            assertEquals(2, flowEvents.size());
-        }
+            assertTrue(receivedInTime, "Stream should receive 2 items");
+            assertEquals(2, streamEvents.size());
 
-        boolean completedInTime = completeLatch.await(3, TimeUnit.SECONDS);
-        assertTrue(completedInTime, "Subscriber should receive onComplete when dispatcher closes");
+            stream.close();
+            reader.join(Duration.ofSeconds(1).toMillis());
+            assertTrue(stream.isClosed());
+        }
     }
 
     @Test
     @DisplayName("Should drop oldest events when buffer overflows under DROP_OLDEST policy")
     void testOverflowDropOldest() throws Exception {
         // Buffer capacity of 2
-        AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatcher(2, AsyncExecutionEventDispatcher.OverflowPolicy.DROP_OLDEST);
+        AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatcher(2, OverflowPolicy.DROP_OLDEST);
 
         UUID mId = UUID.randomUUID();
         // Fire 5 events rapidly without giving worker time to drain

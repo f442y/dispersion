@@ -1,18 +1,12 @@
 package com.github.f442y.dispersion.fsm.core.executor;
 
-import com.github.f442y.dispersion.fsm.executor.StateMachineExecutor;
 import com.github.f442y.dispersion.fsm.StateMachineFuture;
-import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
-import com.github.f442y.dispersion.event.ExecutionEvent;
-import com.github.f442y.dispersion.event.ExecutionEventListener;
-
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
-import com.github.f442y.dispersion.fsm.StateMachineFuture;
-import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
-import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.exception.BackpressureException;
+import com.github.f442y.dispersion.fsm.executor.BackpressureStrategy;
+import com.github.f442y.dispersion.fsm.executor.StateMachineExecutor;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -124,47 +118,131 @@ public class BufferedStateMachineExecutor<
         return dispatchAsyncInternal(initialContext, input, null);
     }
 
+    /**
+     * Attempts to asynchronously dispatch a state machine execution with a bounded wait timeout on the calling thread.
+     *
+     * @param input   The external input payload
+     * @param timeout The maximum duration to wait for an admission permit before failing
+     * @return A {@link StateMachineFuture} handle wrapping the execution
+     * @throws BackpressureException If permit acquisition fails within the given timeout
+     */
     @NonNull
     public StateMachineFuture<OUTPUT> tryDispatchAsync(@Nullable INPUT input, @NonNull Duration timeout) {
         Objects.requireNonNull(timeout, "timeout must not be null");
         return dispatchAsyncInternal(null, input, timeout);
     }
 
+    /**
+     * Attempts to asynchronously dispatch a state machine execution with explicit initial context and bounded timeout.
+     *
+     * @param initialContext The initial context instance
+     * @param input          The external input payload
+     * @param timeout        The maximum duration to wait for an admission permit before failing
+     * @return A {@link StateMachineFuture} handle wrapping the execution
+     * @throws BackpressureException If permit acquisition fails within the given timeout
+     */
+    @NonNull
+    public StateMachineFuture<OUTPUT> tryDispatchAsync(
+            @NonNull CONTEXT initialContext,
+            @Nullable INPUT input,
+            @NonNull Duration timeout
+    ) {
+        Objects.requireNonNull(initialContext, "initialContext must not be null");
+        Objects.requireNonNull(timeout, "timeout must not be null");
+        return dispatchAsyncInternal(initialContext, input, timeout);
+    }
+
+    /**
+     * Internal async dispatch coordinator balancing synchronous caller feedback with non-blocking async semantics.
+     *
+     * <h3>Admission &amp; Backpressure Semantics:</h3>
+     * <ul>
+     *   <li><b>Synchronous Caller Admission:</b> Triggered when {@code timeout != null} (via {@link #tryDispatchAsync})
+     *       or when the configured strategy is {@link BackpressureStrategy#REJECT_IMMEDIATELY}.
+     *       If capacity is saturated, a {@link BackpressureException} is thrown synchronously to the caller thread,
+     *       providing zero-allocation, instant feedback without virtual thread scheduling.</li>
+     *   <li><b>Asynchronous Virtual Thread Admission:</b> Triggered for {@link BackpressureStrategy#BLOCK} and
+     *       {@link BackpressureStrategy#WAIT_WITH_TIMEOUT} under standard {@link #dispatchAsync}.
+     *       The calling thread returns immediately with a {@link StateMachineFuture}. The virtual thread parks
+     *       lightweight during permit acquisition. If permit acquisition times out or is interrupted, the returned
+     *       future completes exceptionally with a {@link BackpressureException}.</li>
+     * </ul>
+     */
     @NonNull
     private StateMachineFuture<OUTPUT> dispatchAsyncInternal(
             @Nullable CONTEXT initialContext,
             @Nullable INPUT input,
             @Nullable Duration timeout
     ) {
-        try {
-            if (timeout != null) {
-                admissionController.acquire(timeout);
-            } else {
-                admissionController.acquire();
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new BackpressureException("Interrupted while acquiring execution permit", e);
-        }
-
         UUID executionId = UUID.randomUUID();
         CompletableFuture<OUTPUT> future = new CompletableFuture<>();
 
-        try {
-            virtualThreadExecutor.submit(() -> {
-                try {
-                    OUTPUT result = AbstractStateMachineCallable.executeDirect(executionId, configuration, initialContext, input);
-                    future.complete(result);
-                } catch (Throwable t) {
-                    future.completeExceptionally(t);
-                } finally {
-                    admissionController.release();
+        boolean acquireOnCaller = (timeout != null)
+                || (admissionController.strategy() == BackpressureStrategy.REJECT_IMMEDIATELY);
+
+        if (acquireOnCaller) {
+            try {
+                if (timeout != null) {
+                    admissionController.acquire(timeout);
+                } else {
+                    admissionController.acquire();
                 }
-            });
-        } catch (Throwable t) {
-            admissionController.release();
-            future.completeExceptionally(t);
-            throw t;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new BackpressureException("Interrupted while acquiring execution permit", e);
+            }
+
+            try {
+                virtualThreadExecutor.submit(() -> {
+                    try {
+                        if (future.isCancelled()) {
+                            return;
+                        }
+                        OUTPUT result = AbstractStateMachineCallable.executeDirect(executionId, configuration, initialContext, input);
+                        future.complete(result);
+                    } catch (Throwable t) {
+                        future.completeExceptionally(t);
+                    } finally {
+                        admissionController.release();
+                    }
+                });
+            } catch (Throwable t) {
+                admissionController.release();
+                future.completeExceptionally(t);
+                throw t;
+            }
+        } else {
+            // Asynchronous admission: caller returns immediately with StateMachineFuture.
+            // Virtual thread parks/waits for admission permit without blocking caller's thread.
+            try {
+                virtualThreadExecutor.submit(() -> {
+                    try {
+                        admissionController.acquire();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        future.completeExceptionally(new BackpressureException("Interrupted while acquiring execution permit on virtual thread", e));
+                        return;
+                    } catch (Throwable t) {
+                        future.completeExceptionally(t);
+                        return;
+                    }
+
+                    try {
+                        if (future.isCancelled()) {
+                            return;
+                        }
+                        OUTPUT result = AbstractStateMachineCallable.executeDirect(executionId, configuration, initialContext, input);
+                        future.complete(result);
+                    } catch (Throwable t) {
+                        future.completeExceptionally(t);
+                    } finally {
+                        admissionController.release();
+                    }
+                });
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+                throw t;
+            }
         }
 
         return new StateMachineFuture<>(executionId, future);

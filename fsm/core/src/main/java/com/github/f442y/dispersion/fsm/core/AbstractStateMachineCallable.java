@@ -1,12 +1,12 @@
 package com.github.f442y.dispersion.fsm.core;
 
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.fsm.config.InputFunction;
 import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
-import com.github.f442y.dispersion.event.ExecutionEvent;
-import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.fsm.exception.ActionException;
 import com.github.f442y.dispersion.fsm.exception.MaxStateVisitsExceededException;
 import com.github.f442y.dispersion.fsm.exception.MaxTransitionsExceededException;
@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -302,11 +301,10 @@ public abstract class AbstractStateMachineCallable<
 
         } catch (Throwable t) {
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnCompensatedEvent(
+                safeNotify(eventListener, new ExecutionEvent.TurnFailedEvent(
                         effectiveId,
                         configuration.getMachineName(),
                         (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
-                        List.of(),
                         t,
                         null,
                         Duration.ofNanos(System.nanoTime() - turnStartNanos),

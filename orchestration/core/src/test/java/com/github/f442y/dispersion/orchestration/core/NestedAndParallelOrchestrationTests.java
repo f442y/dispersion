@@ -1,25 +1,10 @@
 package com.github.f442y.dispersion.orchestration.core;
 
-import com.github.f442y.dispersion.fsm.StateMachine;
-import com.github.f442y.dispersion.fsm.StateMachineFuture;
-import com.github.f442y.dispersion.fsm.config.*;
-import com.github.f442y.dispersion.fsm.context.*;
-import com.github.f442y.dispersion.fsm.exception.*;
-import com.github.f442y.dispersion.fsm.executor.*;
-import com.github.f442y.dispersion.fsm.state.*;
-import com.github.f442y.dispersion.fsm.core.*;
-import com.github.f442y.dispersion.fsm.core.atomic.*;
-import com.github.f442y.dispersion.fsm.core.builder.*;
-import com.github.f442y.dispersion.event.*;
-import com.github.f442y.dispersion.event.dispatcher.*;
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-import com.github.f442y.dispersion.orchestration.core.*;
-import com.github.f442y.dispersion.orchestration.core.batch.*;
-import com.github.f442y.dispersion.orchestration.core.messaging.*;
-
+import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -229,6 +214,72 @@ public class NestedAndParallelOrchestrationTests {
 
             String result = rootExecutor.dispatchSync(null);
             assertEquals("ROOT_GOT(SUB_RESULT[MICRO(FROM_SUB)])", result);
+        }
+    }
+
+    /**
+     * Context class with non-thread-safe collections and fields to test branch isolation via cloner &amp; reducer.
+     */
+    public static class UnsynchronizedContext implements StateMachineContext {
+        public List<String> list = new ArrayList<>();
+        public int sum = 0;
+
+        public UnsynchronizedContext() {}
+
+        public UnsynchronizedContext(UnsynchronizedContext other) {
+            this.list = new ArrayList<>(other.list);
+            this.sum = other.sum;
+        }
+    }
+
+    /**
+     * Tests that parallel branches with .cloner() and .reducer() execute with isolated contexts,
+     * allowing standard non-thread-safe collections and primitives to be mutated concurrently without races,
+     * and correctly folding branch results back into the root context.
+     */
+    @Test
+    public void testParallelBranchIsolationAndReduction() throws Exception {
+        try (OrchestrationStateMachineExecutor<UnsynchronizedContext, RootOrchState, Void, Integer> executor =
+                OrchestrationStateMachineBuilder.<UnsynchronizedContext, RootOrchState, Void, Integer>create("IsolatedParallelOrchestrator", RootOrchState.class)
+                        .context(UnsynchronizedContext::new)
+                        .initialState(RootOrchState.INIT)
+                        .state(RootOrchState.INIT)
+                            .action(ctx -> {
+                                ctx.list.add("INITIAL");
+                                ctx.sum = 100;
+                                return ctx;
+                            })
+                            .transition(RootOrchState.FORK_PARALLEL_CHECKS)
+                        .state(RootOrchState.FORK_PARALLEL_CHECKS)
+                            .parallel()
+                                .cloner(UnsynchronizedContext::new)
+                                .reducer((root, branch) -> {
+                                    root.list.addAll(branch.list);
+                                    root.sum += branch.sum;
+                                    return root;
+                                })
+                                .branch("branchA", ctx -> {
+                                    ctx.list.add("FROM_A");
+                                    ctx.sum = 10;
+                                    return ctx;
+                                })
+                                .branch("branchB", ctx -> {
+                                    ctx.list.add("FROM_B");
+                                    ctx.sum = 20;
+                                    return ctx;
+                                })
+                                .branch("branchC", ctx -> {
+                                    ctx.list.add("FROM_C");
+                                    ctx.sum = 30;
+                                    return ctx;
+                                })
+                            .transition(RootOrchState.COMPLETED)
+                        .endStates(RootOrchState.COMPLETED)
+                        .output(ctx -> ctx.sum)
+                        .buildExecutor()) {
+
+            Integer result = executor.dispatchSync(null);
+            assertEquals(160, result);
         }
     }
 }

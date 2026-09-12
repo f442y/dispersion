@@ -80,41 +80,45 @@ import com.github.f442y.dispersion.event.ExecutionEvent;
 
 public void processTelemetry(ExecutionEvent event) {
     switch (event) {
-        case ExecutionEvent.TurnStartedEvent(var mid, var mname, var tid, var initKey, var ts) ->
-            System.out.println("Started turn " + tid + " on " + mname);
+        case ExecutionEvent.TurnStartedEvent started ->
+            System.out.println("Started turn on " + started.machineName());
 
-        case ExecutionEvent.TurnSuspendedEvent(var mid, var mname, var suspKey, var sig, var corrKey, var ts) ->
-            System.out.printf("Suspended at %s awaiting signal %s (key: %s)%n", suspKey, sig, corrKey);
+        case ExecutionEvent.TurnSuspendedEvent suspended ->
+            System.out.printf("Suspended at %s awaiting signal %s (key: %s)%n",
+                    suspended.stateName(), suspended.expectedSignal(), suspended.correlationKey());
 
-        case ExecutionEvent.TurnCompletedEvent(var mid, var mname, var termKey, var out, var ts) ->
-            System.out.println("Completed turn at " + termKey);
+        case ExecutionEvent.TurnCompletedEvent completed ->
+            System.out.println("Completed turn at " + completed.finalStateName());
 
-        case ExecutionEvent.TurnCompensatedEvent(var mid, var mname, var errKey, var cause, var ts) ->
-            System.err.println("Compensated turn after failure in " + errKey + ": " + cause.getMessage());
+        case ExecutionEvent.TurnCompensatedEvent compensated ->
+            System.err.println("Compensated turn after failure in " + compensated.failedStateName() + ": " + compensated.cause().getMessage());
 
-        case ExecutionEvent.StateEnteredEvent(var mid, var mname, var key, var ts) ->
-            System.out.println("Entered state: " + key);
+        case ExecutionEvent.TurnFailedEvent failed ->
+            System.err.println("Turn failed at " + failed.failedStateName() + ": " + failed.cause().getMessage());
 
-        case ExecutionEvent.StateExitedEvent(var mid, var mname, var key, var dur, var ts) ->
-            System.out.println("Exited state: " + key + " in " + dur.toMillis() + "ms");
+        case ExecutionEvent.StateEnteredEvent entered ->
+            System.out.println("Entered state: " + entered.stateName());
 
-        case ExecutionEvent.TransitionEvaluatedEvent(var mid, var mname, var src, var tgt, var ts) ->
-            System.out.println("Transition: " + src + " -> " + tgt);
+        case ExecutionEvent.StateExitedEvent exited ->
+            System.out.println("Exited state: " + exited.stateName() + " in " + exited.duration().toMillis() + "ms");
 
-        case ExecutionEvent.SignalAwaitedEvent(var mid, var mname, var sig, var corrKey, var ts) ->
-            System.out.println("Awaiting signal: " + sig);
+        case ExecutionEvent.TransitionEvaluatedEvent transition ->
+            System.out.println("Transition: " + transition.sourceState() + " -> " + transition.targetState());
 
-        case ExecutionEvent.SignalDeliveredEvent(var mid, var mname, var sig, var corrKey, var ts) ->
-            System.out.println("Delivered signal: " + sig);
+        case ExecutionEvent.SignalAwaitedEvent awaited ->
+            System.out.println("Awaiting signal: " + awaited.expectedSignal());
 
-        case ExecutionEvent.CommandDeduplicatedEvent(var mid, var mname, var cmdId, var type, var ts) ->
-            System.out.println("Deduplicated command: " + cmdId);
+        case ExecutionEvent.SignalDeliveredEvent delivered ->
+            System.out.println("Delivered signal: " + delivered.signalName());
 
-        case ExecutionEvent.BatchBarrierReachedEvent(var bid, var mid, var key, var iid, var ts) ->
-            System.out.println("Item " + iid + " reached barrier for batch " + bid);
+        case ExecutionEvent.CommandDeduplicatedEvent dedup ->
+            System.out.println("Deduplicated command: " + dedup.commandId());
 
-        case ExecutionEvent.BatchBarrierUnlockedEvent(var bid, var mid, var key, var count, var pol, var ts) ->
-            System.out.println("Unlocked barrier for batch " + bid + " (" + count + " items)");
+        case ExecutionEvent.BatchBarrierReachedEvent barrier ->
+            System.out.println("Item " + barrier.itemKey() + " reached barrier at " + barrier.stateName());
+
+        case ExecutionEvent.BatchBarrierUnlockedEvent unlocked ->
+            System.out.println("Barrier unlocked at " + unlocked.stateName() + " for " + unlocked.itemCount() + " items");
     }
 }
 ```

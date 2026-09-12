@@ -2,9 +2,9 @@ package com.github.f442y.dispersion.fsm.core.fixture;
 
 import com.github.f442y.dispersion.fsm.StateMachineFuture;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
-import com.github.f442y.dispersion.fsm.exception.BackpressureException;
 import com.github.f442y.dispersion.fsm.core.executor.AdmissionController;
 import com.github.f442y.dispersion.fsm.core.executor.BufferedStateMachineExecutor;
+import com.github.f442y.dispersion.fsm.exception.BackpressureException;
 
 public class TestStateMachineExecutor
         extends BufferedStateMachineExecutor<TestStateMachine.TestStateMachineContext, TestStateMachine.StateKeys,

@@ -25,6 +25,7 @@ import java.util.UUID;
  *     case ExecutionEvent.TurnSuspendedEvent suspended -> log.info("Turn suspended at [{}]", suspended.stateName());
  *     case ExecutionEvent.TurnCompletedEvent completed -> log.info("Turn completed: {}", completed.machineId());
  *     case ExecutionEvent.TurnCompensatedEvent compensated -> log.warn("Turn compensated: {}", compensated.failedStateName());
+ *     case ExecutionEvent.TurnFailedEvent failed -> log.error("Turn failed at [{}]: {}", failed.failedStateName(), failed.cause().getMessage());
  *     case ExecutionEvent.BatchBarrierReachedEvent barrier -> log.debug("Item [{}] reached barrier", barrier.itemKey());
  *     case ExecutionEvent.BatchBarrierUnlockedEvent unlocked -> log.debug("Barrier [{}] unlocked", unlocked.stateName());
  * }
@@ -35,6 +36,7 @@ public sealed interface ExecutionEvent permits
         ExecutionEvent.TurnSuspendedEvent,
         ExecutionEvent.TurnCompletedEvent,
         ExecutionEvent.TurnCompensatedEvent,
+        ExecutionEvent.TurnFailedEvent,
         ExecutionEvent.StateEnteredEvent,
         ExecutionEvent.StateExitedEvent,
         ExecutionEvent.TransitionEvaluatedEvent,
@@ -139,6 +141,28 @@ public sealed interface ExecutionEvent permits
             Objects.requireNonNull(duration, "duration must not be null");
             Objects.requireNonNull(timestamp, "timestamp must not be null");
             compensatedStates = List.copyOf(compensatedStates);
+        }
+    }
+
+    /**
+     * Emitted when a turn fails due to an unhandled exception without Saga compensation.
+     */
+    record TurnFailedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String failedStateName,
+            @NonNull Throwable cause,
+            @Nullable String correlationKey,
+            @NonNull Duration duration,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public TurnFailedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(failedStateName, "failedStateName must not be null");
+            Objects.requireNonNull(cause, "cause must not be null");
+            Objects.requireNonNull(duration, "duration must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
         }
     }
 

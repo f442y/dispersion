@@ -173,19 +173,37 @@ AtomicStateMachineBuilder.<MyContext, MyState, In, Out>create(MyState.class)
 ```
 
 ### Admission Control & Backpressure (`AdmissionController`)
-Buffer incoming virtual thread tasks to prevent memory exhaustion under burst traffic spikes:
+Buffer incoming tasks and protect downstream resources against memory exhaustion and concurrency saturation under burst traffic spikes.
+
+`AdmissionController` supports three backpressure strategies via `BackpressureStrategy`:
+- **`REJECT_IMMEDIATELY`**: Fails admission immediately with a `BackpressureException` when capacity is saturated. Under both `dispatchSync()` and `dispatchAsync()`, the capacity check happens synchronously on the calling thread, offering zero-allocation, instant fail-fast feedback without scheduling a Virtual Thread.
+- **`BLOCK`**: When permits are exhausted, callers using `dispatchSync()` wait on the current thread. Callers using `dispatchAsync()` **never block the calling thread**—they immediately receive a `StateMachineFuture`, and the spawned Virtual Thread parks efficiently until an admission permit becomes available.
+- **`WAIT_WITH_TIMEOUT`**: Waits up to a configured duration for an admission permit. Can also be invoked on-demand via `tryDispatchAsync(input, timeout)` for bounded synchronous admission checks.
 
 ```java
+import com.github.f442y.dispersion.fsm.StateMachineFuture;
 import com.github.f442y.dispersion.fsm.core.executor.AdmissionController;
 import com.github.f442y.dispersion.fsm.core.executor.BufferedStateMachineExecutor;
+import com.github.f442y.dispersion.fsm.executor.BackpressureStrategy;
+import java.time.Duration;
 
-// Buffer up to 10,000 tasks; reject immediately with BackpressureException if full
-AdmissionController admission = AdmissionController.rejectImmediately(10_000);
+// 1. Fail-fast rejection policy (up to 10,000 concurrent executions)
+AdmissionController fastReject = AdmissionController.rejectImmediately(10_000);
+
+// 2. Non-blocking async queueing (parks virtual thread, never blocks caller thread)
+AdmissionController blockController = AdmissionController.block(500);
 
 BufferedStateMachineExecutor<PaymentContext, PaymentState, PaymentRequest, PaymentResult> bufferedExecutor =
-    new BufferedStateMachineExecutor<>("buffered-payment", config, admission);
+    new BufferedStateMachineExecutor<>("buffered-payment", config, blockController);
 
+// Synchronous fast-path (runs directly in caller's thread, zero allocations)
 PaymentResult res = bufferedExecutor.dispatchSync(request);
+
+// Asynchronous execution (returns StateMachineFuture immediately; waits on Virtual Thread)
+StateMachineFuture<PaymentResult> future = bufferedExecutor.dispatchAsync(request);
+
+// Asynchronous with bounded synchronous admission timeout (fails fast if permit unavailable within 100ms)
+StateMachineFuture<PaymentResult> timedFuture = bufferedExecutor.tryDispatchAsync(request, Duration.ofMillis(100));
 ```
 
 ---

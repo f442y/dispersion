@@ -1,12 +1,9 @@
 package com.github.f442y.dispersion.orchestration.core;
 
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.orchestration.ParallelBranch;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,10 +14,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BinaryOperator;
+import java.util.function.Function;
 
 /**
  * Concurrent fork-join executor for parallel branches on Java 25 Virtual Threads with
- * fast-failing cancellation and branch-level Saga compensation rollback.
+ * context isolation, fork-join result reduction, fast-failing cancellation, and
+ * branch-level Saga compensation rollback.
  */
 public final class ParallelStateExecutor {
 
@@ -29,7 +29,7 @@ public final class ParallelStateExecutor {
     private ParallelStateExecutor() {}
 
     /**
-     * Concurrently executes all branches on virtual threads. If any branch fails, rolls back completed sibling branches.
+     * Concurrently executes all branches on virtual threads without context isolation.
      *
      * @param <CONTEXT>  The context type
      * @param branches   The list of parallel branches
@@ -44,6 +44,43 @@ public final class ParallelStateExecutor {
             @NonNull CONTEXT context,
             @NonNull ExecutorService executor
     ) throws Exception {
+        return executeParallel(branches, context, null, null, executor);
+    }
+
+    /**
+     * Concurrently executes parallel branches on Java Virtual Threads with optional context isolation
+     * and fork-join result reduction.
+     *
+     * <h2>Concurrency &amp; Isolation Semantics</h2>
+     * <ul>
+     *   <li>If a {@code cloner} is configured, each branch receives an independent context snapshot,
+     *       protecting non-thread-safe context variables from concurrent write hazards.</li>
+     *   <li>Branch actions return an updated {@link StateMachineContext} instance. These results are
+     *       preserved in branch declaration order.</li>
+     *   <li>When all branches complete successfully, the results are folded sequentially into the
+     *       primary context via {@code reducer}. If no reducer is specified, the primary context
+     *       (or sole branch result) is returned.</li>
+     *   <li>If any branch encounters a failure, remaining pending branches are cancelled, and all
+     *       completed sibling branches undergo LIFO Saga compensation rollback.</li>
+     * </ul>
+     *
+     * @param <CONTEXT>  The context type
+     * @param branches   The list of parallel branches to execute concurrently
+     * @param context    The primary input context
+     * @param cloner     Optional function creating an isolated context copy for each branch
+     * @param reducer    Optional reducer combining branch outputs back into the primary context
+     * @param executor   The virtual thread executor
+     * @return The updated or merged context after all branches finish
+     * @throws Exception If any branch fails
+     */
+    @NonNull
+    public static <CONTEXT extends StateMachineContext> CONTEXT executeParallel(
+            @NonNull List<ParallelBranch<CONTEXT>> branches,
+            @NonNull CONTEXT context,
+            @Nullable Function<CONTEXT, CONTEXT> cloner,
+            @Nullable BinaryOperator<CONTEXT> reducer,
+            @NonNull ExecutorService executor
+    ) throws Exception {
         Objects.requireNonNull(branches, "branches must not be null");
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(executor, "executor must not be null");
@@ -52,13 +89,21 @@ public final class ParallelStateExecutor {
             return context;
         }
 
+        int count = branches.size();
+        @SuppressWarnings("unchecked")
+        CONTEXT[] branchResults = (CONTEXT[]) new StateMachineContext[count];
         List<ParallelBranch<CONTEXT>> completedBranches = new CopyOnWriteArrayList<>();
         AtomicReference<Throwable> firstFailure = new AtomicReference<>();
-        List<CompletableFuture<Void>> futures = new ArrayList<>(branches.size());
+        List<CompletableFuture<Void>> futures = new ArrayList<>(count);
 
-        for (ParallelBranch<CONTEXT> branch : branches) {
+        for (int i = 0; i < count; i++) {
+            final int branchIndex = i;
+            ParallelBranch<CONTEXT> branch = branches.get(i);
             CompletableFuture<Void> branchFuture = new CompletableFuture<>();
             futures.add(branchFuture);
+
+            // If cloner is provided, isolate input context per branch; otherwise share context instance
+            CONTEXT branchInput = (cloner != null) ? cloner.apply(context) : context;
 
             try {
                 executor.submit(() -> {
@@ -67,7 +112,8 @@ public final class ParallelStateExecutor {
                             branchFuture.cancel(true);
                             return;
                         }
-                        branch.action().execute(context);
+                        CONTEXT result = branch.action().execute(branchInput);
+                        branchResults[branchIndex] = (result != null) ? result : branchInput;
                         completedBranches.add(branch);
                         branchFuture.complete(null);
                     } catch (Throwable t) {
@@ -112,6 +158,18 @@ public final class ParallelStateExecutor {
             throw new RuntimeException(failure);
         }
 
-        return context;
+        // Merge branch results into final context
+        if (reducer != null) {
+            CONTEXT merged = context;
+            for (CONTEXT branchResult : branchResults) {
+                if (branchResult != null) {
+                    merged = reducer.apply(merged, branchResult);
+                }
+            }
+            return merged;
+        }
+
+        // If no reducer, return context (or sole branch result if count == 1)
+        return (count == 1 && branchResults[0] != null) ? branchResults[0] : context;
     }
 }

@@ -3,7 +3,6 @@ module com.github.f442y.dispersion.orchestration.core {
     requires org.slf4j;
     requires transitive com.github.f442y.dispersion.orchestration.api;
     requires transitive com.github.f442y.dispersion.fsm.core;
-    requires transitive com.github.f442y.dispersion.event.core;
 
     exports com.github.f442y.dispersion.orchestration.core;
     exports com.github.f442y.dispersion.orchestration.core.batch;

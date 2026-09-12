@@ -1,10 +1,10 @@
 package com.github.f442y.dispersion.examples;
 
 import com.github.f442y.dispersion.fsm.StateMachineFuture;
-import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
-import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

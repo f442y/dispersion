@@ -1,13 +1,10 @@
 package com.github.f442y.dispersion.fsm.core.state;
 
+import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
 import com.github.f442y.dispersion.fsm.state.Action;
 import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
-
-import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
-import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
-import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;

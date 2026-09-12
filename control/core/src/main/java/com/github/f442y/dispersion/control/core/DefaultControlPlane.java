@@ -1,19 +1,29 @@
 package com.github.f442y.dispersion.control.core;
 
-import com.github.f442y.dispersion.control.*;
-import com.github.f442y.dispersion.event.*;
+import com.github.f442y.dispersion.control.ControlPlane;
+import com.github.f442y.dispersion.control.ExecutionStatus;
+import com.github.f442y.dispersion.control.ExecutionSummary;
+import com.github.f442y.dispersion.control.InspectableMachine;
+import com.github.f442y.dispersion.control.MachineDescriptor;
+import com.github.f442y.dispersion.control.MachineType;
+import com.github.f442y.dispersion.control.SignalDeliveryResult;
+import com.github.f442y.dispersion.event.EventBus;
+import com.github.f442y.dispersion.event.EventStream;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.event.OverflowPolicy;
+import com.github.f442y.dispersion.event.bus.VirtualThreadEventBus;
 import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
-
 import com.github.f442y.dispersion.orchestration.CheckpointStore;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -23,7 +33,6 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -34,32 +43,64 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.function.Function;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * Thread-safe default implementation of {@link ControlPlane}.
- * <p>
- * Maintains an in-memory registry of state machines, live execution summaries,
- * and a bounded ring-buffer of chronological execution events. Also acts as an
- * {@link ExecutionEventListener} so it can be wired directly to executors or
- * an {@link AsyncExecutionEventDispatcher}.
+ * Thread-safe default implementation of {@link ControlPlane} engineered with segmented O(1) eviction
+ * and Virtual Thread live streaming.
+ *
+ * <h2>Segmented O(1) Eviction Architecture</h2>
+ * <p>To eliminate full-collection linear scans (which burn CPU on high-frequency telemetry events),
+ * execution summaries are strictly partitioned into two pools:</p>
+ * <ul>
+ *   <li><b>Active Pool ({@code activeExecutions}):</b> Tracks in-flight workflows ({@link ExecutionStatus#RUNNING}
+ *       or {@link ExecutionStatus#SUSPENDED}). Active workflows are critical operational entities waiting for
+ *       internal steps or external signals; they are never subject to eviction.</li>
+ *   <li><b>Terminal Pool ({@code terminalExecutions}):</b> Tracks finished workflows ({@link ExecutionStatus#COMPLETED},
+ *       {@link ExecutionStatus#FAILED}, or {@link ExecutionStatus#COMPENSATED}). When the terminal count exceeds
+ *       {@code maxTrackedExecutions}, the oldest terminal execution is pruned in strictly <b>O(1)</b> time
+ *       via a concurrent FIFO queue.</li>
+ * </ul>
+ *
+ * <h2>Live Streaming Hub</h2>
+ * <p>Backed by an internal {@link VirtualThreadEventBus}, the control plane serves real-time, non-blocking
+ * {@link EventStream} subscriptions for individual execution instances ({@link #watchExecution(String)})
+ * or entire machine topologies ({@link #watchMachine(String)}).</p>
  */
 public class DefaultControlPlane implements ControlPlane, ExecutionEventListener, AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultControlPlane.class);
 
-    private final Map<String, RegisteredMachine> machines = new ConcurrentHashMap<>();
-    private final Map<String, ExecutionSummary> executions = new ConcurrentHashMap<>();
+    private final Map<String, InspectableMachine> machines = new ConcurrentHashMap<>();
+
+    // Partitioned execution pools
+    private final Map<String, ExecutionSummary> activeExecutions = new ConcurrentHashMap<>();
+    private final Map<String, ExecutionSummary> terminalExecutions = new ConcurrentHashMap<>();
+    private final ConcurrentLinkedQueue<String> terminalEvictionOrder = new ConcurrentLinkedQueue<>();
+    private final AtomicInteger terminalCount = new AtomicInteger(0);
+
+    // Striped locks for thread-safe summary updates without global contention
+    private final Object[] executionLocks = new Object[256];
+
+    // Timeline events per execution
     private final Map<String, Deque<ExecutionEvent>> executionTimelines = new ConcurrentHashMap<>();
+
+    // Global recent events with O(1) atomic sizing
     private final Deque<ExecutionEvent> recentEvents = new ConcurrentLinkedDeque<>();
+    private final AtomicInteger recentCount = new AtomicInteger(0);
+
+    // Live streaming hub
+    private final VirtualThreadEventBus streamBus;
 
     private final int maxTrackedExecutions;
     private final int maxTimelineEventsPerExecution;
     private final int maxRecentEvents;
 
     /**
-     * Creates a Control Plane with standard capacity defaults (10,000 executions, 100 timeline events, 2,000 recent events).
+     * Creates a Control Plane with standard capacity defaults (10,000 terminal executions, 100 timeline events, 2,000 recent events).
      */
     public DefaultControlPlane() {
         this(10_000, 100, 2_000);
@@ -79,15 +120,42 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         this.maxTrackedExecutions = maxTrackedExecutions;
         this.maxTimelineEventsPerExecution = maxTimelineEventsPerExecution;
         this.maxRecentEvents = maxRecentEvents;
+
+        for (int i = 0; i < executionLocks.length; i++) {
+            executionLocks[i] = new Object();
+        }
+
+        this.streamBus = VirtualThreadEventBus.builder()
+                .bufferCapacity(8_192)
+                .historyCapacity(0) // ControlPlane manages recentEvents directly
+                .streamDefaultCapacity(512)
+                .overflowPolicy(OverflowPolicy.DROP_OLDEST)
+                .build();
     }
 
     // =========================================================================
     // Registration & Topology Discovery
     // =========================================================================
 
+    @Override
+    @NonNull
+    public DefaultControlPlane register(@NonNull InspectableMachine machine) {
+        Objects.requireNonNull(machine, "machine must not be null");
+        String name = machine.descriptor().name();
+        machines.put(name, machine);
+        log.info("Registered InspectableMachine [{}] in Control Plane", name);
+        return this;
+    }
+
+    @Override
+    public boolean unregister(@NonNull String machineName) {
+        Objects.requireNonNull(machineName, "machineName must not be null");
+        return machines.remove(machineName) != null;
+    }
+
     /**
      * Registers an {@link OrchestrationStateMachineExecutor}, inspecting its topology
-     * and configuring signal routing.
+     * and configuring signal routing and checkpoint inspection.
      */
     public <C extends StateMachineContext, S extends Enum<S> & StateKey, I, O> DefaultControlPlane register(
             @NonNull OrchestrationStateMachineExecutor<C, S, I, O> executor
@@ -96,25 +164,38 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         OrchestrationStateMachineConfiguration<C, S, I, O> config = executor.getConfiguration();
         String machineName = config.getMachineName();
         StateMap<C, S> stateMap = config.getStateMap();
-
         MachineDescriptor descriptor = createDescriptor(machineName, MachineType.ORCHESTRATION, stateMap);
 
-        Function<String, Optional<OrchestrationCheckpoint<?, ?>>> checkpointFinder = correlationKey -> {
-            CheckpointStore<C, S> store = config.getCheckpointStore();
-            if (store == null) return Optional.empty();
-            return store.findByCorrelationKey(correlationKey).map(cp -> (OrchestrationCheckpoint<?, ?>) cp);
+        InspectableMachine inspectable = new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                return executor.sendSignalByCorrelationKey(correlationKey, signalName, payload != null ? payload : new Object())
+                        .handle((turnResult, throwable) -> mapTurnResultToSignalResult(machineName, correlationKey, signalName, turnResult, throwable));
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                CheckpointStore<C, S> store = config.getCheckpointStore();
+                if (store == null) {
+                    return Optional.empty();
+                }
+                return store.findByCorrelationKey(correlationKey).map(cp -> (Object) cp);
+            }
         };
 
-        RegisteredMachine registration = new RegisteredMachine(
-                descriptor,
-                (corrKey, signalName, payload) -> executor.sendSignalByCorrelationKey(corrKey, signalName, payload)
-                        .handle((turnResult, throwable) -> mapTurnResultToSignalResult(machineName, corrKey, signalName, turnResult, throwable)),
-                checkpointFinder
-        );
-
-        machines.put(machineName, registration);
-        log.info("Registered Orchestration State Machine [{}] in Control Plane", machineName);
-        return this;
+        return register(inspectable);
     }
 
     /**
@@ -127,21 +208,36 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         StateMachineConfiguration<C, S, I, O> config = executor.getConfiguration();
         String machineName = config.getMachineName();
         StateMap<C, S> stateMap = config.getStateMap();
-
         MachineDescriptor descriptor = createDescriptor(machineName, MachineType.ATOMIC, stateMap);
 
-        RegisteredMachine registration = new RegisteredMachine(
-                descriptor,
-                (corrKey, signalName, _) -> CompletableFuture.completedFuture(
-                        SignalDeliveryResult.failure(machineName, corrKey, signalName,
-                                "Atomic state machines do not support external signal suspension or delivery")
-                ),
-                _ -> Optional.empty()
-        );
+        InspectableMachine inspectable = new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return descriptor;
+            }
 
-        machines.put(machineName, registration);
-        log.info("Registered Atomic State Machine [{}] in Control Plane", machineName);
-        return this;
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                return CompletableFuture.completedFuture(
+                        SignalDeliveryResult.failure(machineName, correlationKey, signalName,
+                                "Atomic state machines do not support external signal suspension or delivery")
+                );
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                return Optional.empty();
+            }
+        };
+
+        return register(inspectable);
     }
 
     /**
@@ -152,33 +248,52 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             @Nullable SignalRouter signalRouter
     ) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
-        RegisteredMachine registration = new RegisteredMachine(
-                descriptor,
-                signalRouter != null ? signalRouter : (corrKey, sig, _) -> CompletableFuture.completedFuture(
-                        SignalDeliveryResult.failure(descriptor.name(), corrKey, sig, "No signal router configured")
-                ),
-                _ -> Optional.empty()
-        );
-        machines.put(descriptor.name(), registration);
-        log.info("Registered State Machine [{}] in Control Plane", descriptor.name());
-        return this;
+        InspectableMachine inspectable = new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                if (signalRouter != null) {
+                    return signalRouter.routeSignal(correlationKey, signalName, payload != null ? payload : new Object());
+                }
+                return CompletableFuture.completedFuture(
+                        SignalDeliveryResult.failure(descriptor.name(), correlationKey, signalName, "No signal router configured")
+                );
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                return Optional.empty();
+            }
+        };
+
+        return register(inspectable);
     }
 
     /**
-     * Unregisters a state machine from the Control Plane.
+     * Wires this Control Plane directly as a listener to the given event bus.
      */
-    public boolean unregister(@NonNull String machineName) {
-        Objects.requireNonNull(machineName, "machineName must not be null");
-        return machines.remove(machineName) != null;
+    public DefaultControlPlane attachTo(@NonNull EventBus eventBus) {
+        Objects.requireNonNull(eventBus, "eventBus must not be null");
+        eventBus.subscribe(this);
+        return this;
     }
 
     /**
      * Wires this Control Plane directly as a listener to the given event dispatcher.
      */
     public DefaultControlPlane attachTo(@NonNull AsyncExecutionEventDispatcher dispatcher) {
-        Objects.requireNonNull(dispatcher, "dispatcher must not be null");
-        dispatcher.addListener(this);
-        return this;
+        return attachTo((EventBus) dispatcher);
     }
 
     // =========================================================================
@@ -189,7 +304,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     @NonNull
     public List<MachineDescriptor> listMachines() {
         return machines.values().stream()
-                .map(RegisteredMachine::descriptor)
+                .map(InspectableMachine::descriptor)
                 .toList();
     }
 
@@ -197,7 +312,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     @NonNull
     public Optional<MachineDescriptor> getMachine(@NonNull String machineName) {
         Objects.requireNonNull(machineName, "machineName must not be null");
-        RegisteredMachine reg = machines.get(machineName);
+        InspectableMachine reg = machines.get(machineName);
         return reg != null ? Optional.of(reg.descriptor()) : Optional.empty();
     }
 
@@ -205,7 +320,11 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     @NonNull
     public Optional<ExecutionSummary> getExecution(@NonNull String executionId) {
         Objects.requireNonNull(executionId, "executionId must not be null");
-        return Optional.ofNullable(executions.get(executionId));
+        ExecutionSummary summary = activeExecutions.get(executionId);
+        if (summary == null) {
+            summary = terminalExecutions.get(executionId);
+        }
+        return Optional.ofNullable(summary);
     }
 
     @Override
@@ -216,7 +335,19 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             int limit
     ) {
         int max = limit <= 0 ? 50 : limit;
-        return executions.values().stream()
+
+        Stream<ExecutionSummary> stream;
+        if (status != null) {
+            if (isTerminal(status)) {
+                stream = terminalExecutions.values().stream();
+            } else {
+                stream = activeExecutions.values().stream();
+            }
+        } else {
+            stream = Stream.concat(activeExecutions.values().stream(), terminalExecutions.values().stream());
+        }
+
+        return stream
                 .filter(e -> machineName == null || e.machineName().equals(machineName))
                 .filter(e -> status == null || e.status() == status)
                 .sorted((a, b) -> b.lastUpdated().compareTo(a.lastUpdated()))
@@ -270,20 +401,47 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         return getRecentEvents(machineName, limit);
     }
 
+    @Override
+    @NonNull
+    public Optional<Object> inspectCheckpoint(@NonNull String machineName, @NonNull String correlationKey) {
+        Objects.requireNonNull(machineName, "machineName must not be null");
+        Objects.requireNonNull(correlationKey, "correlationKey must not be null");
+        InspectableMachine machine = machines.get(machineName);
+        if (machine == null) {
+            return Optional.empty();
+        }
+        return machine.inspectCheckpoint(correlationKey);
+    }
+
     /**
      * Inspects a suspended workflow checkpoint by correlation key if supported by the registered machine.
      */
+    @SuppressWarnings("unchecked")
     public Optional<OrchestrationCheckpoint<?, ?>> getCheckpoint(
             @NonNull String machineName,
             @NonNull String correlationKey
     ) {
+        return inspectCheckpoint(machineName, correlationKey)
+                .filter(cp -> cp instanceof OrchestrationCheckpoint)
+                .map(cp -> (OrchestrationCheckpoint<?, ?>) cp);
+    }
+
+    // =========================================================================
+    // Live Streaming Observability
+    // =========================================================================
+
+    @Override
+    @NonNull
+    public EventStream watchExecution(@NonNull String executionId) {
+        Objects.requireNonNull(executionId, "executionId must not be null");
+        return streamBus.openStream(event -> executionId.equals(event.machineId().toString()));
+    }
+
+    @Override
+    @NonNull
+    public EventStream watchMachine(@NonNull String machineName) {
         Objects.requireNonNull(machineName, "machineName must not be null");
-        Objects.requireNonNull(correlationKey, "correlationKey must not be null");
-        RegisteredMachine reg = machines.get(machineName);
-        if (reg == null) {
-            return Optional.empty();
-        }
-        return reg.checkpointFinder().apply(correlationKey);
+        return streamBus.openStream(event -> machineName.equals(event.machineName()));
     }
 
     // =========================================================================
@@ -302,36 +460,41 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         Objects.requireNonNull(correlationKey, "correlationKey must not be null");
         Objects.requireNonNull(signalName, "signalName must not be null");
 
-        RegisteredMachine reg = machines.get(machineName);
-        if (reg == null) {
+        InspectableMachine machine = machines.get(machineName);
+        if (machine == null) {
             return CompletableFuture.completedFuture(
                     SignalDeliveryResult.failure(machineName, correlationKey, signalName,
                             "Machine [" + machineName + "] is not registered in the Control Plane")
             );
         }
 
-        return reg.signalRouter().routeSignal(correlationKey, signalName, payload != null ? payload : new Object());
+        return machine.sendSignal(correlationKey, signalName, payload);
     }
 
     // =========================================================================
-    // ExecutionEventListener Implementation
+    // ExecutionEventListener Implementation & Segmented O(1) Eviction
     // =========================================================================
 
     @Override
     public void onEvent(@NonNull ExecutionEvent event) {
         Objects.requireNonNull(event, "event must not be null");
 
-        // 1. Record in global recent ring buffer
+        // 1. Record in global recent ring buffer with O(1) size check
         recentEvents.addFirst(event);
-        while (recentEvents.size() > maxRecentEvents) {
-            recentEvents.pollLast();
+        if (recentCount.incrementAndGet() > maxRecentEvents) {
+            if (recentEvents.pollLast() != null) {
+                recentCount.decrementAndGet();
+            }
         }
 
         // 2. Append to individual execution timeline
         appendTimelineEvent(event);
 
-        // 3. Update execution summary snapshot
+        // 3. Update execution summary snapshot with partitioned O(1) eviction
         updateExecutionSummary(event);
+
+        // 4. Publish to internal Virtual Thread event stream hub
+        streamBus.onEvent(event);
     }
 
     private void updateExecutionSummary(@NonNull ExecutionEvent event) {
@@ -339,7 +502,59 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         String machine = event.machineName();
         Instant time = event.timestamp();
 
-        executions.compute(execId, (_, current) -> switch (event) {
+        int stripe = (execId.hashCode() & 0x7FFFFFFF) % executionLocks.length;
+        synchronized (executionLocks[stripe]) {
+            ExecutionSummary current = activeExecutions.get(execId);
+            if (current == null) {
+                current = terminalExecutions.get(execId);
+            }
+
+            ExecutionSummary updated = computeNextSummary(current, execId, machine, time, event);
+            if (updated != null) {
+                if (isTerminal(updated.status())) {
+                    activeExecutions.remove(execId);
+                    boolean isNewTerminal = (terminalExecutions.put(execId, updated) == null);
+                    if (isNewTerminal) {
+                        terminalEvictionOrder.add(execId);
+                        if (terminalCount.incrementAndGet() > maxTrackedExecutions) {
+                            evictTerminalExecution();
+                        }
+                    }
+                } else {
+                    terminalExecutions.remove(execId);
+                    activeExecutions.put(execId, updated);
+                }
+            }
+        }
+    }
+
+    private static boolean isTerminal(ExecutionStatus status) {
+        return status == ExecutionStatus.COMPLETED
+                || status == ExecutionStatus.FAILED
+                || status == ExecutionStatus.COMPENSATED;
+    }
+
+    private void evictTerminalExecution() {
+        while (terminalCount.get() > maxTrackedExecutions) {
+            String oldestId = terminalEvictionOrder.poll();
+            if (oldestId == null) {
+                break;
+            }
+            if (terminalExecutions.remove(oldestId) != null) {
+                executionTimelines.remove(oldestId);
+                terminalCount.decrementAndGet();
+            }
+        }
+    }
+
+    private ExecutionSummary computeNextSummary(
+            @Nullable ExecutionSummary current,
+            @NonNull String execId,
+            @NonNull String machine,
+            @NonNull Instant time,
+            @NonNull ExecutionEvent event
+    ) {
+        return switch (event) {
             case ExecutionEvent.TurnStartedEvent e -> {
                 if (current == null) {
                     yield new ExecutionSummary(
@@ -545,6 +760,38 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
+            case ExecutionEvent.TurnFailedEvent e -> {
+                String error = e.cause().getMessage() != null ? e.cause().getMessage() : e.cause().getClass().getSimpleName();
+                if (current != null) {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.failedStateName(),
+                            ExecutionStatus.FAILED,
+                            current.startTime(),
+                            time,
+                            e.correlationKey() != null ? e.correlationKey() : current.correlationKey(),
+                            null,
+                            current.transitionsCount(),
+                            time,
+                            error
+                    );
+                } else {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.failedStateName(),
+                            ExecutionStatus.FAILED,
+                            time,
+                            time,
+                            e.correlationKey(),
+                            null,
+                            0,
+                            time,
+                            error
+                    );
+                }
+            }
             case ExecutionEvent.SignalDeliveredEvent e -> {
                 if (current != null) {
                     yield new ExecutionSummary(
@@ -585,12 +832,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             case ExecutionEvent.CommandDeduplicatedEvent _ -> current;
             case ExecutionEvent.BatchBarrierReachedEvent _ -> current;
             case ExecutionEvent.BatchBarrierUnlockedEvent _ -> current;
-        });
-
-        // Enforce maximum tracked executions limit
-        if (executions.size() > maxTrackedExecutions) {
-            evictOldestExecution();
-        }
+        };
     }
 
     private void appendTimelineEvent(@NonNull ExecutionEvent event) {
@@ -602,15 +844,6 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                 deque.pollFirst();
             }
         }
-    }
-
-    private void evictOldestExecution() {
-        executions.values().stream()
-                .min(Comparator.comparing(ExecutionSummary::lastUpdated))
-                .ifPresent(oldest -> {
-                    executions.remove(oldest.executionId());
-                    executionTimelines.remove(oldest.executionId());
-                });
     }
 
     // =========================================================================
@@ -685,9 +918,14 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     @Override
     public void close() {
         machines.clear();
-        executions.clear();
+        activeExecutions.clear();
+        terminalExecutions.clear();
+        terminalEvictionOrder.clear();
+        terminalCount.set(0);
         executionTimelines.clear();
         recentEvents.clear();
+        recentCount.set(0);
+        streamBus.close();
     }
 
     // =========================================================================
@@ -702,10 +940,4 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                 Object payload
         );
     }
-
-    private record RegisteredMachine(
-            MachineDescriptor descriptor,
-            SignalRouter signalRouter,
-            Function<String, Optional<OrchestrationCheckpoint<?, ?>>> checkpointFinder
-    ) {}
 }

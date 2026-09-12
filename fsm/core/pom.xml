@@ -23,10 +23,6 @@
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-fsm-api</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-event-core</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>org.jspecify</groupId>

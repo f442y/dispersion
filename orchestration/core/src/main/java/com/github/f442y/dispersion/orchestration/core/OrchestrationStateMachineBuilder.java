@@ -1,21 +1,25 @@
 package com.github.f442y.dispersion.orchestration.core;
 
-import com.github.f442y.dispersion.orchestration.*;
-import com.github.f442y.dispersion.orchestration.batch.*;
-import com.github.f442y.dispersion.orchestration.command.*;
-import com.github.f442y.dispersion.orchestration.messaging.*;
-
-import com.github.f442y.dispersion.fsm.core.builder.AbstractStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.orchestration.command.SagaCommand;
-import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
+import com.github.f442y.dispersion.fsm.core.builder.AbstractStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.state.Action;
 import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
 import com.github.f442y.dispersion.fsm.state.Transition;
+import com.github.f442y.dispersion.orchestration.CheckpointStore;
+import com.github.f442y.dispersion.orchestration.CompensationAction;
+import com.github.f442y.dispersion.orchestration.ContextRecoverer;
+import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.OrchestrationState;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.ParallelBranch;
+import com.github.f442y.dispersion.orchestration.RetryPolicy;
+import com.github.f442y.dispersion.orchestration.SignalHandler;
+import com.github.f442y.dispersion.orchestration.command.SagaCommand;
+import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -26,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -106,6 +111,8 @@ public class OrchestrationStateMachineBuilder<
         private ContextRecoverer<CONTEXT, ?> contextRecoverer;
         private RetryPolicy retryPolicy = RetryPolicy.noRetries();
         private List<ParallelBranch<CONTEXT>> parallelBranches;
+        private Function<CONTEXT, CONTEXT> parallelContextCloner;
+        private BinaryOperator<CONTEXT> parallelContextReducer;
         private String expectedSignal;
         private SignalHandler<CONTEXT, ?> signalHandler;
         private SignalPublisher signalPublisher;
@@ -247,6 +254,8 @@ public class OrchestrationStateMachineBuilder<
                     contextRecoverer,
                     retryPolicy,
                     parallelBranches,
+                    parallelContextCloner,
+                    parallelContextReducer,
                     expectedSignal,
                     signalHandler,
                     signalPublisher,
@@ -323,9 +332,41 @@ public class OrchestrationStateMachineBuilder<
     public final class ParallelStepBuilder {
         private final OrchestrationStateStepBuilder stepBuilder;
         private final List<ParallelBranch<CONTEXT>> branches = new ArrayList<>();
+        private Function<CONTEXT, CONTEXT> cloner;
+        private BinaryOperator<CONTEXT> reducer;
 
         private ParallelStepBuilder(@NonNull OrchestrationStateStepBuilder stepBuilder) {
             this.stepBuilder = stepBuilder;
+        }
+
+        /**
+         * Configures an isolator/cloner function creating independent context copies for each parallel branch.
+         * <p>
+         * Use this when context implementations contain unsynchronized collections or fields, ensuring
+         * each parallel branch executes without memory contention or data races.
+         *
+         * @param cloner Function creating an isolated context copy
+         * @return This builder
+         */
+        @NonNull
+        public ParallelStepBuilder cloner(@NonNull Function<CONTEXT, CONTEXT> cloner) {
+            this.cloner = Objects.requireNonNull(cloner, "cloner must not be null");
+            return this;
+        }
+
+        /**
+         * Configures a reducer function folding parallel branch outputs back into the primary context.
+         * <p>
+         * After all parallel branches complete successfully, this reducer is called sequentially in
+         * branch registration order to merge each branch's returned context into the root context.
+         *
+         * @param reducer Reducer combining (currentRootContext, branchResultContext) -&gt; mergedContext
+         * @return This builder
+         */
+        @NonNull
+        public ParallelStepBuilder reducer(@NonNull BinaryOperator<CONTEXT> reducer) {
+            this.reducer = Objects.requireNonNull(reducer, "reducer must not be null");
+            return this;
         }
 
         @NonNull
@@ -355,6 +396,8 @@ public class OrchestrationStateMachineBuilder<
                 @NonNull STATE_KEY nextState
         ) {
             stepBuilder.parallelBranches = branches;
+            stepBuilder.parallelContextCloner = cloner;
+            stepBuilder.parallelContextReducer = reducer;
             return stepBuilder.transition(nextState);
         }
 
@@ -363,6 +406,8 @@ public class OrchestrationStateMachineBuilder<
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
             stepBuilder.parallelBranches = branches;
+            stepBuilder.parallelContextCloner = cloner;
+            stepBuilder.parallelContextReducer = reducer;
             return stepBuilder.transition(transition);
         }
 
@@ -372,6 +417,8 @@ public class OrchestrationStateMachineBuilder<
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
             stepBuilder.parallelBranches = branches;
+            stepBuilder.parallelContextCloner = cloner;
+            stepBuilder.parallelContextReducer = reducer;
             return stepBuilder.transitionsTo(permittedTargets, transition);
         }
     }

@@ -5,7 +5,6 @@ import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
-import com.github.f442y.dispersion.fsm.exception.StateMachineException;
 import com.github.f442y.dispersion.fsm.core.fixture.states.StateA;
 import com.github.f442y.dispersion.fsm.core.fixture.states.StateB;
 import com.github.f442y.dispersion.fsm.core.fixture.states.StateC;
@@ -48,7 +47,7 @@ public class TestStateMachine
 
     @Nullable
     @Override
-    public InputFunction<TestStateMachineContext, WrappedInput> inputFunction() throws StateMachineException {
+    public InputFunction<TestStateMachineContext, WrappedInput> inputFunction() {
         return (testStateMachineContext, wrappedInput) -> {
             testStateMachineContext.num = 10;
             if (wrappedInput != null && wrappedInput.latch != null) {
@@ -60,7 +59,7 @@ public class TestStateMachine
 
     @Nullable
     @Override
-    public OutputFunction<TestStateMachineContext, Integer> outputFunction() throws StateMachineException {
+    public OutputFunction<TestStateMachineContext, Integer> outputFunction() {
         return testStateMachineContext -> {
             if (testStateMachineContext.latch != null) {
                 testStateMachineContext.latch.countDown();

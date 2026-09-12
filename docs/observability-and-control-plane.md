@@ -118,40 +118,44 @@ public void handleEvent(ExecutionEvent event) {
 
 ## 3. Asynchronous Dispatcher & Reactive Streams
 
-`AsyncExecutionEventDispatcher` decouples workflow execution from telemetry consumers. Events are queued into a bounded buffer and consumed on a dedicated Virtual Thread (`dispersion-event-dispatcher-worker`).
+`VirtualThreadEventBus` (and `AsyncExecutionEventDispatcher`) decouples workflow execution from telemetry consumers. Events are queued into a fast bounded buffer on the state machine thread and consumed on a dedicated Virtual Thread (`dispersion-event-bus-worker`).
 
-It also implements `Flow.Publisher<ExecutionEvent>`, providing backpressure-aware streaming directly into WebSockets or Server-Sent Events (SSE):
+### Pure Virtual-Thread Design (Zero Reactive Baggage):
+Instead of complex reactive streams (`Flow.Publisher`, `Subscriber`, `request(n)` demand tracking), Dispersion uses **100% imperative, Virtual Thread-native abstractions**:
+- **Strongly-Typed Subscriptions**: Subscribe directly to sealed record types like `TurnFailedEvent` without manual casting or instanceof checks.
+- **Pull-Based Virtual Thread Streaming (`EventStream`)**: Consumers (such as Server-Sent Events or WebSocket endpoints) pull sequentially with blocking `take()` or `poll(timeout)` calls on their own lightweight virtual threads.
+- **Circular History Replay**: In-memory ring buffer for immediate historical queries.
 
 ```java
+import com.github.f442y.dispersion.event.EventBus;
+import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
-import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher;
-import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher.OverflowPolicy;
-import java.util.concurrent.Flow;
+import com.github.f442y.dispersion.event.OverflowPolicy;
+import com.github.f442y.dispersion.event.Subscription;
+import com.github.f442y.dispersion.event.bus.VirtualThreadEventBus;
+import java.time.Duration;
 
-// Bounded queue with 10,000 capacity; drop oldest if consumers fall behind
-try (AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatcher(10_000, OverflowPolicy.DROP_OLDEST)) {
+// 1. Initialize Event Bus (10,000 buffer capacity, 1,000 history items)
+try (EventBus eventBus = VirtualThreadEventBus.builder()
+        .bufferCapacity(10_000)
+        .historyCapacity(1_000)
+        .overflowPolicy(OverflowPolicy.DROP_OLDEST)
+        .build()) {
 
-    // Subscribe reactive stream (e.g. bridging to an SSE controller)
-    dispatcher.subscribe(new Flow.Subscriber<>() {
-        private Flow.Subscription subscription;
+    // 2. Strongly-typed subscription: only receives TurnFailedEvent
+    Subscription failureSub = eventBus.subscribe(
+            ExecutionEvent.TurnFailedEvent.class,
+            event -> System.err.printf("ALERT: Machine [%s] failed: %s%n", event.machineId(), event.cause().getMessage())
+    );
 
-        @Override
-        public void onSubscribe(Flow.Subscription sub) {
-            this.subscription = sub;
-            sub.request(100); // Backpressure batch request
+    // 3. Virtual Thread Pull-Stream (e.g. bridging directly to an SSE / WebSocket controller)
+    Thread.ofVirtual().start(() -> {
+        try (EventStream stream = eventBus.openStream()) {
+            for (ExecutionEvent event : stream) {
+                // Cheap, clean Virtual Thread blocking — zero reactive ceremony!
+                sseEmitter.send(event);
+            }
         }
-
-        @Override
-        public void onNext(ExecutionEvent event) {
-            // Push event over SSE / WebSocket to TanStack Router Web UI
-            subscription.request(1);
-        }
-
-        @Override
-        public void onError(Throwable t) {}
-
-        @Override
-        public void onComplete() {}
     });
 }
 ```
@@ -163,11 +167,17 @@ try (AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatche
 `DefaultControlPlane` is a thread-safe, pure Java implementation designed to be embedded in your service. It manages state machine metadata and live execution status **with zero HTTP server dependency**, making it easy to expose over REST, GraphQL, gRPC, or WebSockets when desired.
 
 ### Capabilities:
-1. **Dynamic Registry**: Registers both `AtomicStateMachineExecutor` and `OrchestrationStateMachineExecutor`, discovering initial states, end states, intermediate nodes, and pre-rendering Mermaid flowcharts via `MachineDescriptor`.
-2. **Live Execution Tracking**: Real-time summaries (`ExecutionSummary`) across all statuses (`RUNNING`, `SUSPENDED`, `COMPLETED`, `COMPENSATED`, `FAILED`).
-3. **Bounded Timeline Buffering**: Maintains a bounded ring buffer of events per execution ID and cluster-wide with LRU/FIFO eviction for predictable memory bounds.
+1. **Universal `InspectableMachine` SPI**: Decouples the control plane from concrete engine internals. Any machine (atomic, orchestration saga, batch, or custom) can register its topology, signal router, and checkpoint inspector via `register(InspectableMachine)`. Convenient overloads automatically adapt `AtomicStateMachineExecutor` and `OrchestrationStateMachineExecutor`.
+2. **Segmented $O(1)$ Eviction Architecture**:
+   - **Active Pool (`activeExecutions`)**: In-flight workflows (`RUNNING` or `SUSPENDED`) represent live business processes waiting for steps or inbound signals (e.g. human approvals, webhooks). They are **strictly protected from eviction** and never pruned regardless of how many completed workflows arrive.
+   - **Terminal Pool (`terminalExecutions`)**: Finished workflows (`COMPLETED`, `FAILED`, `COMPENSATED`) are bounded by `maxTrackedExecutions`. Pruning is performed in **strictly $O(1)$ time** via a concurrent FIFO queue and atomic counters, completely eliminating expensive $O(N)$ linear scans across the entire collection.
+   - **Recent Event Ring Buffer**: Bounded by an atomic counter for zero-overhead, strictly $O(1)$ sliding window tracking without traversing linked lists.
+3. **Virtual Thread Live-Streaming (`EventStream`)**:
+   - `controlPlane.watchExecution(executionId)`: Opens a dedicated, pull-based stream filtered to a single workflow execution.
+   - `controlPlane.watchMachine(machineName)`: Opens a stream for all lifecycle events emitted by any instance of a named machine.
+   - Subscribers pull events sequentially with `stream.take()` or `stream.poll(timeout)` directly on lightweight Virtual Threads without reactive framework overhead.
 4. **Direct In-Memory Signal Routing**: Routes external control signals (`sendSignal`) to suspended instances by correlation key, returning a `CompletableFuture<SignalDeliveryResult>`.
-5. **Checkpoint Inspection**: Retrieves durable checkpoints directly from the registered `CheckpointStore`.
+5. **Universal Checkpoint Inspection**: Retrieves durable workflow snapshots via `inspectCheckpoint(machineName, correlationKey)`.
 
 ### Complete Control Plane Usage Example:
 
@@ -178,19 +188,21 @@ import com.github.f442y.dispersion.control.ExecutionSummary;
 import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.control.core.DefaultControlPlane;
+import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-// 1. Initialize Control Plane (max 10,000 active executions, 200 events/execution, 5,000 global events)
+// 1. Initialize Control Plane (max 10,000 terminal executions, 200 events/execution, 5,000 recent events)
 try (DefaultControlPlane controlPlane = new DefaultControlPlane(10_000, 200, 5_000);
      AsyncExecutionEventDispatcher eventDispatcher = new AsyncExecutionEventDispatcher()) {
 
     // 2. Wire Control Plane listener to dispatcher
     controlPlane.attachTo(eventDispatcher);
 
-    // 3. Register state machine executors
+    // 3. Register state machine executors (or custom InspectableMachine implementations)
     controlPlane.register(loanOrchestrationExecutor);
     controlPlane.register(paymentAtomicExecutor);
 
@@ -199,21 +211,26 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane(10_000, 200, 5_0
     System.out.println("Machine Name: " + desc.name());
     System.out.println("Initial State: " + desc.initialState());
     System.out.println("All States: " + desc.allStates());
-    System.out.println("Mermaid Diagram:\n" + desc.mermaidDiagram());
+    System.out.println("Mermaid Diagram:\n" + desc.mermaidGraph());
 
-    // 5. Query Suspended Executions
+    // 5. Open Real-Time Virtual Thread Stream for a specific execution instance
+    Thread.ofVirtual().start(() -> {
+        try (EventStream stream = controlPlane.watchExecution("exec-loan-1002")) {
+            for (ExecutionEvent event : stream) {
+                // Non-blocking for OS threads; lightweight virtual-thread pull
+                System.out.println("Real-time event: " + event.getClass().getSimpleName());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    });
+
+    // 6. Query Suspended Executions (Active Pool is never evicted!)
     List<ExecutionSummary> suspended = controlPlane.listExecutions("LoanWorkflow", ExecutionStatus.SUSPENDED, 20);
     for (ExecutionSummary exec : suspended) {
         System.out.printf("Execution %s suspended at %s awaiting %s (corrKey: %s)%n",
             exec.executionId(), exec.currentState(), exec.suspendedSignal(), exec.correlationKey());
     }
-
-    // 6. Inspect Execution Event Timeline
-    List<ExecutionEvent> timeline = controlPlane.getExecutionTimeline("exec-loan-1002");
-    timeline.forEach(event ->
-        System.out.printf("[%s] %s -> State: %s%n",
-            event.timestamp(), event.getClass().getSimpleName(), event.executionId())
-    );
 
     // 7. Route External Control Signal
     CompletableFuture<SignalDeliveryResult> future = controlPlane.sendSignal(
@@ -226,7 +243,7 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane(10_000, 200, 5_0
     SignalDeliveryResult result = future.join();
     System.out.println("Delivered: " + result.delivered());
     System.out.println("Completed: " + result.completed());
-    System.out.println("Resulting State: " + result.currentState());
+    System.out.println("Resulting State: " + result.resultingState());
 }
 ```
 
@@ -234,14 +251,15 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane(10_000, 200, 5_0
 
 ## 5. Web UI Integration (React + TanStack Router)
 
-Because `ControlPlane` exposes pure Java methods and reactive event streams, building a React frontend on top of it is straightforward:
+Because `ControlPlane` exposes pure Java methods and Virtual Thread event streams, building a React frontend on top of it is straightforward:
 
 | Frontend Feature | Control Plane SPI Method | UI View |
 | :--- | :--- | :--- |
-| **Topology View** | `controlPlane.getMachine(name).mermaidDiagram()` | Render interactive SVG graph via Mermaid or React Flow |
-| **Execution Table** | `controlPlane.listExecutions(name, status, limit)` | Filterable TanStack Table showing status, turns, and correlation keys |
+| **Topology View** | `controlPlane.getMachine(name).mermaidGraph()` | Render interactive SVG graph via Mermaid or React Flow |
+| **Execution Table** | `controlPlane.listExecutions(name, status, limit)` | Filterable TanStack Table showing active vs terminal status, turns, and correlation keys |
 | **Execution Timeline**| `controlPlane.getExecutionTimeline(execId)` | Visual audit trail showing every state entry, exit, and transition |
-| **Live Updates** | `dispatcher.subscribe(...)` -> SSE / WebSocket | Real-time state progress updates without manual polling |
+| **Live SSE / WebSocket** | `controlPlane.watchExecution(...)` / `watchMachine(...)` | Real-time state progress updates pulled sequentially without polling |
+| **Checkpoint Inspection**| `controlPlane.inspectCheckpoint(name, corrKey)` | JSON drawer inspecting persisted Saga context and history |
 | **Manual Signal Actions**| `controlPlane.sendSignal(...)` | Form modal allowing operators to manually approve or trigger signals |
 
 ---

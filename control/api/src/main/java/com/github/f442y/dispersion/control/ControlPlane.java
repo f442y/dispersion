@@ -1,5 +1,6 @@
 package com.github.f442y.dispersion.control;
 
+import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
 import org.jspecify.annotations.NonNull;
@@ -11,9 +12,26 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Universal Control Plane SPI for inspecting state machine topologies, tracking active and suspended
- * execution lifecycles, querying event timelines, and dispatching external control signals.
+ * execution lifecycles, querying event timelines, streaming live transitions, and dispatching control signals.
  */
-public interface ControlPlane {
+public interface ControlPlane extends AutoCloseable {
+
+    /**
+     * Registers an inspectable state machine with the Control Plane.
+     *
+     * @param machine The inspectable machine definition and router
+     * @return this ControlPlane for fluent chaining
+     */
+    @NonNull
+    ControlPlane register(@NonNull InspectableMachine machine);
+
+    /**
+     * Unregisters a state machine from the Control Plane by name.
+     *
+     * @param machineName The state machine name
+     * @return true if the machine was registered and removed, false otherwise
+     */
+    boolean unregister(@NonNull String machineName);
 
     /**
      * Lists all registered state machine topology descriptors.
@@ -93,6 +111,34 @@ public interface ControlPlane {
     );
 
     /**
+     * Inspects a saved checkpoint snapshot for a specific machine and correlation key.
+     *
+     * @param machineName    The state machine name
+     * @param correlationKey The correlation key
+     * @return Optional containing the checkpoint object if found
+     */
+    @NonNull
+    Optional<Object> inspectCheckpoint(@NonNull String machineName, @NonNull String correlationKey);
+
+    /**
+     * Opens a real-time, pull-based {@link EventStream} for observing lifecycle events of a specific execution.
+     *
+     * @param executionId The execution UUID
+     * @return An open {@link EventStream} on a dedicated Virtual Thread queue
+     */
+    @NonNull
+    EventStream watchExecution(@NonNull String executionId);
+
+    /**
+     * Opens a real-time, pull-based {@link EventStream} for observing all events of a specific state machine.
+     *
+     * @param machineName The state machine name
+     * @return An open {@link EventStream} on a dedicated Virtual Thread queue
+     */
+    @NonNull
+    EventStream watchMachine(@NonNull String machineName);
+
+    /**
      * Returns the telemetry event listener that state machine builders and dispatchers can hook into
      * to keep this Control Plane synchronized in real time.
      *
@@ -100,4 +146,7 @@ public interface ControlPlane {
      */
     @NonNull
     ExecutionEventListener getEventListener();
+
+    @Override
+    default void close() {}
 }

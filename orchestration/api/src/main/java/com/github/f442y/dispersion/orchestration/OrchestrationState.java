@@ -2,11 +2,11 @@ package com.github.f442y.dispersion.orchestration;
 
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 import com.github.f442y.dispersion.fsm.state.Action;
 import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.Transition;
+import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 
 /**
@@ -44,6 +45,8 @@ public class OrchestrationState<
     private final ContextRecoverer<CONTEXT, ?> contextRecoverer;
     private final RetryPolicy retryPolicy;
     private final List<ParallelBranch<CONTEXT>> parallelBranches;
+    private final Function<CONTEXT, CONTEXT> parallelContextCloner;
+    private final BinaryOperator<CONTEXT> parallelContextReducer;
     private final String expectedSignal;
     private final SignalHandler<CONTEXT, ?> signalHandler;
     private final SignalPublisher signalPublisher;
@@ -70,6 +73,34 @@ public class OrchestrationState<
             @Nullable String publishDestination,
             @Nullable Function<CONTEXT, ?> publishPayloadExtractor
     ) {
+        this(action, transition, permittedTargets, isTerminal, maxVisits, maxVisitsFallback,
+                compensationAction, childStateMachine, childInputExtractor, childOutputMerger,
+                contextRecoverer, retryPolicy, parallelBranches, null, null,
+                expectedSignal, signalHandler, signalPublisher, publishDestination, publishPayloadExtractor);
+    }
+
+    public OrchestrationState(
+            @NonNull Action<CONTEXT> action,
+            @NonNull Transition<CONTEXT, STATE_KEY> transition,
+            @Nullable Set<STATE_KEY> permittedTargets,
+            boolean isTerminal,
+            int maxVisits,
+            @Nullable STATE_KEY maxVisitsFallback,
+            @Nullable CompensationAction<CONTEXT> compensationAction,
+            @Nullable StateMachineConfiguration<?, ?, ?, ?> childStateMachine,
+            @Nullable Function<CONTEXT, ?> childInputExtractor,
+            @Nullable BiFunction<CONTEXT, Object, CONTEXT> childOutputMerger,
+            @Nullable ContextRecoverer<CONTEXT, ?> contextRecoverer,
+            @Nullable RetryPolicy retryPolicy,
+            @Nullable List<ParallelBranch<CONTEXT>> parallelBranches,
+            @Nullable Function<CONTEXT, CONTEXT> parallelContextCloner,
+            @Nullable BinaryOperator<CONTEXT> parallelContextReducer,
+            @Nullable String expectedSignal,
+            @Nullable SignalHandler<CONTEXT, ?> signalHandler,
+            @Nullable SignalPublisher signalPublisher,
+            @Nullable String publishDestination,
+            @Nullable Function<CONTEXT, ?> publishPayloadExtractor
+    ) {
         this.action = Objects.requireNonNull(action, "action must not be null");
         this.transition = Objects.requireNonNull(transition, "transition must not be null");
         this.permittedTargets = (permittedTargets != null) ? Set.copyOf(permittedTargets) : Collections.emptySet();
@@ -83,6 +114,8 @@ public class OrchestrationState<
         this.contextRecoverer = contextRecoverer;
         this.retryPolicy = (retryPolicy != null) ? retryPolicy : RetryPolicy.noRetries();
         this.parallelBranches = (parallelBranches != null) ? List.copyOf(parallelBranches) : Collections.emptyList();
+        this.parallelContextCloner = parallelContextCloner;
+        this.parallelContextReducer = parallelContextReducer;
         this.expectedSignal = expectedSignal;
         this.signalHandler = signalHandler;
         this.signalPublisher = signalPublisher;
@@ -157,6 +190,23 @@ public class OrchestrationState<
     @NonNull
     public List<ParallelBranch<CONTEXT>> parallelBranches() {
         return parallelBranches;
+    }
+
+    /**
+     * Optional function to create isolated context clones for concurrent parallel branch execution,
+     * protecting thread-confined contexts from concurrent modification.
+     */
+    @Nullable
+    public Function<CONTEXT, CONTEXT> parallelContextCloner() {
+        return parallelContextCloner;
+    }
+
+    /**
+     * Optional reducer function folding branch execution outputs back into the primary context.
+     */
+    @Nullable
+    public BinaryOperator<CONTEXT> parallelContextReducer() {
+        return parallelContextReducer;
     }
 
     @Nullable
