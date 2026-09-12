@@ -1,8 +1,16 @@
 # Observability & Control Plane
 
-To provide full transparency into distributed workflows, Dispersion provides a two-layer observability and management architecture:
-1. **Event Lifecycle SPI (`dispersion-api`)**: Fine-grained, zero-cost lifecycle telemetry emitted at each state, turn, signal, and compensation.
-2. **Core Java Control Plane (`dispersion-core`)**: An in-memory, thread-safe registry and control API that tracks live executions, inspects suspended checkpoints, extracts Mermaid diagrams, and routes external signals—serving as the foundational backend for monitoring tools and modern reactive Web UIs (such as a React + TanStack Router dashboard).
+To provide full transparency into distributed workflows, Dispersion provides a fine-grained, decoupled observability and management architecture across dedicated modules:
+1. **Event Lifecycle SPI (`dispersion-event-api`)**: Fine-grained, zero-cost lifecycle telemetry emitted at each state, turn, signal, and compensation via 12 sealed `ExecutionEvent` records.
+2. **Asynchronous Ring Buffer Dispatcher (`dispersion-event-core`)**: Lock-free virtual-thread event dispatcher with backpressure handling (drop/buffer/block) implementing `Flow.Publisher<ExecutionEvent>`.
+3. **Control Plane Contracts (`dispersion-control-api`)**: Unified SPI (`ControlPlane`), topology descriptors (`MachineDescriptor`), and execution summaries (`ExecutionSummary`, `SignalDeliveryResult`).
+4. **Core Java Control Plane (`dispersion-control-core`)**: An in-memory, thread-safe registry and control implementation (`DefaultControlPlane`) that tracks live executions, inspects suspended checkpoints, extracts Mermaid diagrams, and routes external signals—serving as the foundational backend for monitoring tools and modern reactive Web UIs (such as a React + TanStack Router dashboard).
+
+> **Maven Coordinates:**
+> - Event Telemetry SPI: `com.github.f442y.dispersion:dispersion-event-api`
+> - Event Dispatcher Runtime: `com.github.f442y.dispersion:dispersion-event-core`
+> - Control Plane Contracts: `com.github.f442y.dispersion:dispersion-control-api`
+> - Control Plane Runtime: `com.github.f442y.dispersion:dispersion-control-core`
 
 ---
 
@@ -16,7 +24,7 @@ graph TD
         CTRL["Signal Dispatcher Panel"]
     end
 
-    subgraph Control_Plane["Core Control Plane (Pure Java - Zero Web Server Overhead)"]
+    subgraph Control_Plane["dispersion-control-core (Zero Web Server Overhead)"]
         CP["DefaultControlPlane"]
         REG["Machine Topology Registry<br/>(MachineDescriptor + Mermaid Diagrams)"]
         LIVE["Execution Tracker<br/>(ExecutionSummary + Bounded Timelines)"]
@@ -28,9 +36,9 @@ graph TD
     end
 
     subgraph Engines["Dispersion Workflow Engines"]
-        ATOM["Atomic Micro-FSMs"]
-        ORCH["Orchestration Sagas"]
-        DISP["AsyncExecutionEventDispatcher<br/>(Ring Buffer on Virtual Thread)"]
+        ATOM["Atomic Micro-FSMs<br/>(dispersion-fsm-core)"]
+        ORCH["Orchestration Sagas<br/>(dispersion-orchestration-core)"]
+        DISP["AsyncExecutionEventDispatcher<br/>(dispersion-event-core)"]
         STORE[("CheckpointStore")]
     end
 
@@ -115,8 +123,9 @@ public void handleEvent(ExecutionEvent event) {
 It also implements `Flow.Publisher<ExecutionEvent>`, providing backpressure-aware streaming directly into WebSockets or Server-Sent Events (SSE):
 
 ```java
-import com.github.f442y.dispersion.event.AsyncExecutionEventDispatcher;
-import com.github.f442y.dispersion.event.AsyncExecutionEventDispatcher.OverflowPolicy;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher;
+import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher.OverflowPolicy;
 import java.util.concurrent.Flow;
 
 // Bounded queue with 10,000 capacity; drop oldest if consumers fall behind
@@ -164,12 +173,13 @@ try (AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatche
 
 ```java
 import com.github.f442y.dispersion.control.ControlPlane;
-import com.github.f442y.dispersion.control.DefaultControlPlane;
 import com.github.f442y.dispersion.control.ExecutionStatus;
 import com.github.f442y.dispersion.control.ExecutionSummary;
 import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
-import com.github.f442y.dispersion.event.AsyncExecutionEventDispatcher;
+import com.github.f442y.dispersion.control.core.DefaultControlPlane;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.dispatcher.AsyncExecutionEventDispatcher;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 

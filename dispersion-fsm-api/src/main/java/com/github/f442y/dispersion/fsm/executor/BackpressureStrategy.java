@@ -11,13 +11,13 @@ public enum BackpressureStrategy {
     BLOCK,
 
     /**
-     * Immediately rejects new task admissions and throws {@link com.github.f442y.dispersion.exception.BackpressureException}.
+     * Immediately rejects new task admissions and throws {@link com.github.f442y.dispersion.fsm.exception.BackpressureException}.
      */
     REJECT_IMMEDIATELY,
 
     /**
      * Waits up to a configured timeout duration for an execution permit before throwing
-     * {@link com.github.f442y.dispersion.exception.BackpressureException}.
+     * {@link com.github.f442y.dispersion.fsm.exception.BackpressureException}.
      */
     WAIT_WITH_TIMEOUT
 }

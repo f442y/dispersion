@@ -2,7 +2,7 @@
 
 Dispersion is a high-throughput, zero-synchronization finite state machine and distributed Saga orchestration engine engineered specifically for **Java 25+ Virtual Threads** (Project Loom).
 
-Traditional workflow engines often incur substantial overhead: heavy thread-pool contention, distributed locks, database ping-pong per state transition, or reflection-heavy runtime proxies. Dispersion eliminates these bottlenecks through a modern architectural philosophy rooted in **thread confinement**, **sealed type hierarchies**, and a **two-tiered execution model**.
+Traditional workflow engines often incur substantial overhead: heavy thread-pool contention, distributed locks, database ping-pong per state transition, or reflection-heavy runtime proxies. Dispersion eliminates these bottlenecks through a modern architectural philosophy rooted in **thread confinement**, **sealed type hierarchies**, a **two-tiered execution model**, and a **fine-grained modular decomposition**.
 
 ---
 
@@ -50,6 +50,7 @@ graph TD
 
 | Dimension | Tier 1: Atomic (Micro) State Machine | Tier 2: Orchestration (Macro) State Machine |
 | :--- | :--- | :--- |
+| **Primary Module** | `dispersion-fsm-api` / `dispersion-fsm-core` | `dispersion-orchestration-api` / `dispersion-orchestration-core` |
 | **Execution Scope** | Single virtual thread, synchronous pipeline | Asynchronous, turn-based coordinator |
 | **State Mutations** | Direct, thread-confined, lock-free POJO | Checkpointed snapshots & persistent rehydration |
 | **Lifecycle** | High-throughput sequential graph steps | Long-lived, suspendable via external signals (`waitForSignal`) |
@@ -111,21 +112,21 @@ classDiagram
 
 ### Concepts Glossary
 
-| Concept | Purpose & Responsibilities |
-| :--- | :--- |
-| **`StateKey`** | An interface implemented by domain enums representing graph nodes. Prevents magic strings and enforces compile-time type safety. |
-| **`StateMachineContext`** | A mutable POJO/DTO holding accumulated business data. Thread-confined during each turn, allowing lock-free mutations. |
-| **`Action<CONTEXT>`** | Pure business logic `(ctx) -> ctx` executed upon entering a state. |
-| **`Transition<CONTEXT, STATE_KEY>`** | Routing logic `(ctx) -> nextStateKey` that evaluates context to select the next node. |
-| **`InputFunction<C, I>`** | Maps inbound parameters into a fresh context instance before the initial state executes. |
-| **`OutputFunction<C, O>`** | Extracts or formats the final return payload from context after reaching a terminal state. |
-| **`CompensationAction<C>`** | Reversal logic `(ctx) -> ctx` executed in reverse chronological order (LIFO) if a downstream step fails. |
-| **`SagaCommand<C>`** | A unified interface coupling forward action (`execute`) with compensating rollback (`compensate`). |
-| **`CheckpointStore`** | Persistence abstraction for snapshotting suspended workflow state to disk/database. |
-| **`SignalCommand`** | Domain payload carrying a `correlationKey()` for routing external webhooks to paused workflows. |
-| **`CommandEnvelope<T>`** | Immutable record `(commandId, timestamp, command)` delivering guaranteed network deduplication. |
-| **`ExecutionEvent`** | Sealed hierarchy of 12 immutable telemetry records capturing every engine milestone. |
-| **`ControlPlane`** | Centralized in-memory registry and inspection SPI for topology discovery, live summaries, and signal routing. |
+| Concept | Module | Purpose & Responsibilities |
+| :--- | :--- | :--- |
+| **`StateKey`** | `dispersion-fsm-api` | An interface implemented by domain enums representing graph nodes. Prevents magic strings and enforces compile-time type safety. |
+| **`StateMachineContext`** | `dispersion-fsm-api` | A mutable POJO/DTO holding accumulated business data. Thread-confined during each turn, allowing lock-free mutations. |
+| **`Action<CONTEXT>`** | `dispersion-fsm-api` | Pure business logic `(ctx) -> ctx` executed upon entering a state. |
+| **`Transition<CONTEXT, STATE_KEY>`** | `dispersion-fsm-api` | Routing logic `(ctx) -> nextStateKey` that evaluates context to select the next node. |
+| **`InputFunction<C, I>`** | `dispersion-fsm-api` | Maps inbound parameters into a fresh context instance before the initial state executes. |
+| **`OutputFunction<C, O>`** | `dispersion-fsm-api` | Extracts or formats the final return payload from context after reaching a terminal state. |
+| **`CompensationAction<C>`** | `dispersion-orchestration-api` | Reversal logic `(ctx) -> ctx` executed in reverse chronological order (LIFO) if a downstream step fails. |
+| **`SagaCommand<C>`** | `dispersion-orchestration-api` | A unified interface coupling forward action (`execute`) with compensating rollback (`compensate`). |
+| **`CheckpointStore`** | `dispersion-orchestration-api` | Persistence abstraction for snapshotting suspended workflow state to disk/database. |
+| **`SignalCommand`** | `dispersion-orchestration-api` | Domain payload carrying a `correlationKey()` for routing external webhooks to paused workflows. |
+| **`CommandEnvelope<T>`** | `dispersion-orchestration-api` | Immutable record `(commandId, timestamp, command)` delivering guaranteed network deduplication. |
+| **`ExecutionEvent`** | `dispersion-event-api` | Sealed hierarchy of 12 immutable telemetry records capturing every engine milestone. |
+| **`ControlPlane`** | `dispersion-control-api` | Centralized in-memory registry and inspection SPI for topology discovery, live summaries, and signal routing. |
 
 ---
 
@@ -175,6 +176,61 @@ dispatchTurnSync(turnId, input)
         ├─► Hit Terminal State -> Delete Checkpoint -> COMPLETE
         └─► [OutputFunction] -> Return result
 ```
+
+---
+
+## 5. Modular Topology & JPMS Package Isolation
+
+Dispersion is partitioned into fine-grained topic modules with a symmetrical API/Core split. Each module maintains isolated package namespaces to ensure **zero split-package collisions** under the Java 25 Platform Module System (JPMS):
+
+```mermaid
+graph TD
+    subgraph BOM["dispersion-bom"]
+        BOM_POM["Centralized Dependency Versions"]
+    end
+
+    subgraph Event["Telemetry & Event Subsystem"]
+        E_API["dispersion-event-api<br/><code>com.github.f442y.dispersion.event</code>"]
+        E_CORE["dispersion-event-core<br/><code>com.github.f442y.dispersion.event.dispatcher</code>"]
+        E_CORE --> E_API
+    end
+
+    subgraph FSM["Tier 1: Atomic Finite State Machine"]
+        F_API["dispersion-fsm-api<br/><code>com.github.f442y.dispersion.fsm.*</code>"]
+        F_CORE["dispersion-fsm-core<br/><code>com.github.f442y.dispersion.fsm.core.*</code>"]
+        F_API --> E_API
+        F_CORE --> F_API
+        F_CORE --> E_CORE
+    end
+
+    subgraph Orch["Tier 2: Orchestration & Distributed Sagas"]
+        O_API["dispersion-orchestration-api<br/><code>com.github.f442y.dispersion.orchestration.*</code>"]
+        O_CORE["dispersion-orchestration-core<br/><code>com.github.f442y.dispersion.orchestration.core.*</code>"]
+        O_API --> F_API
+        O_CORE --> O_API
+        O_CORE --> F_CORE
+    end
+
+    subgraph Ctrl["Observability & Control Plane"]
+        C_API["dispersion-control-api<br/><code>com.github.f442y.dispersion.control</code>"]
+        C_CORE["dispersion-control-core<br/><code>com.github.f442y.dispersion.control.core</code>"]
+        C_CORE --> C_API
+        C_CORE --> O_CORE
+    end
+```
+
+| Module | Automatic Module Name | Primary Responsibilities |
+| :--- | :--- | :--- |
+| `dispersion-bom` | `com.github.f442y.dispersion.bom` | Centralized BOM for dependency version alignment. |
+| `dispersion-event-api` | `com.github.f442y.dispersion.event.api` | Sealed `ExecutionEvent` records and `ExecutionEventListener` SPI. |
+| `dispersion-event-core` | `com.github.f442y.dispersion.event.core` | `AsyncExecutionEventDispatcher` (lock-free virtual-thread ring buffer). |
+| `dispersion-fsm-api` | `com.github.f442y.dispersion.fsm.api` | `StateMachine`, `StateMachineExecutor`, `StateMachineContext`, `StateKey`, sealed exceptions. |
+| `dispersion-fsm-core` | `com.github.f442y.dispersion.fsm.core` | `AtomicStateMachineBuilder`, `AtomicStateMachineExecutor`, `AdmissionController`. |
+| `dispersion-orchestration-api` | `com.github.f442y.dispersion.orchestration.api` | `CheckpointStore`, `SagaCommand`, `CommandEnvelope`, messaging & batching SPIs. |
+| `dispersion-orchestration-core` | `com.github.f442y.dispersion.orchestration.core` | `OrchestrationStateMachineBuilder`, `OrchestrationStepDriver`, parallel branches, batch runner. |
+| `dispersion-control-api` | `com.github.f442y.dispersion.control.api` | `ControlPlane` SPI, `MachineDescriptor`, `ExecutionSummary`, `SignalDeliveryResult`. |
+| `dispersion-control-core` | `com.github.f442y.dispersion.control.core` | `DefaultControlPlane` in-memory registry, event history replay, and signal routing. |
+| `dispersion-examples` | `com.github.f442y.dispersion.examples` | Reference test suites for 500-thread pipelines and distributed order sagas. |
 
 ---
 

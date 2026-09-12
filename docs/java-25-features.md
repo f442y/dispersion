@@ -43,7 +43,7 @@ classDiagram
 ```
 
 ```java
-import com.github.f442y.dispersion.exception.*;
+import com.github.f442y.dispersion.fsm.exception.*;
 
 try {
     executor.dispatchSync(input);
@@ -127,6 +127,8 @@ Dispersion makes heavy use of records (`CommandEnvelope`, `SignalDeliveryResult`
 
 ```java
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
+import java.time.Instant;
+import java.util.UUID;
 
 if (envelope instanceof CommandEnvelope(UUID id, Instant ts, PaymentSignal(String orderId, double amount))) {
     System.out.printf("Command %s processed payment for order %s: $%.2f%n", id, orderId, amount);
@@ -140,3 +142,17 @@ if (envelope instanceof CommandEnvelope(UUID id, Instant ts, PaymentSignal(Strin
 Dispersion applies `@NullMarked` and `@Nullable` annotations across all public API modules. This ensures:
 - Strict IDE and compiler static analysis checks against `NullPointerException`.
 - Seamless interoperability with Kotlin and modern Java static analyzers (e.g. NullAway, SpotBugs).
+
+---
+
+## 6. JPMS Modular Encapsulation
+
+Dispersion declares explicit `Automatic-Module-Name` headers across all jars in its `pom.xml` manifests, enabling clean `module-info.java` consumption in modular Java 25 applications with zero package overlap:
+
+```java
+module com.example.myapp {
+    requires com.github.f442y.dispersion.fsm.core;
+    requires com.github.f442y.dispersion.orchestration.core;
+    requires com.github.f442y.dispersion.control.core;
+}
+```

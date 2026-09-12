@@ -4,6 +4,11 @@ Orchestration state machines coordinate **long-running, durable, multi-turn dist
 
 Moreover, Orchestration machines provide **automated LIFO Saga compensation rollbacks**, **concurrent parallel fork-join execution**, and **resilient child machine retry loops**.
 
+> **Maven Coordinates:**
+> - Contract / API: `com.github.f442y.dispersion:dispersion-orchestration-api`
+> - Runtime / Core: `com.github.f442y.dispersion:dispersion-orchestration-core`
+> - Base FSM Primitives: `com.github.f442y.dispersion:dispersion-fsm-api`
+
 ---
 
 ## 1. The Turn-Based Execution Model
@@ -45,10 +50,10 @@ sequenceDiagram
 ## 2. Defining States, Context & Checkpoint Persistence
 
 ```java
-import com.github.f442y.dispersion.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.CheckpointStore;
-import com.github.f442y.dispersion.orchestration.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.state.StateKey;
+import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
 
 // 1. Declare States
 public enum OrderState implements StateKey {
@@ -82,9 +87,9 @@ CheckpointStore<OrderContext, OrderState> checkpointStore = new InMemoryCheckpoi
 Use `OrchestrationStateMachineBuilder` to configure your workflow:
 
 ```java
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
 
 OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
     OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderPipeline", OrderState.class)

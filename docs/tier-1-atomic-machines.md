@@ -8,6 +8,10 @@ Atomic state machines are ideal for:
 - Financial trade validation and order sizing.
 - Single-turn micro-workflows embedded as child machines inside Orchestration Sagas.
 
+> **Maven Coordinates:**
+> - Contract / API: `com.github.f442y.dispersion:dispersion-fsm-api`
+> - Runtime / Core: `com.github.f442y.dispersion:dispersion-fsm-core`
+
 ---
 
 ## 1. Defining States & Context
@@ -15,8 +19,8 @@ Atomic state machines are ideal for:
 All state definitions in Dispersion are type-safe enums implementing the `StateKey` interface. Context objects hold domain data and must implement `StateMachineContext`.
 
 ```java
-import com.github.f442y.dispersion.context.StateMachineContext;
-import com.github.f442y.dispersion.state.StateKey;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.state.StateKey;
 
 // 1. Declare State Keys as an Enum
 public enum PaymentState implements StateKey {
@@ -49,9 +53,9 @@ public record PaymentResult(String transactionId, double chargedAmount, String a
 Use `AtomicStateMachineBuilder` to assemble the topology, configure actions, map inputs, and extract outputs:
 
 ```java
-import com.github.f442y.dispersion.atomic.AtomicStateMachineBuilder;
-import com.github.f442y.dispersion.atomic.AtomicStateMachineExecutor;
-import com.github.f442y.dispersion.config.StateMachineConfiguration;
+import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
 import java.util.Set;
 
 StateMachineConfiguration<PaymentContext, PaymentState, PaymentRequest, PaymentResult> config =
@@ -172,8 +176,8 @@ AtomicStateMachineBuilder.<MyContext, MyState, In, Out>create(MyState.class)
 Buffer incoming virtual thread tasks to prevent memory exhaustion under burst traffic spikes:
 
 ```java
-import com.github.f442y.dispersion.executor.AdmissionController;
-import com.github.f442y.dispersion.executor.BufferedStateMachineExecutor;
+import com.github.f442y.dispersion.fsm.core.executor.AdmissionController;
+import com.github.f442y.dispersion.fsm.core.executor.BufferedStateMachineExecutor;
 
 // Buffer up to 10,000 tasks; reject immediately with BackpressureException if full
 AdmissionController admission = AdmissionController.rejectImmediately(10_000);

@@ -2,6 +2,11 @@
 
 In modern distributed systems, state machines must interact with external message brokers, survive network retries without double-processing side effects, and coordinate batches of items streaming in parallel. Dispersion provides native, broker-agnostic building blocks for these scenarios.
 
+> **Maven Coordinates:**
+> - Contract / API: `com.github.f442y.dispersion:dispersion-orchestration-api`
+> - Runtime / Core: `com.github.f442y.dispersion:dispersion-orchestration-core`
+> - Base FSM Primitives: `com.github.f442y.dispersion:dispersion-fsm-api`
+
 ---
 
 ## 1. Idempotent Command Processing & Deduplication
@@ -98,10 +103,10 @@ graph LR
 ### Outbound Publishing & Inbound Subscriptions
 
 ```java
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineExecutor;
-import com.github.f442y.dispersion.orchestration.messaging.InMemorySignalBroker;
-import com.github.f442y.dispersion.orchestration.messaging.SignalReceiver;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.messaging.InMemorySignalBroker;
+import com.github.f442y.dispersion.orchestration.core.messaging.SignalReceiver;
 
 // 1. Create a broker instance (InMemorySignalBroker for local testing or custom Kafka adapter)
 try (InMemorySignalBroker broker = new InMemorySignalBroker()) {
@@ -162,10 +167,11 @@ graph TD
 ### Batch Orchestration Example
 
 ```java
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationExecutor;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.state.StateKey;
+import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationExecutor;
+import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStateMachineBuilder;
 import java.util.List;
 
 public enum PalletState implements StateKey {
