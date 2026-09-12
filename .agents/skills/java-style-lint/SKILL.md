@@ -1,6 +1,6 @@
 ---
 name: java-style-lint
-description: "Audits Java code, files, or git diffs against strict project standards, identifying warning suppressions, generic catch blocks, var usage, wildcard imports, non-conforming generics, and non-structured logging, providing root-cause fixes."
+description: "Audit Java files or git diffs against repository coding standards. Use when the user explicitly asks to audit, lint, or verify Java style compliance."
 ---
 
 # Java Style Lint & Audit Skill

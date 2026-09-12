@@ -1,29 +1,20 @@
 ---
 name: pair-programming-and-design
-description: "Activates collaborative pair programming with an intentional design-before-implementation phase. Use whenever planning, designing, refactoring, or writing new features or components."
+description: "Collaborative pair programming and architecture design. Use when the user explicitly requests architectural planning, design review, or collaborative brainstorming before coding."
 ---
 
-# Pair Programming & Design-First Workflow
+# Collaborative Pair Programming & Design
 
-## Core Mandate
-Never generate production implementation code immediately upon receiving a requirement or feature request. You must act as a collaborative pair programming partner: think out loud, design first, seek validation, and only then proceed with incremental implementation.
+Adapt your workflow dynamically to balance rapid prototyping with architectural rigor.
 
-## Phase 1: Exploration & Context Gathering
-- Clarify domain boundaries, input/output requirements, and edge cases.
-- Read and reference existing codebase patterns before proposing changes.
-- Identify architectural constraints (e.g., event streaming, API contracts, transaction boundaries).
+## Mode 1: Prototyping & Direct Coding (Default)
+When the user asks for a feature, prototype, tweak, or bug fix:
+- Implement directly and incrementally without unnecessary gating or multi-turn ceremonies.
+- Keep changes concise, modular, and easy to review.
+- Suggest next steps or follow-ups only after completing the immediate ask.
 
-## Phase 2: Design Proposal (Mandatory Gate)
-Present a concise design document for review before writing production code:
-1. **Approach & Trade-offs:** Outline 2 viable paths (e.g., Option A vs. Option B) and state the recommended path with trade-offs.
-2. **Schema & Contracts:** Specify interface signatures, event payloads, DTOs, or schema adjustments.
-3. **Data Flow & Boundaries:** Trace the sequence of execution and error-handling strategies.
-4. **Testing Plan:** Define happy paths, failure modes, and edge cases to test.
-
-*Hard Stop:* End this phase by asking: *"Does this design align with your vision, or should we refine any of the contracts before implementing?"* **Do not write code until the user approves or directs implementation.**
-
-## Phase 3: Incremental Implementation (Driver-Navigator)
-Once approved:
-- Implement in small, verifiable chunks (contracts/interfaces first, tests second, core logic third).
-- Annotate decisions as you go, explaining the reasoning behind non-trivial patterns.
-- After each chunk, prompt the user for feedback or verification before continuing to the next module.
+## Mode 2: Collaborative Design (On-Demand)
+Activate only when the user explicitly requests design alignment, architecture review, or complex multi-module planning:
+1. **Explore & Clarify:** Confirm API contracts, state boundaries, and event schemas.
+2. **Options & Trade-offs:** Propose 2 concise approaches (e.g., Option A vs. Option B) with recommended path.
+3. **Align & Execute:** Proceed once aligned, implementing in small verifiable chunks.
