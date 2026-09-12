@@ -91,6 +91,7 @@
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
         <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+        <test.excludedGroups>LongRunningTests, Playground</test.excludedGroups>
     </properties>
 
     <dependencyManagement>
@@ -260,7 +261,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven-surefire-plugin.version}</version>
                     <configuration>
-                        <excludedGroups>LongRunningTests, Playground</excludedGroups>
+                        <excludedGroups>${test.excludedGroups}</excludedGroups>
                     </configuration>
                 </plugin>
                 <plugin>

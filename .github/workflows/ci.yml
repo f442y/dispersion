@@ -5,10 +5,15 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    name: Java 25 Test Matrix (${{ matrix.os }})
+  build-and-test:
+    name: Java 25 Matrix (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -26,10 +31,38 @@ jobs:
           distribution: 'zulu'
           cache: 'maven'
 
-      - name: Build & Verify with Maven
-        run: ./mvnw clean verify
+      - name: Ensure Maven Wrapper Executable
         if: runner.os != 'Windows'
+        run: chmod +x mvnw
 
-      - name: Build & Verify with Maven (Windows)
-        run: .\mvnw.cmd clean verify
+      - name: Build & Package Reactor (Linux)
+        if: runner.os != 'Windows'
+        run: ./mvnw install -DskipTests -B -ntp -T 1C
+
+      - name: Build & Package Reactor (Windows)
         if: runner.os == 'Windows'
+        run: .\mvnw.cmd install -DskipTests -B -ntp -T 1C
+
+      - name: Run Unit Tests (Linux)
+        if: runner.os != 'Windows'
+        run: ./mvnw test -pl '!examples' -B -ntp -T 1C
+
+      - name: Run Unit Tests (Windows)
+        if: runner.os == 'Windows'
+        run: .\mvnw.cmd test -pl "!examples" -B -ntp -T 1C
+
+      - name: Run Integration Tests (Linux)
+        if: runner.os != 'Windows'
+        run: ./mvnw test -pl examples -B -ntp -T 1C
+
+      - name: Run Integration Tests (Windows)
+        if: runner.os == 'Windows'
+        run: .\mvnw.cmd test -pl examples -B -ntp -T 1C
+
+      - name: Upload Surefire Test Reports on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-${{ matrix.os }}
+          path: '**/target/surefire-reports/*'
+          if-no-files-found: ignore

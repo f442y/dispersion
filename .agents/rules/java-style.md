@@ -4,40 +4,45 @@ trigger: always_on
 
 # Java Coding & Architectural Guidelines
 
-Adhere strictly to these conventions when generating, refactoring, or reviewing Java code.
+Adhere strictly to these conventions when generating, refactoring, or proposing Java code.
 
 ---
 
-### 1. Imports & Formatting
-* **No Wildcards:** Never use wildcard (`*`) imports. Specify every class explicitly (e.g., `import java.util.List;`).
-* **No Inline FQCN:** Do not reference fully-qualified class names in method bodies or signatures. Place all imports at the top of the file.
+### 1. Import Rules
+* **No Wildcards:** Never use wildcard (`*`) imports under any circumstance. Declare every class import explicitly (e.g., `import java.util.List;`, not `import java.util.*;`).
+* **No Inline FQCN:** Do not use fully qualified class names inside method bodies, field declarations, or signatures (e.g., avoid `java.time.Instant.now()`). Add explicit imports at the top of the file.
 
 ---
 
 ### 2. Typing, Variables & Generics
-* **No `var`:** Do NOT use the `var` keyword. Explicitly declare all variable and parameter types.
-* **Full-Word Generics:** Single-letter generic identifiers (like `<T>`, `<E>`, `<K, V>`) are strictly forbidden.
-* **Generic Casing:** Generic parameters must be descriptive and formatted in `SCREAMING_SNAKE_CASE` (e.g., `<ENTITY_TYPE>`, `<EVENT_PAYLOAD>`, `<COMMAND_OBJECT>`).
+* **No `var`:** Never use the `var` keyword. Explicitly declare all variable types (e.g., `List<String> items = new ArrayList<>();`).
+* **Full-Word Generics:** Single-letter generic identifiers (`<T>`, `<E>`, `<K, V>`) are strictly forbidden.
+* **SCREAMING_SNAKE_CASE Generics:** All generic type parameters must be descriptive, multi-word names formatted in uppercase snake case (e.g., `<ENTITY_TYPE>`, `<EVENT_PAYLOAD>`, `<COMMAND_OBJECT>`).
 
 ---
 
-### 3. Modern Java Idioms
-* **Data Modeling:** Default to `record` types for all DTOs, value objects, Kafka event payloads, and command envelopes.
-* **Domain Hierarchies:** Use `sealed interface` or `sealed class` with explicit `permits` for closed sets of events, states, or commands.
-* **Pattern Matching:** Use modern pattern matching for `instanceof` and modern `switch` expressions with arrow (`->`) syntax. Avoid `switch` statements with `break`.
-* **Collections:** Use immutable factory methods (`List.of()`, `Set.of()`, `Map.of()`) and `Stream.toList()`. Never return `null` for collections.
-* **Text Blocks:** Use text blocks (`""" ... """`) for multi-line strings, SQL queries, or JSON templates.
-* **Time API:** Use `java.time` types (`Instant`, `OffsetDateTime`, `LocalDate`). Never use `Date` or `Calendar`.
+### 3. Warning Remediation (Zero Suppressions)
+* **Never Suppress Warnings:** Never use `@SuppressWarnings` annotations (e.g., `"unchecked"`, `"rawtypes"`, `"deprecation"`, `"unused"`, `"all"`), and never add suppression comments (e.g., `// NOSONAR`, `// CHECKSTYLE:OFF`).
+* **Resolve Root Causes:** Always resolve underlying compiler issues directly:
+  * Parameterize raw types properly.
+  * Update deprecated calls to current replacements.
+  * Remove dead/unused variables or refactor signatures.
+  * Implement explicit null checks or use `try-with-resources`.
 
 ---
 
-### 4. Structured Logging
-* **SLF4J Fluent API:** Use the SLF4J fluent logging API (`log.atInfo()`, `log.atError()`, etc.) for all log statements.
-* **Key-Value Attributes:** Attach contextual metadata using `.addKeyValue("key_name", value)` using snake_case keys. Do not bury structured contextual data in the free-text message.
-* **Example:**
+### 4. Exception Handling
+* **Never Catch Generic Exceptions:** Never catch `Throwable`, `Exception`, or `RuntimeException`.
+* **Catch Specific Exceptions:** Inspect the operations inside the `try` block and catch only the narrow exceptions declared or thrown (e.g., `catch (IOException ex)`).
+* **Multi-Catch Syntax:** Use Java multi-catch (`catch (IOException | TimeoutException ex)`) when multiple concrete exceptions share identical remediation.
+* **Preserve Stack Traces:** Never swallow exceptions. Wrap in a domain exception preserving the cause (`throw new OrderProcessingException("...", ex)`) or log structured error keys.
+
+---
+
+### 5. Logging & Modern Conventions
+* **Structured Fluent Logging:** Use the SLF4J fluent API (`log.atInfo()`, `log.atError()`) with key-value pairs:
   ```java
   log.atInfo()
-     .addKeyValue("transaction_id", transactionId)
+     .addKeyValue("order_id", orderId)
      .addKeyValue("account_id", accountId)
-     .addKeyValue("event_type", "FUNDS_TRANSFERRED")
-     .log("Funds transfer executed successfully");
+     .log("Order processed successfully");
