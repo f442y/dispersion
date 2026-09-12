@@ -57,6 +57,7 @@
         <!-- Project Versioning (CI Friendly) -->
         <revision>0.1.0${changelist}</revision>
         <changelist>-SNAPSHOT</changelist>
+        <flatten.skip>false</flatten.skip>
 
         <!-- Java Runtime & Encoding -->
         <java.version>25</java.version>
@@ -233,6 +234,7 @@
                     <artifactId>flatten-maven-plugin</artifactId>
                     <version>${flatten-maven-plugin.version}</version>
                     <configuration>
+                        <skip>${flatten.skip}</skip>
                         <updatePomFile>true</updatePomFile>
                         <flattenMode>resolveCiFriendliesOnly</flattenMode>
                     </configuration>
