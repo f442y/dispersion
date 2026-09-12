@@ -1,8 +1,11 @@
 package com.github.f442y.dispersion.orchestration.core;
 
+import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.fsm.config.InputFunction;
+import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.fsm.core.builder.AbstractStateMachineBuilder;
+import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
 import com.github.f442y.dispersion.fsm.state.Action;
 import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
@@ -25,10 +28,13 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
@@ -46,16 +52,115 @@ public class OrchestrationStateMachineBuilder<
         CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
         INPUT,
-        OUTPUT> extends AbstractStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT,
-        OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT>> {
+        OUTPUT> {
+
+    protected final Class<STATE_KEY> stateKeyClass;
+    protected final Map<STATE_KEY, State<CONTEXT, STATE_KEY>> states;
+    protected String machineName;
+    protected STATE_KEY initialState;
+    protected final Set<STATE_KEY> endStates;
+    protected int maxTransitions = -1;
+    protected StateMachineContextFactory<CONTEXT> contextFactory;
+    protected InputFunction<CONTEXT, INPUT> inputFunction;
+    protected OutputFunction<CONTEXT, OUTPUT> outputFunction;
+    protected BiConsumer<CONTEXT, Throwable> exceptionTrigger;
+    protected Consumer<CONTEXT> finishTrigger;
+    protected ExecutionEventListener eventListener;
 
     private Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener;
     private Function<CONTEXT, String> correlationKeyExtractor;
     private CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
 
     private OrchestrationStateMachineBuilder(@NonNull String machineName, @NonNull Class<STATE_KEY> stateKeyClass) {
-        super(stateKeyClass);
         this.machineName = Objects.requireNonNull(machineName, "machineName must not be null");
+        this.stateKeyClass = Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
+        this.states = new EnumMap<>(stateKeyClass);
+        this.endStates = EnumSet.noneOf(stateKeyClass);
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> name(@NonNull String name) {
+        this.machineName = Objects.requireNonNull(name, "name must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> eventListener(@NonNull ExecutionEventListener eventListener) {
+        this.eventListener = Objects.requireNonNull(eventListener, "eventListener must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> context(@NonNull StateMachineContextFactory<CONTEXT> factory) {
+        this.contextFactory = Objects.requireNonNull(factory, "factory must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> initialState(@NonNull STATE_KEY initialState) {
+        this.initialState = Objects.requireNonNull(initialState, "initialState must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endState(@NonNull STATE_KEY endState) {
+        Objects.requireNonNull(endState, "endState must not be null");
+        this.endStates.add(endState);
+        return this;
+    }
+
+    @NonNull
+    @SafeVarargs
+    public final OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endStates(@NonNull STATE_KEY... endStates) {
+        for (STATE_KEY s : endStates) {
+            endState(s);
+        }
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endStates(@NonNull Set<STATE_KEY> endStates) {
+        Objects.requireNonNull(endStates, "endStates must not be null");
+        this.endStates.addAll(endStates);
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> maxTransitions(int maxTransitions) {
+        this.maxTransitions = maxTransitions;
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> input(@NonNull InputFunction<CONTEXT, INPUT> inputFunction) {
+        this.inputFunction = Objects.requireNonNull(inputFunction, "inputFunction must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> output(@NonNull OutputFunction<CONTEXT, OUTPUT> outputFunction) {
+        this.outputFunction = Objects.requireNonNull(outputFunction, "outputFunction must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onException(@NonNull BiConsumer<CONTEXT, Throwable> exceptionTrigger) {
+        this.exceptionTrigger = Objects.requireNonNull(exceptionTrigger, "exceptionTrigger must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onFinish(@NonNull Consumer<CONTEXT> finishTrigger) {
+        this.finishTrigger = Objects.requireNonNull(finishTrigger, "finishTrigger must not be null");
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> addState(@NonNull STATE_KEY stateKey, @NonNull State<CONTEXT, STATE_KEY> state) {
+        Objects.requireNonNull(stateKey, "stateKey must not be null");
+        Objects.requireNonNull(state, "state must not be null");
+        this.states.put(stateKey, state);
+        return this;
     }
 
     @NonNull

@@ -7,7 +7,6 @@ import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
-import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
 import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
@@ -41,6 +40,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -531,7 +531,7 @@ public final class OrchestrationStepDriver {
                     }
                     childResult = turn.output();
                 } else {
-                    childResult = AbstractStateMachineCallable.executeDirect(null, childConfig, null, childInput);
+                    childResult = executeChildStateMachineDirect(childConfig, childInput);
                 }
 
                 BiFunction<CONTEXT, Object, CONTEXT> outputMerger = orchState.childOutputMerger();
@@ -564,6 +564,128 @@ public final class OrchestrationStepDriver {
                 Thread.ofVirtual().name("child-orch-", 0).factory()
         )) {
             return executeTurn(childMachineId, childConfig, null, (CI) childInput, childExecutor);
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static <CC extends StateMachineContext, CS extends Enum<CS> & StateKey, CI, CO>
+    CO executeChildStateMachineDirect(
+            @NonNull StateMachineConfiguration<CC, CS, CI, CO> childConfig,
+            @Nullable Object childInput
+    ) throws Exception {
+        StateMap<CC, CS> stateMap = childConfig.getStateMap();
+        CC context = null;
+        StateMachineContextFactory<CC> factory = childConfig.stateMachineContextFactory();
+        if (factory != null) {
+            context = factory.newInstance();
+        }
+        if (context == null) {
+            throw new IllegalStateException("StateMachine execution failed: Context is null and no contextFactory is configured");
+        }
+
+        InputFunction<CC, CI> inputFn = childConfig.inputFunction();
+        if (inputFn != null) {
+            context = inputFn.apply(context, (CI) childInput);
+        }
+
+        ExecutionEventListener eventListener = childConfig.eventListener();
+        UUID childExecId = (eventListener != null) ? UUID.randomUUID() : null;
+        long turnStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
+
+        if (eventListener != null) {
+            safeNotify(eventListener, new ExecutionEvent.TurnStartedEvent(
+                    childExecId,
+                    childConfig.getMachineName(),
+                    null,
+                    Instant.now()
+            ));
+        }
+
+        CS currentStateKey = stateMap.getInitialState();
+        int totalTransitions = 0;
+        int maxTransitions = childConfig.getMaxTransitions();
+
+        try {
+            while (currentStateKey != null) {
+                int ordinal = currentStateKey.ordinal();
+                if (maxTransitions > 0 && totalTransitions >= maxTransitions) {
+                    throw new IllegalStateException("Max transitions exceeded: " + maxTransitions);
+                }
+                if (stateMap.isEndStateFast(ordinal)) {
+                    break;
+                }
+                State<CC, CS> state = stateMap.getStateFast(ordinal);
+
+                if (eventListener != null) {
+                    safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
+                            childExecId,
+                            childConfig.getMachineName(),
+                            currentStateKey.name(),
+                            Instant.now()
+                    ));
+                }
+                long stateStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
+
+                context = state.action().execute(context);
+
+                if (eventListener != null) {
+                    safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
+                            childExecId,
+                            childConfig.getMachineName(),
+                            currentStateKey.name(),
+                            Duration.ofNanos(System.nanoTime() - stateStartNanos),
+                            Instant.now()
+                    ));
+                }
+
+                CS nextStateKey = state.transition().nextState(context);
+
+                if (eventListener != null && nextStateKey != null) {
+                    safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
+                            childExecId,
+                            childConfig.getMachineName(),
+                            currentStateKey.name(),
+                            nextStateKey.name(),
+                            Instant.now()
+                    ));
+                }
+
+                totalTransitions++;
+                currentStateKey = nextStateKey;
+            }
+
+            if (eventListener != null) {
+                safeNotify(eventListener, new ExecutionEvent.TurnCompletedEvent(
+                        childExecId,
+                        childConfig.getMachineName(),
+                        (currentStateKey != null) ? currentStateKey.name() : null,
+                        null,
+                        Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                        Instant.now()
+                ));
+            }
+
+            Consumer<CC> finishTrigger = childConfig.stateMachineFinishTrigger();
+            if (finishTrigger != null) {
+                finishTrigger.accept(context);
+            }
+
+            OutputFunction<CC, CO> outputFn = childConfig.outputFunction();
+            return (outputFn != null) ? outputFn.apply(context) : null;
+        } catch (Throwable t) {
+            if (eventListener != null) {
+                safeNotify(eventListener, new ExecutionEvent.TurnFailedEvent(
+                        childExecId,
+                        childConfig.getMachineName(),
+                        (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
+                        t,
+                        null,
+                        Duration.ofNanos(System.nanoTime() - turnStartNanos),
+                        Instant.now()
+                ));
+            }
+            if (t instanceof Exception e) throw e;
+            throw new RuntimeException(t);
         }
     }
 
