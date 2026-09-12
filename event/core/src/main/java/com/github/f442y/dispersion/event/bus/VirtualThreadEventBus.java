@@ -136,9 +136,9 @@ public class VirtualThreadEventBus implements EventBus {
 
     @Override
     @NonNull
-    public <E extends ExecutionEvent> Subscription subscribe(
-            @NonNull Class<E> eventType,
-            @NonNull Consumer<E> listener
+    public <EVENT_TYPE extends ExecutionEvent> Subscription subscribe(
+            @NonNull Class<EVENT_TYPE> eventType,
+            @NonNull Consumer<EVENT_TYPE> listener
     ) {
         Objects.requireNonNull(eventType, "eventType must not be null");
         Objects.requireNonNull(listener, "listener must not be null");
@@ -169,7 +169,7 @@ public class VirtualThreadEventBus implements EventBus {
 
     @Override
     @NonNull
-    public <E extends ExecutionEvent> EventStream openStream(@NonNull Class<E> eventType) {
+    public <EVENT_TYPE extends ExecutionEvent> EventStream openStream(@NonNull Class<EVENT_TYPE> eventType) {
         Objects.requireNonNull(eventType, "eventType must not be null");
         return openStream(streamDefaultCapacity, eventType::isInstance);
     }
@@ -285,7 +285,9 @@ public class VirtualThreadEventBus implements EventBus {
                     break;
                 }
             } catch (Throwable t) {
-                log.error("Unexpected error in event bus worker loop", t);
+                log.atError()
+                        .setCause(t)
+                        .log("Unexpected error in event bus worker loop");
             }
         }
 
@@ -322,7 +324,10 @@ public class VirtualThreadEventBus implements EventBus {
                     deliveredCount.incrementAndGet();
                 }
             } catch (Throwable t) {
-                log.error("Error executing listener for event [{}]: {}", event.getClass().getSimpleName(), t.getMessage(), t);
+                log.atError()
+                        .setCause(t)
+                        .addKeyValue("event_type", event.getClass().getSimpleName())
+                        .log("Error executing listener for event");
             }
         }
 
@@ -335,7 +340,10 @@ public class VirtualThreadEventBus implements EventBus {
                     droppedCount.incrementAndGet();
                 }
             } catch (Throwable t) {
-                log.error("Error delivering event to stream: {}", t.getMessage(), t);
+                log.atError()
+                        .setCause(t)
+                        .addKeyValue("event_type", event.getClass().getSimpleName())
+                        .log("Error delivering event to stream");
             }
         }
     }

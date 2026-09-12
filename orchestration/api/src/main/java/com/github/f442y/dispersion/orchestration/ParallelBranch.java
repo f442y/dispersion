@@ -23,17 +23,17 @@ public record ParallelBranch<CONTEXT extends StateMachineContext>(
         Objects.requireNonNull(action, "action must not be null");
     }
 
-    public static <C extends StateMachineContext> ParallelBranch<C> of(
+    public static <CONTEXT extends StateMachineContext> ParallelBranch<CONTEXT> of(
             @NonNull String name,
-            @NonNull Action<C> action
+            @NonNull Action<CONTEXT> action
     ) {
         return new ParallelBranch<>(name, action, null);
     }
 
-    public static <C extends StateMachineContext> ParallelBranch<C> of(
+    public static <CONTEXT extends StateMachineContext> ParallelBranch<CONTEXT> of(
             @NonNull String name,
-            @NonNull Action<C> action,
-            @Nullable CompensationAction<C> compensationAction
+            @NonNull Action<CONTEXT> action,
+            @Nullable CompensationAction<CONTEXT> compensationAction
     ) {
         return new ParallelBranch<>(name, action, compensationAction);
     }

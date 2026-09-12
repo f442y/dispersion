@@ -6,6 +6,8 @@ import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.control.core.DefaultControlPlane;
+import com.github.f442y.dispersion.control.test.FakeInspectableMachine;
+import com.github.f442y.dispersion.event.test.RecordingEventBus;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
@@ -30,7 +32,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -297,8 +298,8 @@ public class ControlPlaneIntegrationExampleTests {
     @Test
     @DisplayName("Should demonstrate DispersionTestKit fluent facade for quick testing")
     void testTestKitUsage() {
-        var recordingBus = DispersionTestKit.recordingEventBus();
-        var fakeMachine = DispersionTestKit.fakeInspectableMachine("KitMachine", MachineType.ORCHESTRATION);
+        RecordingEventBus recordingBus = DispersionTestKit.recordingEventBus();
+        FakeInspectableMachine fakeMachine = DispersionTestKit.fakeInspectableMachine("KitMachine", MachineType.ORCHESTRATION);
 
         controlPlane.register(fakeMachine);
         controlPlane.attachTo(recordingBus);

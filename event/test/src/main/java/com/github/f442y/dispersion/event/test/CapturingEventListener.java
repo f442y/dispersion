@@ -30,11 +30,11 @@ public class CapturingEventListener implements ExecutionEventListener {
 
     @SuppressWarnings("unchecked")
     @NonNull
-    public <E extends ExecutionEvent> List<E> eventsOfType(@NonNull Class<E> type) {
+    public <EVENT_TYPE extends ExecutionEvent> List<EVENT_TYPE> eventsOfType(@NonNull Class<EVENT_TYPE> type) {
         Objects.requireNonNull(type, "type must not be null");
         return events.stream()
                 .filter(type::isInstance)
-                .map(e -> (E) e)
+                .map(event -> (EVENT_TYPE) event)
                 .toList();
     }
 

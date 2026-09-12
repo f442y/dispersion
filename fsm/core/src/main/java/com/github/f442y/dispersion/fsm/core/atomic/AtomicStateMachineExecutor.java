@@ -9,6 +9,7 @@ import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.executor.AdmissionController;
 import com.github.f442y.dispersion.fsm.core.executor.BufferedStateMachineExecutor;
 import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.fsm.state.StateMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -73,7 +74,7 @@ public class AtomicStateMachineExecutor<
     @NonNull
     public InspectableMachine asInspectableMachine() {
         String machineName = getName();
-        var stateMap = getConfiguration().getStateMap();
+        StateMap<CONTEXT, STATE_KEY> stateMap = getConfiguration().getStateMap();
         String initialState = stateMap.getInitialState().name();
         Set<String> endStates = stateMap.getEndStates().stream()
                 .map(Enum::name)

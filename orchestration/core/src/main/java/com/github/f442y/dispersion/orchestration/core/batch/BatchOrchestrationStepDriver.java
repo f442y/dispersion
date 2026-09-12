@@ -143,7 +143,10 @@ public final class BatchOrchestrationStepDriver {
 
         if (itemSignal instanceof CommandEnvelope<?> env) {
             if (processedCommandIds.contains(env.commandId())) {
-                log.info("Ignoring duplicate command [{}] for batch [{}]", env.commandId(), checkpoint.batchKey());
+                log.atInfo()
+                        .addKeyValue("command_id", env.commandId())
+                        .addKeyValue("batch_key", checkpoint.batchKey())
+                        .log("Ignoring duplicate command for batch");
                 OUTPUT out = (config.outputFunction != null) ? config.outputFunction.apply(checkpoint.batchContext()) : null;
                 return new BatchTurnResult<>(
                         checkpoint.batchId(),
@@ -292,7 +295,11 @@ public final class BatchOrchestrationStepDriver {
                         }
                     } catch (Throwable t) {
                         failures.add(t);
-                        log.error("Batch [{}] Item [{}] failed: {}", batchKey, itemKey, t.getMessage(), t);
+                        log.atError()
+                                .addKeyValue("batch_key", batchKey)
+                                .addKeyValue("item_key", itemKey)
+                                .setCause(t)
+                                .log("Batch item execution failed");
                     }
                     return moved;
                 }));

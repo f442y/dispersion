@@ -10,12 +10,12 @@ import java.util.UUID;
  * Idempotency envelope wrapping a {@link SignalCommand} with a unique message/command ID
  * to guarantee exactly-once processing semantics across network retries and webhook redeliveries.
  *
- * @param <C> The concrete {@link SignalCommand} type
+ * @param <COMMAND_TYPE> The concrete {@link SignalCommand} type
  */
-public record CommandEnvelope<C extends SignalCommand>(
+public record CommandEnvelope<COMMAND_TYPE extends SignalCommand>(
         @NonNull UUID commandId,
         @NonNull Instant timestamp,
-        @NonNull C command
+        @NonNull COMMAND_TYPE command
 ) {
 
     public CommandEnvelope {
@@ -25,15 +25,15 @@ public record CommandEnvelope<C extends SignalCommand>(
     }
 
     @NonNull
-    public static <CMD extends SignalCommand> CommandEnvelope<CMD> of(
+    public static <COMMAND_TYPE extends SignalCommand> CommandEnvelope<COMMAND_TYPE> of(
             @NonNull UUID commandId,
-            @NonNull CMD command
+            @NonNull COMMAND_TYPE command
     ) {
         return new CommandEnvelope<>(commandId, Instant.now(), command);
     }
 
     @NonNull
-    public static <CMD extends SignalCommand> CommandEnvelope<CMD> of(@NonNull CMD command) {
+    public static <COMMAND_TYPE extends SignalCommand> CommandEnvelope<COMMAND_TYPE> of(@NonNull COMMAND_TYPE command) {
         return new CommandEnvelope<>(UUID.randomUUID(), Instant.now(), command);
     }
 }

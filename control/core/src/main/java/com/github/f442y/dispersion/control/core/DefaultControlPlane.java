@@ -5,7 +5,6 @@ import com.github.f442y.dispersion.control.ExecutionStatus;
 import com.github.f442y.dispersion.control.ExecutionSummary;
 import com.github.f442y.dispersion.control.InspectableMachine;
 import com.github.f442y.dispersion.control.MachineDescriptor;
-import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventStream;
@@ -28,7 +27,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -131,7 +129,9 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         Objects.requireNonNull(machine, "machine must not be null");
         String name = machine.descriptor().name();
         machines.put(name, machine);
-        log.info("Registered InspectableMachine [{}] in Control Plane", name);
+        log.atInfo()
+                .addKeyValue("machine_name", name)
+                .log("Registered InspectableMachine in Control Plane");
         return this;
     }
 

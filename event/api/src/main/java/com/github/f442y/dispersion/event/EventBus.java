@@ -45,13 +45,13 @@ public interface EventBus extends ExecutionEventListener, AutoCloseable {
      *
      * @param eventType The specific event class (e.g. {@code TurnFailedEvent.class})
      * @param listener  The consumer callback receiving instances of type {@code E}
-     * @param <E>       The concrete event type
+     * @param <EVENT_TYPE> The concrete event type
      * @return A {@link Subscription} handle to unsubscribe
      */
     @NonNull
-    <E extends ExecutionEvent> Subscription subscribe(
-            @NonNull Class<E> eventType,
-            @NonNull Consumer<E> listener
+    <EVENT_TYPE extends ExecutionEvent> Subscription subscribe(
+            @NonNull Class<EVENT_TYPE> eventType,
+            @NonNull Consumer<EVENT_TYPE> listener
     );
 
     /**
@@ -84,11 +84,11 @@ public interface EventBus extends ExecutionEventListener, AutoCloseable {
      * Opens a strongly-typed pull-based {@link EventStream} receiving only events of the specified type.
      *
      * @param eventType The event record class
-     * @param <E>       The concrete event type
+     * @param <EVENT_TYPE> The concrete event type
      * @return An open {@link EventStream}
      */
     @NonNull
-    <E extends ExecutionEvent> EventStream openStream(@NonNull Class<E> eventType);
+    <EVENT_TYPE extends ExecutionEvent> EventStream openStream(@NonNull Class<EVENT_TYPE> eventType);
 
     /**
      * Retrieves up to {@code limit} recent events recorded in the in-memory circular replay buffer,

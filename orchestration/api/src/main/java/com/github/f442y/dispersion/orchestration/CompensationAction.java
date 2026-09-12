@@ -24,13 +24,13 @@ public interface CompensationAction<CONTEXT extends StateMachineContext> {
     /**
      * Returns a no-op compensation action that returns the context unchanged.
      *
-     * @param <C> The context type
+     * @param <CONTEXT> The context type
      * @return A no-op {@link CompensationAction}
      */
     @NonNull
     @SuppressWarnings("unchecked")
-    static <C extends StateMachineContext> CompensationAction<C> noop() {
-        return (CompensationAction<C>) NoopCompensationAction.INSTANCE;
+    static <CONTEXT extends StateMachineContext> CompensationAction<CONTEXT> noop() {
+        return (CompensationAction<CONTEXT>) NoopCompensationAction.INSTANCE;
     }
 
     /**

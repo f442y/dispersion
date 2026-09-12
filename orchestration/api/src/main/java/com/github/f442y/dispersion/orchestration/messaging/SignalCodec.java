@@ -19,12 +19,12 @@ public interface SignalCodec {
     /**
      * Deserializes bytes back to the target payload class.
      *
-     * @param <T>         The target type
-     * @param bytes       The serialized byte array
-     * @param targetClass The target class
+     * @param <PAYLOAD_TYPE> The target type
+     * @param bytes          The serialized byte array
+     * @param targetClass    The target class
      * @return Deserialized object
      * @throws Exception If deserialization fails
      */
     @NonNull
-    <T> T decode(byte @NonNull [] bytes, @NonNull Class<T> targetClass) throws Exception;
+    <PAYLOAD_TYPE> PAYLOAD_TYPE decode(byte @NonNull [] bytes, @NonNull Class<PAYLOAD_TYPE> targetClass) throws Exception;
 }

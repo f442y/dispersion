@@ -38,8 +38,11 @@ public class SignalReceiver implements SignalConsumer {
     public CompletableFuture<OrchestrationTurnResult<?, ?, ?>> onMessage(@NonNull SignalMessage message) {
         Objects.requireNonNull(message, "message must not be null");
 
-        log.debug("Processing signal message [{}] (signal: {}, corr: {})",
-                message.messageId(), message.signalName(), message.correlationKey());
+        log.atDebug()
+                .addKeyValue("message_id", message.messageId())
+                .addKeyValue("signal_name", message.signalName())
+                .addKeyValue("correlation_key", message.correlationKey())
+                .log("Processing signal message");
 
         try {
             Object payload = message.payload();
@@ -72,7 +75,10 @@ public class SignalReceiver implements SignalConsumer {
             return failed;
 
         } catch (Throwable t) {
-            log.error("Error routing SignalMessage [{}]", message.messageId(), t);
+            log.atError()
+                    .addKeyValue("message_id", message.messageId())
+                    .setCause(t)
+                    .log("Error routing signal message");
             CompletableFuture<OrchestrationTurnResult<?, ?, ?>> failed = new CompletableFuture<>();
             failed.completeExceptionally(t);
             return failed;

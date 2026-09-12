@@ -181,9 +181,10 @@ public abstract class AbstractStateMachineCallable<
 
                 // 2. Fast $O(1)$ terminal end-state check (1 CPU instruction)
                 if (stateMap.isEndStateFast(ordinal)) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("[{}] Reached terminal state [{}]", executionId, currentStateKey);
-                    }
+                    log.atDebug()
+                            .addKeyValue("execution_id", executionId)
+                            .addKeyValue("terminal_state", currentStateKey.name())
+                            .log("Reached terminal state");
                     break;
                 }
 
@@ -198,10 +199,12 @@ public abstract class AbstractStateMachineCallable<
                         if (currentCount > maxVisits) {
                             STATE_KEY fallback = currentState.maxVisitsFallback();
                             if (fallback != null) {
-                                if (log.isWarnEnabled()) {
-                                    log.warn("[{}] State [{}] exceeded visit limit ({}); diverting to fallback [{}]",
-                                            executionId, currentStateKey, maxVisits, fallback);
-                                }
+                                log.atWarn()
+                                        .addKeyValue("execution_id", executionId)
+                                        .addKeyValue("state", currentStateKey.name())
+                                        .addKeyValue("max_visits", maxVisits)
+                                        .addKeyValue("fallback_state", fallback.name())
+                                        .log("State exceeded visit limit; diverting to fallback");
                                 currentStateKey = fallback;
                                 continue;
                             } else {
@@ -317,7 +320,10 @@ public abstract class AbstractStateMachineCallable<
                 try {
                     exceptionTrigger.accept(context, t);
                 } catch (Throwable triggerEx) {
-                    log.error("[{}] Exception in stateMachineExceptionTrigger callback", executionId, triggerEx);
+                    log.atError()
+                            .setCause(triggerEx)
+                            .addKeyValue("execution_id", executionId)
+                            .log("Exception in stateMachineExceptionTrigger callback");
                 }
             }
 
@@ -332,7 +338,10 @@ public abstract class AbstractStateMachineCallable<
         try {
             listener.onEvent(event);
         } catch (Throwable t) {
-            log.error("ExecutionEventListener [{}] threw exception: {}", listener.getClass().getName(), t.getMessage(), t);
+            log.atError()
+                    .setCause(t)
+                    .addKeyValue("listener_class", listener.getClass().getName())
+                    .log("ExecutionEventListener threw exception");
         }
     }
 }

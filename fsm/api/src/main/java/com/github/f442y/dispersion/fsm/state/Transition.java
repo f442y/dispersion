@@ -30,13 +30,13 @@ public interface Transition<CONTEXT extends StateMachineContext, STATE_KEY exten
     /**
      * Creates an unconditional transition that always resolves to the specified target state key.
      *
-     * @param <C>       The concrete type of {@link StateMachineContext}
-     * @param <S>       The state identifier type
-     * @param nextState The deterministic target state key
+     * @param <CONTEXT>   The concrete type of {@link StateMachineContext}
+     * @param <STATE_KEY> The state identifier type
+     * @param nextState   The deterministic target state key
      * @return A {@link Transition} always resolving to {@code nextState}
      */
     @NonNull
-    static <C extends StateMachineContext, S extends StateKey> Transition<C, S> to(@NonNull S nextState) {
+    static <CONTEXT extends StateMachineContext, STATE_KEY extends StateKey> Transition<CONTEXT, STATE_KEY> to(@NonNull STATE_KEY nextState) {
         Objects.requireNonNull(nextState, "nextState must not be null");
         return _ -> nextState;
     }
@@ -44,18 +44,18 @@ public interface Transition<CONTEXT extends StateMachineContext, STATE_KEY exten
     /**
      * Creates a conditional binary branching transition based on a predicate over the context.
      *
-     * @param <C>         The context type
-     * @param <S>         The state key type
+     * @param <CONTEXT>   The context type
+     * @param <STATE_KEY> The state key type
      * @param condition   Predicate evaluated against the context
      * @param trueTarget  State to transition to if condition is true
      * @param falseTarget State to transition to if condition is false
      * @return A conditional {@link Transition}
      */
     @NonNull
-    static <C extends StateMachineContext, S extends StateKey> Transition<C, S> branch(
-            @NonNull Predicate<C> condition,
-            @NonNull S trueTarget,
-            @NonNull S falseTarget
+    static <CONTEXT extends StateMachineContext, STATE_KEY extends StateKey> Transition<CONTEXT, STATE_KEY> branch(
+            @NonNull Predicate<CONTEXT> condition,
+            @NonNull STATE_KEY trueTarget,
+            @NonNull STATE_KEY falseTarget
     ) {
         Objects.requireNonNull(condition, "condition must not be null");
         Objects.requireNonNull(trueTarget, "trueTarget must not be null");
@@ -66,14 +66,14 @@ public interface Transition<CONTEXT extends StateMachineContext, STATE_KEY exten
     /**
      * Creates a terminal transition that returns {@code null}, indicating completion of the state machine.
      *
-     * @param <C> The concrete type of {@link StateMachineContext}
-     * @param <S> The state identifier type
+     * @param <CONTEXT>   The concrete type of {@link StateMachineContext}
+     * @param <STATE_KEY> The state identifier type
      * @return A terminal {@link Transition} instance
      */
     @NonNull
     @SuppressWarnings("unchecked")
-    static <C extends StateMachineContext, S extends StateKey> Transition<C, S> terminal() {
-        return (Transition<C, S>) TerminalTransition.INSTANCE;
+    static <CONTEXT extends StateMachineContext, STATE_KEY extends StateKey> Transition<CONTEXT, STATE_KEY> terminal() {
+        return (Transition<CONTEXT, STATE_KEY>) TerminalTransition.INSTANCE;
     }
 
     /**

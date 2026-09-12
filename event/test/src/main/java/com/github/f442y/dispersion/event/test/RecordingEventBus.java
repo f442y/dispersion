@@ -94,9 +94,9 @@ public class RecordingEventBus implements EventBus {
 
     @Override
     @NonNull
-    public <E extends ExecutionEvent> Subscription subscribe(
-            @NonNull Class<E> eventType,
-            @NonNull Consumer<E> listener
+    public <EVENT_TYPE extends ExecutionEvent> Subscription subscribe(
+            @NonNull Class<EVENT_TYPE> eventType,
+            @NonNull Consumer<EVENT_TYPE> listener
     ) {
         Objects.requireNonNull(eventType, "eventType must not be null");
         Objects.requireNonNull(listener, "listener must not be null");
@@ -130,7 +130,7 @@ public class RecordingEventBus implements EventBus {
 
     @Override
     @NonNull
-    public <E extends ExecutionEvent> EventStream openStream(@NonNull Class<E> eventType) {
+    public <EVENT_TYPE extends ExecutionEvent> EventStream openStream(@NonNull Class<EVENT_TYPE> eventType) {
         Objects.requireNonNull(eventType, "eventType must not be null");
         return openStream(eventType::isInstance);
     }
@@ -179,11 +179,11 @@ public class RecordingEventBus implements EventBus {
 
     @SuppressWarnings("unchecked")
     @NonNull
-    public <E extends ExecutionEvent> List<E> eventsOfType(@NonNull Class<E> type) {
+    public <EVENT_TYPE extends ExecutionEvent> List<EVENT_TYPE> eventsOfType(@NonNull Class<EVENT_TYPE> type) {
         Objects.requireNonNull(type, "type must not be null");
         return recordedEvents.stream()
                 .filter(type::isInstance)
-                .map(e -> (E) e)
+                .map(event -> (EVENT_TYPE) event)
                 .toList();
     }
 
@@ -192,18 +192,18 @@ public class RecordingEventBus implements EventBus {
         return recordedEvents.stream().anyMatch(filter);
     }
 
-    public <E extends ExecutionEvent> boolean hasEmitted(@NonNull Class<E> type) {
+    public <EVENT_TYPE extends ExecutionEvent> boolean hasEmitted(@NonNull Class<EVENT_TYPE> type) {
         Objects.requireNonNull(type, "type must not be null");
         return recordedEvents.stream().anyMatch(type::isInstance);
     }
 
-    public <E extends ExecutionEvent> void assertEmitted(@NonNull Class<E> type) {
+    public <EVENT_TYPE extends ExecutionEvent> void assertEmitted(@NonNull Class<EVENT_TYPE> type) {
         if (!hasEmitted(type)) {
             throw new AssertionError("Expected event of type [" + type.getSimpleName() + "] to be emitted, but was not. Recorded events: " + recordedEvents);
         }
     }
 
-    public <E extends ExecutionEvent> void assertEmitted(@NonNull Class<E> type, @NonNull Predicate<E> filter) {
+    public <EVENT_TYPE extends ExecutionEvent> void assertEmitted(@NonNull Class<EVENT_TYPE> type, @NonNull Predicate<EVENT_TYPE> filter) {
         Objects.requireNonNull(type, "type must not be null");
         Objects.requireNonNull(filter, "filter must not be null");
         boolean matched = recordedEvents.stream()

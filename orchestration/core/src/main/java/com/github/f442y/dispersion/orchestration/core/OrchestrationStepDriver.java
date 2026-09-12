@@ -121,7 +121,10 @@ public final class OrchestrationStepDriver {
         // Idempotent Command Envelope Deduplication
         if (signalPayload instanceof CommandEnvelope<?> env) {
             if (processedIds.contains(env.commandId())) {
-                log.info("[{}] Ignoring duplicate command envelope [{}]", checkpoint.machineId(), env.commandId());
+                log.atInfo()
+                        .addKeyValue("machine_id", checkpoint.machineId())
+                        .addKeyValue("command_id", env.commandId())
+                        .log("Ignoring duplicate command envelope");
                 if (config.eventListener() != null) {
                     safeNotify(config.eventListener(), new ExecutionEvent.CommandDeduplicatedEvent(
                             checkpoint.machineId(),
@@ -199,7 +202,10 @@ public final class OrchestrationStepDriver {
             while (currentStateKey != null) {
                 // 1. Check if terminal
                 if (stateMap.getEndStates().contains(currentStateKey)) {
-                    log.debug("[{}] Reached terminal state [{}]", machineId, currentStateKey);
+                    log.atDebug()
+                            .addKeyValue("machine_id", machineId)
+                            .addKeyValue("terminal_state", currentStateKey.name())
+                            .log("Reached terminal state");
                     break;
                 }
 
@@ -407,8 +413,11 @@ public final class OrchestrationStepDriver {
             );
 
         } catch (Throwable t) {
-            log.error("[{}] Failure in state [{}]; initiating automated LIFO Saga compensation rollback: {}",
-                    machineId, currentStateKey, t.getMessage(), t);
+            log.atError()
+                    .setCause(t)
+                    .addKeyValue("machine_id", machineId)
+                    .addKeyValue("state", (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN")
+                    .log("Failure in state; initiating automated LIFO Saga compensation rollback");
 
             List<String> compStateNames = new ArrayList<>();
             // Execute Saga Compensation Rollback in Reverse Chronological Order (LIFO)
@@ -419,13 +428,20 @@ public final class OrchestrationStepDriver {
                     if (s instanceof OrchestrationState<CONTEXT, STATE_KEY> os) {
                         CompensationAction<CONTEXT> compAction = os.compensationAction();
                         if (compAction != null) {
-                            log.debug("[{}] Compensating completed state [{}]", machineId, compStateKey);
+                            log.atDebug()
+                                    .addKeyValue("machine_id", machineId)
+                                    .addKeyValue("compensating_state", compStateKey.name())
+                                    .log("Compensating completed state");
                             context = compAction.compensate(context);
                             compStateNames.add(compStateKey.name());
                         }
                     }
                 } catch (Throwable compErr) {
-                    log.error("[{}] Compensation error in state [{}]: {}", machineId, compStateKey, compErr.getMessage(), compErr);
+                    log.atError()
+                            .setCause(compErr)
+                            .addKeyValue("machine_id", machineId)
+                            .addKeyValue("state", compStateKey.name())
+                            .log("Compensation error in state");
                 }
             }
 
@@ -542,7 +558,12 @@ public final class OrchestrationStepDriver {
 
             } catch (Throwable t) {
                 lastError = t;
-                log.warn("[{}] Child machine attempt {}/{} failed: {}", parentMachineId, attempt, maxAttempts, t.getMessage());
+                log.atWarn()
+                        .setCause(t)
+                        .addKeyValue("parent_machine_id", parentMachineId)
+                        .addKeyValue("attempt", attempt)
+                        .addKeyValue("max_attempts", maxAttempts)
+                        .log("Child machine attempt failed");
                 if (attempt >= maxAttempts) {
                     if (t instanceof Exception ex) throw ex;
                     throw new RuntimeException(t);
@@ -554,28 +575,36 @@ public final class OrchestrationStepDriver {
     }
 
     @SuppressWarnings("unchecked")
-    private static <CC extends StateMachineContext, CS extends Enum<CS> & StateKey, CI, CO>
-    OrchestrationTurnResult<CC, CS, CO> executeChildOrchestrationTurn(
+    private static <
+            CHILD_CONTEXT extends StateMachineContext,
+            CHILD_STATE_KEY extends Enum<CHILD_STATE_KEY> & StateKey,
+            CHILD_INPUT,
+            CHILD_OUTPUT>
+    OrchestrationTurnResult<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_OUTPUT> executeChildOrchestrationTurn(
             @NonNull UUID childMachineId,
-            @NonNull OrchestrationStateMachineConfiguration<CC, CS, CI, CO> childConfig,
+            @NonNull OrchestrationStateMachineConfiguration<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT> childConfig,
             @Nullable Object childInput
     ) throws Exception {
         try (ExecutorService childExecutor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("child-orch-", 0).factory()
         )) {
-            return executeTurn(childMachineId, childConfig, null, (CI) childInput, childExecutor);
+            return executeTurn(childMachineId, childConfig, null, (CHILD_INPUT) childInput, childExecutor);
         }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static <CC extends StateMachineContext, CS extends Enum<CS> & StateKey, CI, CO>
-    CO executeChildStateMachineDirect(
-            @NonNull StateMachineConfiguration<CC, CS, CI, CO> childConfig,
+    private static <
+            CHILD_CONTEXT extends StateMachineContext,
+            CHILD_STATE_KEY extends Enum<CHILD_STATE_KEY> & StateKey,
+            CHILD_INPUT,
+            CHILD_OUTPUT>
+    CHILD_OUTPUT executeChildStateMachineDirect(
+            @NonNull StateMachineConfiguration<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT> childConfig,
             @Nullable Object childInput
     ) throws Exception {
-        StateMap<CC, CS> stateMap = childConfig.getStateMap();
-        CC context = null;
-        StateMachineContextFactory<CC> factory = childConfig.stateMachineContextFactory();
+        StateMap<CHILD_CONTEXT, CHILD_STATE_KEY> stateMap = childConfig.getStateMap();
+        CHILD_CONTEXT context = null;
+        StateMachineContextFactory<CHILD_CONTEXT> factory = childConfig.stateMachineContextFactory();
         if (factory != null) {
             context = factory.newInstance();
         }
@@ -583,9 +612,9 @@ public final class OrchestrationStepDriver {
             throw new IllegalStateException("StateMachine execution failed: Context is null and no contextFactory is configured");
         }
 
-        InputFunction<CC, CI> inputFn = childConfig.inputFunction();
+        InputFunction<CHILD_CONTEXT, CHILD_INPUT> inputFn = childConfig.inputFunction();
         if (inputFn != null) {
-            context = inputFn.apply(context, (CI) childInput);
+            context = inputFn.apply(context, (CHILD_INPUT) childInput);
         }
 
         ExecutionEventListener eventListener = childConfig.eventListener();
@@ -601,7 +630,7 @@ public final class OrchestrationStepDriver {
             ));
         }
 
-        CS currentStateKey = stateMap.getInitialState();
+        CHILD_STATE_KEY currentStateKey = stateMap.getInitialState();
         int totalTransitions = 0;
         int maxTransitions = childConfig.getMaxTransitions();
 
@@ -614,7 +643,7 @@ public final class OrchestrationStepDriver {
                 if (stateMap.isEndStateFast(ordinal)) {
                     break;
                 }
-                State<CC, CS> state = stateMap.getStateFast(ordinal);
+                State<CHILD_CONTEXT, CHILD_STATE_KEY> state = stateMap.getStateFast(ordinal);
 
                 if (eventListener != null) {
                     safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
@@ -638,7 +667,7 @@ public final class OrchestrationStepDriver {
                     ));
                 }
 
-                CS nextStateKey = state.transition().nextState(context);
+                CHILD_STATE_KEY nextStateKey = state.transition().nextState(context);
 
                 if (eventListener != null && nextStateKey != null) {
                     safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
@@ -665,12 +694,12 @@ public final class OrchestrationStepDriver {
                 ));
             }
 
-            Consumer<CC> finishTrigger = childConfig.stateMachineFinishTrigger();
+            Consumer<CHILD_CONTEXT> finishTrigger = childConfig.stateMachineFinishTrigger();
             if (finishTrigger != null) {
                 finishTrigger.accept(context);
             }
 
-            OutputFunction<CC, CO> outputFn = childConfig.outputFunction();
+            OutputFunction<CHILD_CONTEXT, CHILD_OUTPUT> outputFn = childConfig.outputFunction();
             return (outputFn != null) ? outputFn.apply(context) : null;
         } catch (Throwable t) {
             if (eventListener != null) {
@@ -705,7 +734,9 @@ public final class OrchestrationStepDriver {
             try {
                 config.getCheckpointListener().accept(checkpoint);
             } catch (Throwable t) {
-                log.error("Error invoking checkpoint listener", t);
+                log.atError()
+                        .setCause(t)
+                        .log("Error invoking checkpoint listener");
             }
         }
     }
@@ -714,7 +745,10 @@ public final class OrchestrationStepDriver {
         try {
             listener.onEvent(event);
         } catch (Throwable t) {
-            log.error("ExecutionEventListener [{}] threw an exception: {}", listener.getClass().getName(), t.getMessage(), t);
+            log.atError()
+                    .setCause(t)
+                    .addKeyValue("listener_class", listener.getClass().getName())
+                    .log("ExecutionEventListener threw an exception");
         }
     }
 }

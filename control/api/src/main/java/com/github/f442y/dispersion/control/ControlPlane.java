@@ -7,6 +7,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -121,22 +122,22 @@ public interface ControlPlane extends AutoCloseable {
     Optional<Object> inspectCheckpoint(@NonNull String machineName, @NonNull String correlationKey);
 
     /**
-     * Inspects a saved checkpoint snapshot for a specific machine and correlation key,
+     * Inspects a suspended or completed checkpoint for the given state machine and correlation key,
      * casting to the expected type if present and matching.
      *
      * @param machineName    The state machine name
      * @param correlationKey The correlation key
      * @param checkpointType The expected checkpoint class
-     * @param <T>            The checkpoint type
+     * @param <CHECKPOINT_TYPE> The checkpoint type
      * @return Optional containing the typed checkpoint if found and of expected type
      */
     @NonNull
-    default <T> Optional<T> inspectCheckpoint(
+    default <CHECKPOINT_TYPE> Optional<CHECKPOINT_TYPE> inspectCheckpoint(
             @NonNull String machineName,
             @NonNull String correlationKey,
-            @NonNull Class<T> checkpointType
+            @NonNull Class<CHECKPOINT_TYPE> checkpointType
     ) {
-        java.util.Objects.requireNonNull(checkpointType, "checkpointType must not be null");
+        Objects.requireNonNull(checkpointType, "checkpointType must not be null");
         return inspectCheckpoint(machineName, correlationKey)
                 .filter(checkpointType::isInstance)
                 .map(checkpointType::cast);

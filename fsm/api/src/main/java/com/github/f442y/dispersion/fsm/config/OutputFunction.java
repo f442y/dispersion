@@ -31,11 +31,11 @@ public interface OutputFunction<CONTEXT extends StateMachineContext, OUTPUT> ext
     /**
      * Creates an output function that returns the entire context as the output.
      *
-     * @param <C> The context type
+     * @param <CONTEXT> The context type
      * @return An output function returning the context directly
      */
     @NonNull
-    static <C extends StateMachineContext> OutputFunction<C, C> context() {
+    static <CONTEXT extends StateMachineContext> OutputFunction<CONTEXT, CONTEXT> context() {
         return context -> context;
     }
 }

@@ -89,7 +89,9 @@ public class TestStateMachineTests {
         Thread.startVirtualThread(() -> {
             try {
                 Integer res = testStateMachineExecutor.dispatch().future().get();
-                log.info("SM Future Resolved: {}", res);
+                log.atInfo()
+                        .addKeyValue("result", res)
+                        .log("SM Future Resolved");
                 assertEquals(30, res);
                 latch.countDown();
             } catch (InterruptedException | ExecutionException | BackpressureException e) {

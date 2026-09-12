@@ -1,18 +1,19 @@
 package com.github.f442y.dispersion.orchestration.core;
 
-import com.github.f442y.dispersion.fsm.StateMachineFuture;
-import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.fsm.executor.StateMachineExecutor;
-import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
-import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
-import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
-import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.control.InspectableMachine;
 import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
+import com.github.f442y.dispersion.fsm.StateMachineFuture;
+import com.github.f442y.dispersion.fsm.context.StateMachineContext;
+import com.github.f442y.dispersion.fsm.executor.StateMachineExecutor;
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.fsm.state.StateMap;
 import com.github.f442y.dispersion.orchestration.CheckpointStore;
+import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
+import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -22,11 +23,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * High-performance turn-based Orchestration State Machine Executor coordinating durable workflow
@@ -213,7 +213,7 @@ public class OrchestrationStateMachineExecutor<
     @NonNull
     public InspectableMachine asInspectableMachine() {
         String machineName = configuration.getMachineName();
-        var stateMap = configuration.getStateMap();
+        StateMap<CONTEXT, STATE_KEY> stateMap = configuration.getStateMap();
         String initialState = stateMap.getInitialState().name();
         Set<String> endStates = stateMap.getEndStates().stream()
                 .map(Enum::name)

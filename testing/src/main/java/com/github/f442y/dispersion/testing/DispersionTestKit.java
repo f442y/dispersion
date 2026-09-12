@@ -34,8 +34,8 @@ public final class DispersionTestKit {
     }
 
     @NonNull
-    public static <C extends StateMachineContext, S extends Enum<S> & StateKey>
-    RecordingCheckpointStore<C, S> recordingCheckpointStore() {
+    public static <CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey>
+    RecordingCheckpointStore<CONTEXT, STATE_KEY> recordingCheckpointStore() {
         return new RecordingCheckpointStore<>();
     }
 

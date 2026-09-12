@@ -249,15 +249,15 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public <C extends StateMachineContext, S extends Enum<S> & StateKey, I, O>
-        ChildMachineStepBuilder<I, O> atomicMachine(@NonNull StateMachineConfiguration<C, S, I, O> machine) {
+        public <CHILD_CONTEXT extends StateMachineContext, CHILD_STATE_KEY extends Enum<CHILD_STATE_KEY> & StateKey, CHILD_INPUT, CHILD_OUTPUT>
+        ChildMachineStepBuilder<CHILD_INPUT, CHILD_OUTPUT> atomicMachine(@NonNull StateMachineConfiguration<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT> machine) {
             this.childStateMachine = Objects.requireNonNull(machine, "machine must not be null");
             return new ChildMachineStepBuilder<>(this);
         }
 
         @NonNull
-        public <C extends StateMachineContext, S extends Enum<S> & StateKey, I, O>
-        ChildMachineStepBuilder<I, O> childMachine(@NonNull StateMachineConfiguration<C, S, I, O> machine) {
+        public <CHILD_CONTEXT extends StateMachineContext, CHILD_STATE_KEY extends Enum<CHILD_STATE_KEY> & StateKey, CHILD_INPUT, CHILD_OUTPUT>
+        ChildMachineStepBuilder<CHILD_INPUT, CHILD_OUTPUT> childMachine(@NonNull StateMachineConfiguration<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT> machine) {
             this.childStateMachine = Objects.requireNonNull(machine, "machine must not be null");
             return new ChildMachineStepBuilder<>(this);
         }
@@ -279,29 +279,29 @@ public class OrchestrationStateMachineBuilder<
 
         @NonNull
         @SuppressWarnings("unchecked")
-        public <PAYLOAD> OrchestrationStateStepBuilder waitForSignal(
+        public <SIGNAL_PAYLOAD> OrchestrationStateStepBuilder waitForSignal(
                 @NonNull String signalName,
-                @NonNull Class<PAYLOAD> payloadClass,
-                @NonNull SignalHandler<CONTEXT, PAYLOAD> handler
+                @NonNull Class<SIGNAL_PAYLOAD> payloadClass,
+                @NonNull SignalHandler<CONTEXT, SIGNAL_PAYLOAD> handler
         ) {
             Objects.requireNonNull(signalName, "signalName must not be null");
             Objects.requireNonNull(payloadClass, "payloadClass must not be null");
             Objects.requireNonNull(handler, "handler must not be null");
             this.expectedSignal = signalName;
-            this.signalHandler = (ctx, payload) -> handler.handleSignal(ctx, (PAYLOAD) payload);
+            this.signalHandler = (ctx, payload) -> handler.handleSignal(ctx, (SIGNAL_PAYLOAD) payload);
             return this;
         }
 
         @NonNull
         @SuppressWarnings("unchecked")
-        public <CMD extends SignalCommand> OrchestrationStateStepBuilder waitForCommand(
-                @NonNull Class<CMD> commandClass,
-                @NonNull SignalHandler<CONTEXT, CMD> handler
+        public <COMMAND_TYPE extends SignalCommand> OrchestrationStateStepBuilder waitForCommand(
+                @NonNull Class<COMMAND_TYPE> commandClass,
+                @NonNull SignalHandler<CONTEXT, COMMAND_TYPE> handler
         ) {
             Objects.requireNonNull(commandClass, "commandClass must not be null");
             Objects.requireNonNull(handler, "handler must not be null");
             this.expectedSignal = commandClass.getSimpleName();
-            this.signalHandler = (ctx, payload) -> handler.handleSignal(ctx, (CMD) payload);
+            this.signalHandler = (ctx, payload) -> handler.handleSignal(ctx, (COMMAND_TYPE) payload);
             return this;
         }
 

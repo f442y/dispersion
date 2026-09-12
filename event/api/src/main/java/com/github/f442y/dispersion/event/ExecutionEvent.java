@@ -15,19 +15,19 @@ import java.util.UUID;
  * <p>Supports exhaustive pattern matching in Java 25+ without requiring a default branch:</p>
  * <pre>{@code
  * switch (event) {
- *     case ExecutionEvent.TurnStartedEvent started -> log.info("Turn started: {}", started.machineId());
- *     case ExecutionEvent.StateEnteredEvent entered -> log.debug("Entered: {}", entered.stateName());
- *     case ExecutionEvent.StateExitedEvent exited -> log.debug("Exited: {} in {}ms", exited.stateName(), exited.duration().toMillis());
- *     case ExecutionEvent.TransitionEvaluatedEvent trans -> log.debug("Transition: {} -> {}", trans.sourceState(), trans.targetState());
- *     case ExecutionEvent.SignalAwaitedEvent awaited -> log.info("Awaiting signal [{}]", awaited.expectedSignal());
- *     case ExecutionEvent.SignalDeliveredEvent delivered -> log.info("Delivered signal [{}]", delivered.signalName());
- *     case ExecutionEvent.CommandDeduplicatedEvent dedup -> log.warn("Deduplicated command [{}]", dedup.commandId());
- *     case ExecutionEvent.TurnSuspendedEvent suspended -> log.info("Turn suspended at [{}]", suspended.stateName());
- *     case ExecutionEvent.TurnCompletedEvent completed -> log.info("Turn completed: {}", completed.machineId());
- *     case ExecutionEvent.TurnCompensatedEvent compensated -> log.warn("Turn compensated: {}", compensated.failedStateName());
- *     case ExecutionEvent.TurnFailedEvent failed -> log.error("Turn failed at [{}]: {}", failed.failedStateName(), failed.cause().getMessage());
- *     case ExecutionEvent.BatchBarrierReachedEvent barrier -> log.debug("Item [{}] reached barrier", barrier.itemKey());
- *     case ExecutionEvent.BatchBarrierUnlockedEvent unlocked -> log.debug("Barrier [{}] unlocked", unlocked.stateName());
+ *     case ExecutionEvent.TurnStartedEvent started -> log.atInfo().addKeyValue("machine_id", started.machineId()).log("Turn started");
+ *     case ExecutionEvent.StateEnteredEvent entered -> log.atDebug().addKeyValue("state", entered.stateName()).log("State entered");
+ *     case ExecutionEvent.StateExitedEvent exited -> log.atDebug().addKeyValue("state", exited.stateName()).addKeyValue("duration_ms", exited.duration().toMillis()).log("State exited");
+ *     case ExecutionEvent.TransitionEvaluatedEvent trans -> log.atDebug().addKeyValue("source", trans.sourceState()).addKeyValue("target", trans.targetState()).log("Transition evaluated");
+ *     case ExecutionEvent.SignalAwaitedEvent awaited -> log.atInfo().addKeyValue("signal", awaited.expectedSignal()).log("Awaiting signal");
+ *     case ExecutionEvent.SignalDeliveredEvent delivered -> log.atInfo().addKeyValue("signal", delivered.signalName()).log("Signal delivered");
+ *     case ExecutionEvent.CommandDeduplicatedEvent dedup -> log.atWarn().addKeyValue("command_id", dedup.commandId()).log("Command deduplicated");
+ *     case ExecutionEvent.TurnSuspendedEvent suspended -> log.atInfo().addKeyValue("state", suspended.stateName()).log("Turn suspended");
+ *     case ExecutionEvent.TurnCompletedEvent completed -> log.atInfo().addKeyValue("machine_id", completed.machineId()).log("Turn completed");
+ *     case ExecutionEvent.TurnCompensatedEvent compensated -> log.atWarn().addKeyValue("failed_state", compensated.failedStateName()).log("Turn compensated");
+ *     case ExecutionEvent.TurnFailedEvent failed -> log.atError().addKeyValue("failed_state", failed.failedStateName()).setCause(failed.cause()).log("Turn failed");
+ *     case ExecutionEvent.BatchBarrierReachedEvent barrier -> log.atDebug().addKeyValue("item_key", barrier.itemKey()).log("Item reached barrier");
+ *     case ExecutionEvent.BatchBarrierUnlockedEvent unlocked -> log.atDebug().addKeyValue("state", unlocked.stateName()).log("Barrier unlocked");
  * }
  * }</pre>
  */

@@ -138,16 +138,23 @@ public final class ParallelStateExecutor {
 
         Throwable failure = firstFailure.get();
         if (failure != null) {
-            log.error("Parallel branch failure detected; executing branch-level compensations in LIFO order", failure);
+            log.atError()
+                    .setCause(failure)
+                    .log("Parallel branch failure detected; executing branch-level compensations in LIFO order");
             // Compensate completed branches in reverse order (LIFO)
             for (int i = completedBranches.size() - 1; i >= 0; i--) {
                 ParallelBranch<CONTEXT> branch = completedBranches.get(i);
                 if (branch.compensationAction() != null) {
                     try {
-                        log.debug("Compensating parallel branch [{}]", branch.name());
+                        log.atDebug()
+                                .addKeyValue("branch_name", branch.name())
+                                .log("Compensating parallel branch");
                         branch.compensationAction().compensate(context);
                     } catch (Throwable compErr) {
-                        log.error("Error compensating parallel branch [{}]", branch.name(), compErr);
+                        log.atError()
+                                .setCause(compErr)
+                                .addKeyValue("branch_name", branch.name())
+                                .log("Error compensating parallel branch");
                     }
                 }
             }

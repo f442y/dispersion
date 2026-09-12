@@ -65,20 +65,20 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     STATE_KEY maxVisitsFallback();
 
     /**
-     * Creates an intermediate state pairing the given action with explicit permitted targets and a dynamic transition.
+     * Creates an intermediate state pairing the given action with explicit permitted targets and transition.
      *
-     * @param <C>              The context type
-     * @param <S>              The state key type
+     * @param <CONTEXT>        The context type
+     * @param <STATE_KEY>      The state key type
      * @param action           The action business logic
      * @param permittedTargets The explicit set of valid next states
      * @param transition       The transition routing logic
      * @return A new {@link State} instance
      */
     @NonNull
-    static <C extends StateMachineContext, S extends Enum<S> & StateKey> State<C, S> of(
-            @NonNull Action<C> action,
-            @NonNull Set<S> permittedTargets,
-            @NonNull Transition<C, S> transition
+    static <CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> State<CONTEXT, STATE_KEY> of(
+            @NonNull Action<CONTEXT> action,
+            @NonNull Set<STATE_KEY> permittedTargets,
+            @NonNull Transition<CONTEXT, STATE_KEY> transition
     ) {
         return new SimpleState<>(action, permittedTargets, transition, false, -1, null);
     }
@@ -86,8 +86,8 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     /**
      * Creates an intermediate state pairing the given action with explicit permitted targets, transition, and visit limits.
      *
-     * @param <C>                 The context type
-     * @param <S>                 The state key type
+     * @param <CONTEXT>           The context type
+     * @param <STATE_KEY>         The state key type
      * @param action              The action business logic
      * @param permittedTargets    The explicit set of valid next states
      * @param transition          The transition routing logic
@@ -96,12 +96,12 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
      * @return A new {@link State} instance
      */
     @NonNull
-    static <C extends StateMachineContext, S extends Enum<S> & StateKey> State<C, S> of(
-            @NonNull Action<C> action,
-            @NonNull Set<S> permittedTargets,
-            @NonNull Transition<C, S> transition,
+    static <CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> State<CONTEXT, STATE_KEY> of(
+            @NonNull Action<CONTEXT> action,
+            @NonNull Set<STATE_KEY> permittedTargets,
+            @NonNull Transition<CONTEXT, STATE_KEY> transition,
             int maxVisits,
-            @Nullable S maxVisitsFallback
+            @Nullable STATE_KEY maxVisitsFallback
     ) {
         return new SimpleState<>(action, permittedTargets, transition, false, maxVisits, maxVisitsFallback);
     }
@@ -109,16 +109,16 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     /**
      * Creates an intermediate state pairing the given action with an unconditional next state.
      *
-     * @param <C>       The context type
-     * @param <S>       The state key type
-     * @param action    The action business logic
-     * @param nextState The deterministic next state key
+     * @param <CONTEXT>   The context type
+     * @param <STATE_KEY> The state key type
+     * @param action      The action business logic
+     * @param nextState   The deterministic next state key
      * @return A new {@link State} instance
      */
     @NonNull
-    static <C extends StateMachineContext, S extends Enum<S> & StateKey> State<C, S> of(
-            @NonNull Action<C> action,
-            @NonNull S nextState
+    static <CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> State<CONTEXT, STATE_KEY> of(
+            @NonNull Action<CONTEXT> action,
+            @NonNull STATE_KEY nextState
     ) {
         Objects.requireNonNull(nextState, "nextState must not be null");
         return new SimpleState<>(action, Set.of(nextState), Transition.to(nextState), false, -1, null);
@@ -127,14 +127,14 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     /**
      * Creates a terminal end state that performs no action and signals the end of the state machine.
      *
-     * @param <C> The context type
-     * @param <S> The state key type
+     * @param <CONTEXT>   The context type
+     * @param <STATE_KEY> The state key type
      * @return A terminal {@link State} instance
      */
     @NonNull
     @SuppressWarnings("unchecked")
-    static <C extends StateMachineContext, S extends Enum<S> & StateKey> State<C, S> terminal() {
-        return (State<C, S>) TerminalState.INSTANCE;
+    static <CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> State<CONTEXT, STATE_KEY> terminal() {
+        return (State<CONTEXT, STATE_KEY>) TerminalState.INSTANCE;
     }
 
     /**
@@ -186,14 +186,14 @@ public interface State<CONTEXT extends StateMachineContext, STATE_KEY extends En
     /**
      * Default immutable record implementation of {@link State}.
      */
-    record SimpleState<C extends StateMachineContext, S extends Enum<S> & StateKey>(
-            @NonNull Action<C> action,
-            @NonNull Set<S> permittedTargets,
-            @NonNull Transition<C, S> transition,
+    record SimpleState<CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey>(
+            @NonNull Action<CONTEXT> action,
+            @NonNull Set<STATE_KEY> permittedTargets,
+            @NonNull Transition<CONTEXT, STATE_KEY> transition,
             boolean isTerminal,
             int maxVisits,
-            @Nullable S maxVisitsFallback
-    ) implements State<C, S> {
+            @Nullable STATE_KEY maxVisitsFallback
+    ) implements State<CONTEXT, STATE_KEY> {
         public SimpleState {
             Objects.requireNonNull(action, "action must not be null");
             Objects.requireNonNull(transition, "transition must not be null");

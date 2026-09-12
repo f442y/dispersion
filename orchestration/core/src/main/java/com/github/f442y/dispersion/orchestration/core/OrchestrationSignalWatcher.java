@@ -208,7 +208,7 @@ public class OrchestrationSignalWatcher<
     }
 
     @FunctionalInterface
-    private interface CallableSupplier<T> {
-        T get() throws Exception;
+    private interface CallableSupplier<RESULT_TYPE> {
+        RESULT_TYPE get() throws Exception;
     }
 }

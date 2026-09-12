@@ -99,9 +99,9 @@ public class AsyncExecutionEventDispatcher implements EventBus {
 
     @Override
     @NonNull
-    public <E extends ExecutionEvent> Subscription subscribe(
-            @NonNull Class<E> eventType,
-            @NonNull Consumer<E> listener
+    public <EVENT_TYPE extends ExecutionEvent> Subscription subscribe(
+            @NonNull Class<EVENT_TYPE> eventType,
+            @NonNull Consumer<EVENT_TYPE> listener
     ) {
         return delegate.subscribe(eventType, listener);
     }
@@ -126,7 +126,7 @@ public class AsyncExecutionEventDispatcher implements EventBus {
 
     @Override
     @NonNull
-    public <E extends ExecutionEvent> EventStream openStream(@NonNull Class<E> eventType) {
+    public <EVENT_TYPE extends ExecutionEvent> EventStream openStream(@NonNull Class<EVENT_TYPE> eventType) {
         return delegate.openStream(eventType);
     }
 

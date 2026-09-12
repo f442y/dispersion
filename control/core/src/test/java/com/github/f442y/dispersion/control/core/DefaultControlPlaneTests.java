@@ -18,11 +18,14 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -109,11 +112,11 @@ class DefaultControlPlaneTests {
         assertTrue(summary.transitionsCount() >= 2);
 
         // Verify execution timeline
-        var timeline = controlPlane.getExecutionTimeline(summary.executionId());
+        List<ExecutionEvent> timeline = controlPlane.getExecutionTimeline(summary.executionId());
         assertFalse(timeline.isEmpty());
 
         // Verify recent events
-        var recent = controlPlane.getRecentEvents("OrderFulfillmentFSM", 20);
+        List<ExecutionEvent> recent = controlPlane.getRecentEvents("OrderFulfillmentFSM", 20);
         assertFalse(recent.isEmpty());
     }
 
@@ -430,7 +433,7 @@ class DefaultControlPlaneTests {
             Instant now = Instant.now();
 
             // 1. Create active/suspended workflows
-            List<UUID> activeIds = new java.util.ArrayList<>();
+            List<UUID> activeIds = new ArrayList<>();
             for (int i = 0; i < activeExecutionsToEmit; i++) {
                 UUID activeId = UUID.randomUUID();
                 activeIds.add(activeId);
@@ -439,7 +442,7 @@ class DefaultControlPlaneTests {
             }
 
             // 2. Concurrently emit 5,000 terminal executions using Virtual Threads
-            try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
                 for (int i = 0; i < terminalExecutionsToEmit; i++) {
                     final int idx = i;
                     executor.submit(() -> {

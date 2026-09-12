@@ -29,12 +29,12 @@ public interface InputFunction<CONTEXT extends StateMachineContext, INPUT> {
     /**
      * Creates an identity input function that returns the context unchanged regardless of input.
      *
-     * @param <C> The context type
-     * @param <I> The input type
+     * @param <CONTEXT> The context type
+     * @param <INPUT>   The input type
      * @return An identity {@link InputFunction}
      */
     @NonNull
-    static <C extends StateMachineContext, I> InputFunction<C, I> identity() {
+    static <CONTEXT extends StateMachineContext, INPUT> InputFunction<CONTEXT, INPUT> identity() {
         return (context, _) -> context;
     }
 }

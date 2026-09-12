@@ -263,7 +263,7 @@ public final class StateMap<CONTEXT extends StateMachineContext, STATE_KEY exten
     }
 
     @NonNull
-    public static <C extends StateMachineContext, S extends Enum<S> & StateKey> Builder<C, S> builder(@NonNull Class<S> stateKeyClass) {
+    public static <CONTEXT extends StateMachineContext, STATE_KEY extends Enum<STATE_KEY> & StateKey> Builder<CONTEXT, STATE_KEY> builder(@NonNull Class<STATE_KEY> stateKeyClass) {
         return new Builder<>(stateKeyClass);
     }
 

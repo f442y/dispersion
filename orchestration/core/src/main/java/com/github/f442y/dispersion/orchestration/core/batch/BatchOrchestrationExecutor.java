@@ -1,5 +1,9 @@
 package com.github.f442y.dispersion.orchestration.core.batch;
 
+import com.github.f442y.dispersion.control.InspectableMachine;
+import com.github.f442y.dispersion.control.MachineDescriptor;
+import com.github.f442y.dispersion.control.MachineType;
+import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationCheckpoint;
@@ -7,10 +11,6 @@ import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.ItemSignalCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.control.InspectableMachine;
-import com.github.f442y.dispersion.control.MachineDescriptor;
-import com.github.f442y.dispersion.control.MachineType;
-import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStepDriver.BatchConfiguration;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -25,12 +25,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Unified execution coordinator for singular items and batch collections on Java 25 Virtual Threads.
@@ -321,7 +321,7 @@ public class BatchOrchestrationExecutor<
         sb.append("    [*] --> ").append(initialState).append("\n");
         for (Map.Entry<STATE_KEY, BatchOrchestrationStepDriver.ItemStateDefinition<ITEM_CONTEXT, STATE_KEY>> entry : configuration.stateDefinitions.entrySet()) {
             STATE_KEY source = entry.getKey();
-            var def = entry.getValue();
+            BatchOrchestrationStepDriver.ItemStateDefinition<ITEM_CONTEXT, STATE_KEY> def = entry.getValue();
             if (def.isBarrier) {
                 sb.append("    note right of ").append(source.name()).append(" : Barrier (").append(def.barrierPolicy).append(")\n");
             }

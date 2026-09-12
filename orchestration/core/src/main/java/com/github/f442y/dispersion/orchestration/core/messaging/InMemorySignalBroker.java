@@ -8,6 +8,7 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -103,21 +104,29 @@ public class InMemorySignalBroker implements SignalPublisher, AutoCloseable {
     public CompletableFuture<Void> publish(@NonNull SignalMessage message) {
         Objects.requireNonNull(message, "message must not be null");
 
-        log.debug("Publishing message [{}] (signal: {}, corr: {}) to destination [{}]",
-                message.messageId(), message.signalName(), message.correlationKey(), message.destination());
+        log.atDebug()
+                .addKeyValue("message_id", message.messageId())
+                .addKeyValue("signal_name", message.signalName())
+                .addKeyValue("correlation_key", message.correlationKey())
+                .addKeyValue("destination", message.destination())
+                .log("Publishing message to destination");
 
         CompletableFuture<Void> publishFuture = new CompletableFuture<>();
 
         virtualThreadExecutor.submit(() -> {
-            java.util.List<Throwable> errors = new java.util.ArrayList<>();
+            List<Throwable> errors = new ArrayList<>();
 
             List<SignalConsumer> topicListeners = topicSubscribers.getOrDefault(message.destination(), List.of());
             for (SignalConsumer listener : topicListeners) {
                 try {
                     listener.onMessage(message);
                 } catch (Throwable t) {
-                    log.error("Subscriber [{}] failed to process message [{}] on topic [{}]",
-                            listener, message.messageId(), message.destination(), t);
+                    log.atError()
+                            .addKeyValue("subscriber", listener.getClass().getName())
+                            .addKeyValue("message_id", message.messageId())
+                            .addKeyValue("destination", message.destination())
+                            .setCause(t)
+                            .log("Subscriber failed to process message on destination");
                     errors.add(t);
                 }
             }
@@ -126,8 +135,11 @@ public class InMemorySignalBroker implements SignalPublisher, AutoCloseable {
                 try {
                     globalListener.onMessage(message);
                 } catch (Throwable t) {
-                    log.error("Global subscriber [{}] failed to process message [{}]",
-                            globalListener, message.messageId(), t);
+                    log.atError()
+                            .addKeyValue("subscriber", globalListener.getClass().getName())
+                            .addKeyValue("message_id", message.messageId())
+                            .setCause(t)
+                            .log("Global subscriber failed to process message");
                     errors.add(t);
                 }
             }
