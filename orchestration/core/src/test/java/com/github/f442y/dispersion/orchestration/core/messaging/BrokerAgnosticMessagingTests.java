@@ -10,6 +10,7 @@ import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
 import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
 import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.messaging.SignalConsumer;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
@@ -257,4 +258,91 @@ public class BrokerAgnosticMessagingTests {
 
         executor.close();
     }
+
+    @Test
+    public void testBrokerSubscriberFaultIsolation() {
+        InMemorySignalBroker broker = new InMemorySignalBroker();
+        List<String> receivedBySecond = new CopyOnWriteArrayList<>();
+        List<String> receivedByGlobal = new CopyOnWriteArrayList<>();
+
+        // Failing subscriber
+        broker.subscribe("test-topic", _ -> {
+            throw new RuntimeException("Simulated subscriber crash");
+        });
+
+        // Healthy subscriber on same topic
+        broker.subscribe("test-topic", msg -> {
+            receivedBySecond.add(msg.destination());
+            return CompletableFuture.completedFuture(null);
+        });
+
+        // Healthy global subscriber
+        broker.subscribeGlobal(msg -> {
+            receivedByGlobal.add(msg.destination());
+            return CompletableFuture.completedFuture(null);
+        });
+
+        SignalMessage msg = new SignalMessage("test-topic", "TEST_SIGNAL", null, "PAYLOAD");
+        CompletableFuture<Void> future = broker.publish(msg);
+
+        // Should complete exceptionally because of the failing subscriber
+        org.junit.jupiter.api.Assertions.assertThrows(Exception.class, future::join);
+
+        // But healthy topic and global subscribers still processed the message
+        assertEquals(List.of("test-topic"), receivedBySecond);
+        assertEquals(List.of("test-topic"), receivedByGlobal);
+
+        broker.close();
+    }
+
+    @Test
+    public void testBrokerUnsubscribeAndAutoCloseableRegistration() throws Exception {
+        InMemorySignalBroker broker = new InMemorySignalBroker();
+        List<String> received = new CopyOnWriteArrayList<>();
+
+        SignalConsumer consumer = msg -> {
+            received.add("topic:" + msg.destination());
+            return CompletableFuture.completedFuture(null);
+        };
+
+        // 1. AutoCloseable registration on topic
+        try (AutoCloseable sub = broker.register("topic-a", consumer)) {
+            broker.publish(new SignalMessage("topic-a", "SIG", null, "1")).join();
+            assertEquals(1, received.size());
+        }
+
+        // After close, consumer should not receive messages
+        broker.publish(new SignalMessage("topic-a", "SIG", null, "2")).join();
+        assertEquals(1, received.size());
+
+        // 2. Manual unsubscribe on topic
+        broker.subscribe("topic-b", consumer);
+        broker.publish(new SignalMessage("topic-b", "SIG", null, "3")).join();
+        assertEquals(2, received.size());
+
+        boolean removed = broker.unsubscribe("topic-b", consumer);
+        assertTrue(removed);
+
+        broker.publish(new SignalMessage("topic-b", "SIG", null, "4")).join();
+        assertEquals(2, received.size());
+
+        // 3. Global registration and close
+        List<String> globalReceived = new CopyOnWriteArrayList<>();
+        SignalConsumer globalConsumer = msg -> {
+            globalReceived.add("global:" + msg.destination());
+            return CompletableFuture.completedFuture(null);
+        };
+
+        try (AutoCloseable sub = broker.registerGlobal(globalConsumer)) {
+            broker.publish(new SignalMessage("topic-x", "SIG", null, "5")).join();
+            assertEquals(1, globalReceived.size());
+        }
+
+        broker.publish(new SignalMessage("topic-y", "SIG", null, "6")).join();
+        assertEquals(1, globalReceived.size());
+
+        broker.close();
+    }
 }
+
+

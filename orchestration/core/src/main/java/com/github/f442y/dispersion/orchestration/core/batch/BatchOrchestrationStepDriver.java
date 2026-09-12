@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -331,12 +332,20 @@ public final class BatchOrchestrationStepDriver {
             }
         }
 
-        // Check if all items reached terminal states
+        // Check if all items reached terminal states and determine common state
         boolean allCompleted = true;
+        STATE_KEY commonState = null;
+        boolean uniformState = true;
+
         for (STATE_KEY st : itemStates.values()) {
             if (!config.endStates.contains(st)) {
                 allCompleted = false;
-                break;
+            }
+            if (commonState == null && uniformState) {
+                commonState = st;
+            } else if (uniformState && !Objects.equals(commonState, st)) {
+                commonState = null;
+                uniformState = false;
             }
         }
 
@@ -347,7 +356,7 @@ public final class BatchOrchestrationStepDriver {
                 batchId,
                 batchKey,
                 status,
-                null,
+                commonState,
                 itemStates,
                 itemContexts,
                 batchContext,
@@ -355,4 +364,5 @@ public final class BatchOrchestrationStepDriver {
                 null
         );
     }
+
 }

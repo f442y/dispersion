@@ -74,6 +74,15 @@ public class OrchestrationStateMachineExecutor<
             if (result.error() != null) throw new RuntimeException(result.error());
         }
 
+        if (result.isSuspended()) {
+            String stateName = result.currentStateKey() != null ? result.currentStateKey().name() : "UNKNOWN";
+            String signal = result.expectedSignal() != null ? result.expectedSignal() : "UNKNOWN";
+            throw new IllegalStateException("Orchestration machine [" + configuration.getMachineName()
+                    + "] suspended in state [" + stateName
+                    + "] awaiting signal [" + signal
+                    + "]. For workflows with suspension points, use dispatchTurnSync() to inspect the OrchestrationTurnResult.");
+        }
+
         return result.output();
     }
 

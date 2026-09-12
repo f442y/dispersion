@@ -330,4 +330,35 @@ public class SignalAndRehydrationOrchestrationTests {
 
         executor.close();
     }
+
+    @Test
+    public void testDispatchSyncOnSuspendingWorkflowThrowsIllegalStateException() {
+        InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
+
+        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderOrchestratorGuard", OrderState.class)
+                .context(OrderContext::new)
+                .initialState(OrderState.VALIDATE)
+                .checkpointStore(store)
+                .state(OrderState.VALIDATE)
+                    .action(ctx -> ctx)
+                    .transition(OrderState.AWAIT_PAYMENT_SIGNAL)
+                .state(OrderState.AWAIT_PAYMENT_SIGNAL)
+                    .waitForSignal("PAYMENT_CONFIRMED", PaymentSignalPayload.class, (ctx, payload) -> ctx)
+                    .transition(OrderState.FULFILL)
+                .state(OrderState.FULFILL)
+                    .action(ctx -> ctx)
+                    .transition(OrderState.COMPLETED)
+                .endStates(OrderState.COMPLETED)
+                .output(_ -> "SUCCESS")
+                .buildExecutor();
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> executor.dispatchSync(new OrderContext()));
+        assertTrue(ex.getMessage().contains("OrderOrchestratorGuard"));
+        assertTrue(ex.getMessage().contains("suspended in state [AWAIT_PAYMENT_SIGNAL]"));
+        assertTrue(ex.getMessage().contains("awaiting signal [PAYMENT_CONFIRMED]"));
+        assertTrue(ex.getMessage().contains("use dispatchTurnSync()"));
+
+        executor.close();
+    }
 }

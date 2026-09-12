@@ -58,6 +58,46 @@ public class InMemorySignalBroker implements SignalPublisher, AutoCloseable {
         return this;
     }
 
+    /**
+     * Registers a topic consumer and returns an {@link AutoCloseable} subscription handle for easy cleanup.
+     */
+    @NonNull
+    public AutoCloseable register(@NonNull String destination, @NonNull SignalConsumer consumer) {
+        subscribe(destination, consumer);
+        return () -> unsubscribe(destination, consumer);
+    }
+
+    /**
+     * Registers a global consumer and returns an {@link AutoCloseable} subscription handle for easy cleanup.
+     */
+    @NonNull
+    public AutoCloseable registerGlobal(@NonNull SignalConsumer consumer) {
+        subscribeGlobal(consumer);
+        return () -> unsubscribeGlobal(consumer);
+    }
+
+    /**
+     * Unsubscribes a consumer from a specific destination topic.
+     *
+     * @return true if the consumer was removed, false otherwise
+     */
+    public boolean unsubscribe(@NonNull String destination, @NonNull SignalConsumer consumer) {
+        Objects.requireNonNull(destination, "destination must not be null");
+        Objects.requireNonNull(consumer, "consumer must not be null");
+        List<SignalConsumer> listeners = topicSubscribers.get(destination);
+        return listeners != null && listeners.remove(consumer);
+    }
+
+    /**
+     * Unsubscribes a global consumer.
+     *
+     * @return true if the consumer was removed, false otherwise
+     */
+    public boolean unsubscribeGlobal(@NonNull SignalConsumer consumer) {
+        Objects.requireNonNull(consumer, "consumer must not be null");
+        return globalSubscribers.remove(consumer);
+    }
+
     @Override
     @NonNull
     public CompletableFuture<Void> publish(@NonNull SignalMessage message) {
@@ -69,18 +109,33 @@ public class InMemorySignalBroker implements SignalPublisher, AutoCloseable {
         CompletableFuture<Void> publishFuture = new CompletableFuture<>();
 
         virtualThreadExecutor.submit(() -> {
-            try {
-                List<SignalConsumer> topicListeners = topicSubscribers.getOrDefault(message.destination(), List.of());
-                for (SignalConsumer listener : topicListeners) {
+            java.util.List<Throwable> errors = new java.util.ArrayList<>();
+
+            List<SignalConsumer> topicListeners = topicSubscribers.getOrDefault(message.destination(), List.of());
+            for (SignalConsumer listener : topicListeners) {
+                try {
                     listener.onMessage(message);
+                } catch (Throwable t) {
+                    log.error("Subscriber [{}] failed to process message [{}] on topic [{}]",
+                            listener, message.messageId(), message.destination(), t);
+                    errors.add(t);
                 }
-                for (SignalConsumer globalListener : globalSubscribers) {
+            }
+
+            for (SignalConsumer globalListener : globalSubscribers) {
+                try {
                     globalListener.onMessage(message);
+                } catch (Throwable t) {
+                    log.error("Global subscriber [{}] failed to process message [{}]",
+                            globalListener, message.messageId(), t);
+                    errors.add(t);
                 }
+            }
+
+            if (errors.isEmpty()) {
                 publishFuture.complete(null);
-            } catch (Throwable t) {
-                log.error("Error dispatching message to in-memory broker subscribers", t);
-                publishFuture.completeExceptionally(t);
+            } else {
+                publishFuture.completeExceptionally(errors.getFirst());
             }
         });
 
@@ -89,6 +144,8 @@ public class InMemorySignalBroker implements SignalPublisher, AutoCloseable {
 
     @Override
     public void close() {
+        topicSubscribers.clear();
+        globalSubscribers.clear();
         virtualThreadExecutor.close();
     }
 }

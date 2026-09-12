@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -274,8 +275,25 @@ public class BatchOrchestrationExecutor<
         activeCheckpoints.put(result.batchKey(), cp);
     }
 
+    @NonNull
+    public BatchConfiguration<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> getConfiguration() {
+        return configuration;
+    }
+
+    @NonNull
+    public Optional<BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> getCheckpoint(@NonNull String batchKey) {
+        Objects.requireNonNull(batchKey, "batchKey must not be null");
+        return Optional.ofNullable(activeCheckpoints.get(batchKey));
+    }
+
+    @NonNull
+    public Map<String, BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> getActiveCheckpoints() {
+        return Collections.unmodifiableMap(activeCheckpoints);
+    }
+
     @Override
     public void close() {
         executorService.close();
     }
 }
+

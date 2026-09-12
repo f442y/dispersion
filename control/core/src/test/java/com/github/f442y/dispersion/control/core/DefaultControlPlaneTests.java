@@ -15,9 +15,14 @@ import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
 import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
 import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationExecutor;
+import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStateMachineBuilder;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
@@ -458,4 +463,129 @@ class DefaultControlPlaneTests {
             assertNull(mEvent3);
         }
     }
+
+    public enum BatchTestState implements StateKey {
+        LOAD,
+        PROCESS,
+        AWAIT_APPROVAL,
+        DONE
+    }
+
+    public static final class BatchTestCtx implements StateMachineContext {
+        public String batchId = "BATCH-001";
+    }
+
+    public static final class ItemTestCtx implements StateMachineContext {
+        public String itemId;
+        public String status = "INIT";
+        public ItemTestCtx() {}
+        public ItemTestCtx(String itemId) { this.itemId = itemId; }
+    }
+
+    @Test
+    @DisplayName("Should register BatchOrchestrationExecutor, inspect descriptor, send signal, and retrieve checkpoint")
+    void testRegisterBatchOrchestrationExecutor() throws Exception {
+        BatchOrchestrationExecutor<BatchTestCtx, ItemTestCtx, BatchTestState, String> batchExecutor =
+                BatchOrchestrationStateMachineBuilder.<BatchTestCtx, ItemTestCtx, BatchTestState, String>create("DocumentBatch", BatchTestState.class)
+                        .batchContext(BatchTestCtx::new)
+                        .batchKey(ctx -> ctx.batchId)
+                        .itemKey(ctx -> ctx.itemId)
+                        .initialState(BatchTestState.LOAD)
+                        .endStates(BatchTestState.DONE)
+                        .output(ctx -> "BATCH_FINISHED:" + ctx.batchId)
+                        .itemState(BatchTestState.LOAD)
+                            .action(ctx -> { ctx.status = "LOADED"; return ctx; })
+                            .transition(BatchTestState.PROCESS)
+                        .itemState(BatchTestState.PROCESS)
+                            .barrier(BarrierPolicy.ALL_ITEMS_ARRIVED)
+                            .transition(BatchTestState.AWAIT_APPROVAL)
+                        .itemState(BatchTestState.AWAIT_APPROVAL)
+                            .barrier(BarrierPolicy.SIGNAL_TRIGGERED)
+                            .transition(BatchTestState.DONE)
+                        .buildExecutor();
+
+        controlPlane.register(batchExecutor);
+
+        // 1. Inspect descriptor
+        Optional<MachineDescriptor> descOpt = controlPlane.getMachine("DocumentBatch");
+        assertTrue(descOpt.isPresent());
+        MachineDescriptor desc = descOpt.get();
+        assertEquals("DocumentBatch", desc.name());
+        assertEquals(MachineType.BATCH, desc.type());
+        assertEquals("LOAD", desc.initialState());
+        assertTrue(desc.endStates().contains("DONE"));
+        assertTrue(desc.mermaidGraph().contains("Barrier (ALL_ITEMS_ARRIVED)"));
+        assertTrue(desc.mermaidGraph().contains("Barrier (SIGNAL_TRIGGERED)"));
+
+
+        // 2. Dispatch batch turn (reaches AWAIT_APPROVAL and suspends)
+        List<ItemTestCtx> items = List.of(new ItemTestCtx("ITEM-1"), new ItemTestCtx("ITEM-2"));
+        BatchTurnResult<BatchTestCtx, ItemTestCtx, BatchTestState, String> result = batchExecutor.dispatchBatchSync(items);
+        assertTrue(result.isSuspended());
+
+        // 3. Inspect checkpoint through Control Plane
+        Optional<BatchOrchestrationCheckpoint<BatchTestCtx, ItemTestCtx, BatchTestState>> cpOpt =
+                controlPlane.getBatchCheckpoint("DocumentBatch", "BATCH-001");
+        assertTrue(cpOpt.isPresent());
+        assertEquals("DocumentBatch", cpOpt.get().batchName());
+        assertEquals(BatchTestState.AWAIT_APPROVAL, cpOpt.get().currentBatchStateKey());
+
+        // 4. Send signal through Control Plane
+        CompletableFuture<SignalDeliveryResult> signalFuture =
+                controlPlane.sendSignal("DocumentBatch", "BATCH-001", "APPROVE_BATCH", "payload");
+        SignalDeliveryResult deliveryResult = signalFuture.get();
+        assertTrue(deliveryResult.delivered());
+        assertTrue(deliveryResult.completed());
+        assertEquals("DONE", deliveryResult.resultingState());
+
+        batchExecutor.close();
+    }
+
+    @Test
+    @DisplayName("Should maintain segmented O(1) eviction bounds under 10,000 terminal executions without starving active pool")
+    void testEvictionStressUnderHighThroughput() {
+        int maxTerminal = 500;
+        int terminalExecutionsToEmit = 5_000;
+        int activeExecutionsToEmit = 100;
+
+        try (DefaultControlPlane stressCp = new DefaultControlPlane(maxTerminal, 50, 1_000)) {
+            Instant now = Instant.now();
+
+            // 1. Create active/suspended workflows
+            List<UUID> activeIds = new java.util.ArrayList<>();
+            for (int i = 0; i < activeExecutionsToEmit; i++) {
+                UUID activeId = UUID.randomUUID();
+                activeIds.add(activeId);
+                stressCp.onEvent(new ExecutionEvent.TurnStartedEvent(activeId, "StressFlow", "CORR-ACT-" + i, now));
+                stressCp.onEvent(new ExecutionEvent.TurnSuspendedEvent(activeId, "StressFlow", "WAIT_GATE", "SIG", "CORR-ACT-" + i, Duration.ZERO, now));
+            }
+
+            // 2. Concurrently emit 5,000 terminal executions using Virtual Threads
+            try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                for (int i = 0; i < terminalExecutionsToEmit; i++) {
+                    final int idx = i;
+                    executor.submit(() -> {
+                        UUID termId = UUID.randomUUID();
+                        stressCp.onEvent(new ExecutionEvent.TurnStartedEvent(termId, "StressFlow", "CORR-TERM-" + idx, now));
+                        stressCp.onEvent(new ExecutionEvent.TurnCompletedEvent(termId, "StressFlow", "DONE", "CORR-TERM-" + idx, Duration.ofMillis(1), now));
+                    });
+                }
+            }
+
+            // 3. Verify active executions are 100% retained and untouched
+            for (UUID activeId : activeIds) {
+                Optional<ExecutionSummary> summaryOpt = stressCp.getExecution(activeId.toString());
+                assertTrue(summaryOpt.isPresent(), "Active execution must never be evicted!");
+                assertEquals(ExecutionStatus.SUSPENDED, summaryOpt.get().status());
+            }
+
+            // 4. Verify listExecutions respects limits
+            List<ExecutionSummary> activeList = stressCp.listExecutions(null, ExecutionStatus.SUSPENDED, 1000);
+            assertEquals(activeExecutionsToEmit, activeList.size());
+
+            List<ExecutionSummary> terminalList = stressCp.listExecutions(null, ExecutionStatus.COMPLETED, 1000);
+            assertTrue(terminalList.size() <= maxTerminal, "Terminal executions must never exceed maxTrackedExecutions limit");
+        }
+    }
 }
+

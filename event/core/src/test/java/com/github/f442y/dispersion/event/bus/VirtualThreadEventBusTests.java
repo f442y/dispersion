@@ -158,4 +158,47 @@ class VirtualThreadEventBusTests {
             assertTrue(received.get(), "Direct mode should invoke listener synchronously");
         }
     }
+
+    @Test
+    @DisplayName("Should handle 10,000 concurrent events published across 100 virtual threads without loss or contention")
+    void testConcurrentHighThroughputVirtualThreads() throws Exception {
+        int threadCount = 100;
+        int eventsPerThread = 100;
+        int totalEvents = threadCount * eventsPerThread;
+
+        CountDownLatch latch = new CountDownLatch(totalEvents);
+        AtomicInteger receivedCount = new AtomicInteger();
+
+        try (EventBus bus = VirtualThreadEventBus.builder()
+                .bufferCapacity(totalEvents + 1000)
+                .historyCapacity(100)
+                .build()) {
+
+            bus.subscribe(event -> {
+                receivedCount.incrementAndGet();
+                latch.countDown();
+            });
+
+            try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                for (int t = 0; t < threadCount; t++) {
+                    final int threadId = t;
+                    executor.submit(() -> {
+                        for (int e = 0; e < eventsPerThread; e++) {
+                            bus.onEvent(new ExecutionEvent.TurnStartedEvent(
+                                    UUID.randomUUID(),
+                                    "StressMachine",
+                                    "CORR-" + threadId + "-" + e,
+                                    Instant.now()
+                            ));
+                        }
+                    });
+                }
+            }
+
+            assertTrue(latch.await(10, TimeUnit.SECONDS), "All 10,000 events must be processed within 10 seconds");
+            assertEquals(totalEvents, receivedCount.get());
+            assertEquals(100, bus.history(100).size());
+        }
+    }
 }
+
