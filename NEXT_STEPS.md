@@ -41,14 +41,19 @@
    - Unified operator control SPI ([`ControlPlane`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ControlPlane.java)) with thread-safe in-memory reference implementation ([`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java)).
    - Complete event emission telemetry instrumented across both atomic state execution and orchestration step driver.
 
-5. **Comprehensive Documentation Suite (`docs/` & `README.md`)**
-   - [`README.md`](file:///C:/Users/faiza/development/dispersion/README.md): 60-second Quick Starts for both tiers, module coordinates, JPMS automatic module names.
-   - [`docs/architecture-and-concepts.md`](file:///C:/Users/faiza/development/dispersion/docs/architecture-and-concepts.md): Virtual thread confinement and memory model.
-   - [`docs/tier-1-atomic-machines.md`](file:///C:/Users/faiza/development/dispersion/docs/tier-1-atomic-machines.md): Deep-dive into atomic execution.
-   - [`docs/tier-2-orchestration-sagas.md`](file:///C:/Users/faiza/development/dispersion/docs/tier-2-orchestration-sagas.md): Deep-dive into macro sagas and compensation.
-   - [`docs/distributed-messaging-and-batching.md`](file:///C:/Users/faiza/development/dispersion/docs/distributed-messaging-and-batching.md): Idempotency, stream batching, barriers.
-   - [`docs/observability-and-control-plane.md`](file:///C:/Users/faiza/development/dispersion/docs/observability-and-control-plane.md): Event catalogue and UI architecture blueprint.
-   - [`docs/java-25-features.md`](file:///C:/Users/faiza/development/dispersion/docs/java-25-features.md): Modern Java 25 idiomatic patterns.
+5. **Comprehensive Documentation Suite (`docs/`, Module READMEs & `README.md`)**
+   - [`README.md`](file:///C:/Users/faiza/development/dispersion/README.md): Showcase, architecture overview, quickstarts, and module index.
+   - Encompassing Module Documentation:
+     - [`event/README.md`](file:///C:/Users/faiza/development/dispersion/event/README.md): Event bus, sealed telemetry records, and stream consumption.
+     - [`fsm/README.md`](file:///C:/Users/faiza/development/dispersion/fsm/README.md): Tier 1 Atomic FSM, dense ordinal lookup tables, and admission backpressure.
+     - [`orchestration/README.md`](file:///C:/Users/faiza/development/dispersion/orchestration/README.md): Tier 2 Saga Orchestration, LIFO compensation, signal suspension, and turn-based batching.
+     - [`control/README.md`](file:///C:/Users/faiza/development/dispersion/control/README.md): Control plane, InspectableMachine SPI, dynamic Mermaid diagrams, and signal routing.
+     - [`testing/README.md`](file:///C:/Users/faiza/development/dispersion/testing/README.md): DispersionTestKit facade, test double catalog, and unit testing recipes.
+   - Architectural Deep-Dive Guides:
+     - [`docs/architecture-and-design.md`](file:///C:/Users/faiza/development/dispersion/docs/architecture-and-design.md): Hexagonal architecture, decoupling invariants, and thread confinement.
+     - [`docs/virtual-threads-and-performance.md`](file:///C:/Users/faiza/development/dispersion/docs/virtual-threads-and-performance.md): Project Loom mechanics, zero carrier pinning, and escape analysis.
+     - [`docs/saga-orchestration-and-batching.md`](file:///C:/Users/faiza/development/dispersion/docs/saga-orchestration-and-batching.md): Distributed saga theory, checkpoint storage, and batch barriers.
+     - [`docs/observability-and-control-plane.md`](file:///C:/Users/faiza/development/dispersion/docs/observability-and-control-plane.md): Telemetry pipeline, O(1) dual-pool memory topology, and React UI integration.
 
 ---
 
