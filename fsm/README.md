@@ -271,3 +271,15 @@ public class FsmTestingExampleTests {
     </dependency>
 </dependencies>
 ```
+
+---
+
+## 🔗 Related Subsystems & Guides
+
+* 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level landing page and quickstarts.
+* 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Embed atomic state machines into turn-based distributed Sagas.
+* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Register atomic executors into `DefaultControlPlane` via `.asInspectableMachine()`.
+* 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Telemetry events emitted during state transitions.
+* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Test atomic machines with `DispersionTestKit`.
+* ⚡ [**Virtual Threads Performance Guide**](../docs/virtual-threads-and-performance.md) — Deep dive into Loom continuation unmounting and escape analysis.
+

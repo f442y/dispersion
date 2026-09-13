@@ -262,3 +262,15 @@ public class ControlPlaneTestingExampleTests {
     </dependency>
 </dependencies>
 ```
+
+---
+
+## 🔗 Related Subsystems & Guides
+
+* 🏠 [**Project Showcase (`README.md`)**](../README.md) — Landing page, architecture overview, and quickstarts.
+* ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Adapting atomic state machines via `executor.asInspectableMachine()`.
+* 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Adapting saga orchestrators and batch engines via `executor.asInspectableMachine()`.
+* 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Connecting event buses and telemetry listeners to `DefaultControlPlane`.
+* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Unit testing control plane workflows with `FakeInspectableMachine`.
+* 🔭 [**Observability & UI Deep Dive**](../docs/observability-and-control-plane.md) — React + TanStack Router integration blueprints.
+

@@ -239,3 +239,15 @@ Add `dispersion-testing` with test scope to your project:
     </dependency>
 </dependencies>
 ```
+
+---
+
+## 🔗 Related Subsystems & Guides
+
+* 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level overview, architecture map, and quickstarts.
+* ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Unit testing atomic machines with `TestStateContext` and `TestStateKey`.
+* 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Testing sagas with `FakeSignalBroker` and `RecordingCheckpointStore`.
+* 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Capturing execution events with `RecordingEventBus` and `CapturingEventListener`.
+* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Testing registry and signal delivery with `FakeInspectableMachine`.
+* 📐 [**Architecture & Hexagonal Design**](../docs/architecture-and-design.md) — Symmetrical triplet decoupling and test double invariants.
+

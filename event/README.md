@@ -308,3 +308,15 @@ Include the Event modules using the centralized BOM:
     </dependency>
 </dependencies>
 ```
+
+---
+
+## 🔗 Related Subsystems & Guides
+
+* 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level overview, quickstarts, and architecture map.
+* ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — State transitions emitting `TurnStartedEvent`, `StateEnteredEvent`, etc.
+* 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Distributed sagas emitting compensation, signal, and batch events.
+* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Connecting event buses to `DefaultControlPlane` for real-time monitoring.
+* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Capture events in unit tests using `DispersionTestKit.recordingEventBus()`.
+* 🔭 [**Observability Architecture Guide**](../docs/observability-and-control-plane.md) — In-depth guide to telemetry streaming and UI integration.
+

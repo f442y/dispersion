@@ -374,3 +374,15 @@ public class OrchestrationTestingExampleTests {
     </dependency>
 </dependencies>
 ```
+
+---
+
+## 🔗 Related Subsystems & Guides
+
+* 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level landing page, quickstarts, and architecture map.
+* ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Build sub-microsecond atomic machines to embed as child saga steps.
+* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Inspect suspended checkpoints and route external signals via `DefaultControlPlane`.
+* 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Telemetry events for saga turns, compensations, and batch barriers.
+* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Reusable fakes and stores with `DispersionTestKit`.
+* 🔄 [**Distributed Sagas & Batching Deep Dive**](../docs/saga-orchestration-and-batching.md) — Saga theory, LIFO rollbacks, and barrier policies.
+

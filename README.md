@@ -37,30 +37,36 @@
     <td width="50%" valign="top">
       <h3>🚀 Sub-Microsecond Hot Paths</h3>
       <p>State transitions pre-compile into dense ordinal array lookup tables (<code>StateMap</code>). Checks compile to primitive bitmasks with <b>0 heap allocations</b> on hot paths.</p>
+      <p>👉 <i>Explore the <a href="fsm/README.md"><b>FSM Subsystem (Tier 1)</b></a> & <a href="docs/virtual-threads-and-performance.md"><b>Performance Guide</b></a></i></p>
     </td>
     <td width="50%" valign="top">
       <h3>🧵 Java 25 Virtual Threads</h3>
       <p>Engineered natively for Project Loom. Lightweight virtual threads run confined to work units with <b>zero carrier-thread pinning</b> and zero thread-pool exhaustion.</p>
+      <p>👉 <i>Read the <a href="docs/virtual-threads-and-performance.md"><b>Virtual Threads & Concurrency Guide</b></a></i></p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <h3>🔄 Automated LIFO Saga Rollbacks</h3>
       <p>Forward actions dynamically register compensations. Downstream failures automatically unwind the compensation stack in <b>reverse chronological (LIFO)</b> order.</p>
+      <p>👉 <i>Explore the <a href="orchestration/README.md"><b>Orchestration Subsystem (Tier 2)</b></a></i></p>
     </td>
     <td width="50%" valign="top">
       <h3>⏸️ Turn-Based Signal Suspension</h3>
       <p>Workflows pause at <code>waitForCommand</code>, snapshot state to a pluggable <code>CheckpointStore</code>, and <b>free the virtual thread</b> until external webhooks arrive.</p>
+      <p>👉 <i>Read about <a href="docs/saga-orchestration-and-batching.md"><b>Distributed Sagas & Batch Barriers</b></a></i></p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <h3>🛡️ Network Deduplication</h3>
       <p>Guaranteed at-most-once idempotency across distributed message brokers (Kafka, RabbitMQ, SQS) via immutable <code>CommandEnvelope</code> tracking.</p>
+      <p>👉 <i>See <a href="orchestration/README.md#5-network-idempotency--deduplication"><b>Messaging & Deduplication</b></a></i></p>
     </td>
     <td width="50%" valign="top">
       <h3>🔭 Hexagonal Control Plane</h3>
       <p>Centralized <code>InspectableMachine</code> SPI featuring an <b>$O(1)$ dual-pool memory topology</b>, live telemetry streaming, and dynamic Mermaid diagram generation.</p>
+      <p>👉 <i>Explore the <a href="control/README.md"><b>Control Subsystem</b></a> & <a href="event/README.md"><b>Telemetry Pipeline</b></a></i></p>
     </td>
   </tr>
 </table>
@@ -129,13 +135,16 @@ graph TD
 
 | Feature | Tier 1: Atomic State Machine | Tier 2: Saga Orchestrator | Tier 3: Turn-Based Batching |
 | :--- | :--- | :--- | :--- |
-| **Target Subsystem** | [`fsm/` (`dispersion-fsm-core`)](fsm/README.md) | [`orchestration/` (`dispersion-orchestration-core`)](orchestration/README.md) | [`orchestration/` (`dispersion-orchestration-core`)](orchestration/README.md) |
+| **Target Subsystem** | [**`fsm/`** (`dispersion-fsm-core`)](fsm/README.md) | [**`orchestration/`** (`dispersion-orchestration-core`)](orchestration/README.md) | [**`orchestration/`** (`dispersion-orchestration-core`)](orchestration/README.md) |
 | **Execution Latency** | **Sub-microsecond (< 1 μs)** | Turn-based (~ 10–50 μs) | Parallel items with barrier sync |
 | **Threading Model** | Single Virtual Thread (confined) | Virtual Thread per turn | Virtual Thread per batch item |
 | **State Mutability** | Lock-free POJO direct mutation | Checkpoint snapshots on suspension | Isolated item contexts |
-| **Lifecycle** | Ephemeral, in-memory | Long-lived, suspendable | Batch-synchronized turns |
-| **Failure Recovery** | Fast-fail terminal diverting | **Automated LIFO Saga rollbacks** | Item-level error isolation |
-| **Concurrency** | Sequential graph traversal | **Parallel fork-join (`.parallel()`)** | Concurrent item processing |
+| **Lifecycle** | Ephemeral, in-memory | Long-lived, suspendable (`waitForCommand`) | Batch-synchronized turns |
+| **Failure Recovery** | Fast-fail terminal diverting | [**Automated LIFO Saga rollbacks**](orchestration/README.md#2-automated-lifo-saga-rollbacks) | Item-level error isolation |
+| **Concurrency** | Sequential graph traversal | [**Parallel fork-join (`.parallel()`)**](orchestration/README.md#3-parallel-fork-join-concurrency) | Concurrent item processing |
+| **Telemetry & Events** | [13 Sealed `ExecutionEvent`s](event/README.md#2-sealed-telemetry-events-executionevent) | [13 Sealed `ExecutionEvent`s](event/README.md#2-sealed-telemetry-events-executionevent) | [Batch Barrier Events](event/README.md#2-sealed-telemetry-events-executionevent) |
+| **Persistence** | None (zero overhead) | Pluggable [`CheckpointStore`](orchestration/README.md#2-core-architectural-capabilities) | [`BatchOrchestrationCheckpoint`](orchestration/README.md#4-turn-based-batch-processing-batchorchestrationexecutor) |
+| **Testing Doubles** | [`TestStateContext`, `TestStateKey`](fsm/README.md#4-testing-atomic-state-machines-dispersion-fsm-test) | [`FakeSignalBroker`, `RecordingCheckpointStore`](orchestration/README.md#5-testing-orchestrations-dispersion-orchestration-test) | [`DispersionTestKit`](testing/README.md) |
 | **Best Used For** | Rules, protocol parsing, trading engines | Multi-service sagas, checkout, approvals | Bulk ingest, payroll, daily reconciliations |
 
 ---
@@ -146,12 +155,12 @@ How Dispersion compares to legacy orchestration and state machine engines:
 
 | Dimension | Legacy BPMN Engines | Traditional Actor / FSM Libs | Dispersion |
 | :--- | :--- | :--- | :--- |
-| **Runtime Threading** | Heavy OS Thread Pools (Starvation risk) | Reactive Event Loops (Callback hell) | **Java 25 Virtual Threads (Millions concurrent)** |
-| **Transition Latency** | 15–50 ms (Mandatory DB roundtrip) | 50–200 μs (Object hashing & reflection) | **< 1 μs (Pre-compiled ordinal arrays)** |
-| **Hot-Path Allocations** | Hundreds of objects per transition | Medium (Map entries, wrappers) | **0 heap allocations on transition hot paths** |
-| **Thread Synchronization** | Synchronized locks & DB mutexes | Concurrent maps & atomic references | **100% Lock-Free Thread Confinement** |
-| **Saga Compensation** | Manual compensation choreography | Ad-hoc error handlers | **Automated LIFO Saga Rollback Unwind** |
-| **Control Plane Coupling** | Heavy monolithic web application | Missing or ad-hoc | **Decoupled `InspectableMachine` SPI** |
+| **Runtime Threading** | Heavy OS Thread Pools (Starvation risk) | Reactive Event Loops (Callback hell) | [**Java 25 Virtual Threads (Millions concurrent)**](docs/virtual-threads-and-performance.md#1-project-loom--virtual-thread-mechanics) |
+| **Transition Latency** | 15–50 ms (Mandatory DB roundtrip) | 50–200 μs (Object hashing & reflection) | [**< 1 μs (Pre-compiled ordinal arrays)**](fsm/README.md#1-pre-compiled-graph-topology-statemap) |
+| **Hot-Path Allocations** | Hundreds of objects per transition | Medium (Map entries, wrappers) | [**0 heap allocations on transition hot paths**](docs/virtual-threads-and-performance.md#3-zero-allocation-hot-paths--jvm-c2-optimization) |
+| **Thread Synchronization** | Synchronized locks & DB mutexes | Concurrent maps & atomic references | [**100% Lock-Free Thread Confinement**](docs/architecture-and-design.md#3-concurrency-guarantees--thread-confinement) |
+| **Saga Compensation** | Manual compensation choreography | Ad-hoc error handlers | [**Automated LIFO Saga Rollback Unwind**](orchestration/README.md#2-automated-lifo-saga-rollbacks) |
+| **Control Plane Coupling** | Heavy monolithic web application | Missing or ad-hoc | [**Decoupled `InspectableMachine` SPI**](control/README.md#1-decoupled-inspectablemachine-spi) |
 
 ---
 
@@ -212,10 +221,22 @@ try (AtomicStateMachineExecutor<PricingContext, PricingState, PricingRequest, Pr
 }
 ```
 
+> [!TIP]
+> 📖 **Related Documentation:**
+> * Full Subsystem Guide: [**`fsm/README.md`**](fsm/README.md)
+> * Performance & Zero-Pinning: [**`docs/virtual-threads-and-performance.md`**](docs/virtual-threads-and-performance.md)
+> * Zero-Mock Unit Testing: [**`testing/README.md#recipe-1-verifying-telemetry-events-in-an-atomic-machine`**](testing/README.md#recipe-1-verifying-telemetry-events-in-an-atomic-machine)
+
+---
+
 ### 2. Tier 2: Distributed Saga with Automated LIFO Rollback
 Coordinate multi-service sagas with automatic rollback unwinding if any step fails:
 
 ```java
+import com.github.f442y.dispersion.fsm.state.StateKey;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+
 try (OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderRequest, String> executor =
          OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderRequest, String>create("OrderSaga", OrderState.class)
              .context(OrderContext::new)
@@ -242,10 +263,21 @@ try (OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderRequest, S
 }
 ```
 
+> [!TIP]
+> 📖 **Related Documentation:**
+> * Full Subsystem Guide: [**`orchestration/README.md`**](orchestration/README.md)
+> * Distributed Saga Theory: [**`docs/saga-orchestration-and-batching.md`**](docs/saga-orchestration-and-batching.md)
+> * Embedding Atomic Child Machines: [**`orchestration/README.md#3-end-to-end-saga-orchestration-example`**](orchestration/README.md#3-end-to-end-saga-orchestration-example)
+
+---
+
 ### 3. Suspensions & Asynchronous Signal Delivery
 Pause workflow execution waiting for external webhooks or user approvals, freeing the virtual thread:
 
 ```java
+import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
+
 // State declaration waiting for ApprovalSignal
 .state(OrderState.AWAIT_APPROVAL)
     .waitForCommand(ApprovalSignal.class, (OrderContext ctx, ApprovalSignal sig) -> {
@@ -262,11 +294,49 @@ OrchestrationTurnResult<OrderContext, OrderState, String> turn2 =
     executor.dispatchSignalSync("ORD-501", new ApprovalSignal("ORD-501", "Security Lead"));
 ```
 
+> [!TIP]
+> 📖 **Related Documentation:**
+> * Suspension & Checkpoint Stores: [**`orchestration/README.md#4-signal-suspensions--rehydration`**](orchestration/README.md#4-signal-suspensions--rehydration)
+> * Routing Signals through Control Plane: [**`control/README.md#3-end-to-end-control-plane-example`**](control/README.md#3-end-to-end-control-plane-example)
+> * Testing Checkpoints: [**`testing/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga`**](testing/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga)
+
+---
+
+### 4. Hexagonal Observability & Dynamic Mermaid Topology
+Inspect live execution status, query descriptors, and generate dynamic Mermaid diagrams right from Java:
+
+```java
+import com.github.f442y.dispersion.control.ExecutionStatus;
+import com.github.f442y.dispersion.control.ExecutionSummary;
+import com.github.f442y.dispersion.control.MachineDescriptor;
+import com.github.f442y.dispersion.control.core.DefaultControlPlane;
+import java.util.List;
+import java.util.Optional;
+
+try (DefaultControlPlane controlPlane = new DefaultControlPlane()) {
+    // 1. Register any engine via decoupled InspectableMachine adapter
+    controlPlane.register(executor.asInspectableMachine());
+
+    // 2. Query dynamic Mermaid diagram string for instant UI rendering
+    Optional<MachineDescriptor> desc = controlPlane.getMachine("OrderSaga");
+    desc.ifPresent(d -> System.out.println(d.mermaidDiagram()));
+
+    // 3. Inspect active or suspended workflows
+    List<ExecutionSummary> suspended = controlPlane.listExecutions("OrderSaga", ExecutionStatus.SUSPENDED, 10);
+}
+```
+
+> [!TIP]
+> 📖 **Related Documentation:**
+> * Full Control Plane Guide: [**`control/README.md`**](control/README.md)
+> * Telemetry & 13 Sealed Events: [**`event/README.md`**](event/README.md)
+> * UI Integration Patterns (React + TanStack Router): [**`docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router`**](docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router)
+
 ---
 
 ## 📦 Encompassing Modules
 
-Dispersion is engineered as 16 modular components partitioned into 5 functional subsystems:
+Dispersion is engineered as 16 modular components partitioned into 5 functional subsystems. Click each subsystem below for its dedicated guide:
 
 ```mermaid
 graph LR
