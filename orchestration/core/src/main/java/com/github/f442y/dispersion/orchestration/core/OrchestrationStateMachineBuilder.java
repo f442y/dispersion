@@ -20,12 +20,17 @@ import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfig
 import com.github.f442y.dispersion.orchestration.ParallelBranch;
 import com.github.f442y.dispersion.orchestration.RetryPolicy;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
+import com.github.f442y.dispersion.orchestration.WorkloadExecutionMode;
+import com.github.f442y.dispersion.orchestration.WorkloadInvocation;
 import com.github.f442y.dispersion.orchestration.command.SagaCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
+import com.github.f442y.dispersion.routing.WorkloadRouter;
+import com.github.f442y.dispersion.routing.policy.RoutingSelector;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -70,12 +75,19 @@ public class OrchestrationStateMachineBuilder<
     private Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener;
     private Function<CONTEXT, String> correlationKeyExtractor;
     private CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
+    private WorkloadRouter workloadRouter;
 
     private OrchestrationStateMachineBuilder(@NonNull String machineName, @NonNull Class<STATE_KEY> stateKeyClass) {
         this.machineName = Objects.requireNonNull(machineName, "machineName must not be null");
         this.stateKeyClass = Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
         this.states = new EnumMap<>(stateKeyClass);
         this.endStates = EnumSet.noneOf(stateKeyClass);
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> workloadRouter(@NonNull WorkloadRouter router) {
+        this.workloadRouter = Objects.requireNonNull(router, "router must not be null");
+        return this;
     }
 
     @NonNull
@@ -318,6 +330,27 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
+        public <REQ, RES> RoutedWorkloadStepBuilder<REQ, RES> invoke(
+                @NonNull String serviceName,
+                @NonNull Class<REQ> requestClass,
+                @NonNull Class<RES> responseClass
+        ) {
+            Objects.requireNonNull(serviceName, "serviceName must not be null");
+            Objects.requireNonNull(requestClass, "requestClass must not be null");
+            Objects.requireNonNull(responseClass, "responseClass must not be null");
+            return new RoutedWorkloadStepBuilder<>(this, serviceName, requestClass, responseClass);
+        }
+
+        @NonNull
+        public <REQ, RES> RoutedWorkloadStepBuilder<REQ, RES> invokeService(
+                @NonNull String serviceName,
+                @NonNull Class<REQ> requestClass,
+                @NonNull Class<RES> responseClass
+        ) {
+            return invoke(serviceName, requestClass, responseClass);
+        }
+
+        @NonNull
         public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull STATE_KEY nextState
         ) {
@@ -369,6 +402,152 @@ public class OrchestrationStateMachineBuilder<
             );
             states.put(stateKey, node);
             return OrchestrationStateMachineBuilder.this;
+        }
+
+        private OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionWithInvocation(
+                Set<STATE_KEY> permittedTargets,
+                Transition<CONTEXT, STATE_KEY> transition,
+                WorkloadInvocation<CONTEXT, ?, ?> invocation
+        ) {
+            OrchestrationState<CONTEXT, STATE_KEY> node = new OrchestrationState<>(
+                    action,
+                    transition,
+                    permittedTargets,
+                    false,
+                    -1,
+                    null,
+                    compensationAction,
+                    invocation,
+                    parallelBranches,
+                    parallelContextCloner,
+                    parallelContextReducer,
+                    expectedSignal,
+                    signalHandler,
+                    signalPublisher,
+                    publishDestination,
+                    publishPayloadExtractor
+            );
+            states.put(stateKey, node);
+            return OrchestrationStateMachineBuilder.this;
+        }
+    }
+
+    public final class RoutedWorkloadStepBuilder<REQ, RES> {
+        private final OrchestrationStateStepBuilder stepBuilder;
+        private final String serviceName;
+        private final Class<REQ> requestClass;
+        private final Class<RES> responseClass;
+        private Function<CONTEXT, REQ> inputExtractor;
+        private BiFunction<CONTEXT, RES, CONTEXT> outputMerger;
+        private RoutingSelector routingSelector = RoutingSelector.any();
+        private RetryPolicy retryPolicy = RetryPolicy.noRetries();
+        private ContextRecoverer<CONTEXT, REQ> recoverer;
+        private WorkloadExecutionMode executionMode = WorkloadExecutionMode.SYNCHRONOUS_VIRTUAL_THREAD;
+        private Duration timeout = Duration.ofSeconds(30);
+        private Function<CONTEXT, ?> routedCompensationExtractor;
+
+        private RoutedWorkloadStepBuilder(
+                @NonNull OrchestrationStateStepBuilder stepBuilder,
+                @NonNull String serviceName,
+                @NonNull Class<REQ> requestClass,
+                @NonNull Class<RES> responseClass
+        ) {
+            this.stepBuilder = stepBuilder;
+            this.serviceName = serviceName;
+            this.requestClass = requestClass;
+            this.responseClass = responseClass;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> input(@NonNull Function<CONTEXT, REQ> inputExtractor) {
+            this.inputExtractor = Objects.requireNonNull(inputExtractor, "inputExtractor must not be null");
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> output(@NonNull BiFunction<CONTEXT, RES, CONTEXT> outputMerger) {
+            this.outputMerger = Objects.requireNonNull(outputMerger, "outputMerger must not be null");
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> routingSelector(@NonNull RoutingSelector selector) {
+            this.routingSelector = Objects.requireNonNull(selector, "selector must not be null");
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> retry(@NonNull RetryPolicy policy) {
+            this.retryPolicy = Objects.requireNonNull(policy, "policy must not be null");
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> recoverer(@NonNull ContextRecoverer<CONTEXT, REQ> recoverer) {
+            this.recoverer = Objects.requireNonNull(recoverer, "recoverer must not be null");
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> executionMode(@NonNull WorkloadExecutionMode mode) {
+            this.executionMode = Objects.requireNonNull(mode, "mode must not be null");
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> suspended() {
+            this.executionMode = WorkloadExecutionMode.DURABLE_TURN_SUSPENSION;
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> timeout(@NonNull Duration timeout) {
+            this.timeout = Objects.requireNonNull(timeout, "timeout must not be null");
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> compensate(@NonNull Function<CONTEXT, ?> compensationExtractor) {
+            this.routedCompensationExtractor = Objects.requireNonNull(compensationExtractor, "compensationExtractor must not be null");
+            return this;
+        }
+
+        @NonNull
+        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+                @NonNull STATE_KEY nextState
+        ) {
+            return transitionsTo(Set.of(nextState), Transition.to(nextState));
+        }
+
+        @NonNull
+        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+                @NonNull Transition<CONTEXT, STATE_KEY> transition
+        ) {
+            return transitionsTo(Collections.emptySet(), transition);
+        }
+
+        @NonNull
+        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
+                @NonNull Set<STATE_KEY> permittedTargets,
+                @NonNull Transition<CONTEXT, STATE_KEY> transition
+        ) {
+            Function<CONTEXT, REQ> in = (inputExtractor != null) ? inputExtractor : ctx -> null;
+            BiFunction<CONTEXT, RES, CONTEXT> out = (outputMerger != null) ? outputMerger : (ctx, res) -> ctx;
+            WorkloadInvocation<CONTEXT, REQ, RES> invocation = new WorkloadInvocation<>(
+                    serviceName,
+                    null,
+                    requestClass,
+                    responseClass,
+                    in,
+                    out,
+                    routingSelector,
+                    retryPolicy,
+                    recoverer,
+                    executionMode,
+                    timeout,
+                    routedCompensationExtractor
+            );
+            return stepBuilder.transitionWithInvocation(permittedTargets, transition, invocation);
         }
     }
 
@@ -556,7 +735,8 @@ public class OrchestrationStateMachineBuilder<
                 checkpointListener,
                 correlationKeyExtractor,
                 checkpointStore,
-                eventListener
+                eventListener,
+                workloadRouter
         );
     }
 

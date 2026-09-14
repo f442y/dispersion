@@ -82,6 +82,21 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-routing-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-routing-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-routing-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-testing</artifactId>
                 <version>${project.version}</version>
             </dependency>

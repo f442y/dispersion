@@ -42,8 +42,8 @@ graph TD
 
 | Module | JPMS Module Name | Description |
 | :--- | :--- | :--- |
-| **`dispersion-orchestration-api`** | `com.github.f442y.dispersion.orchestration.api` | Contracts for checkpoints, compensation actions, saga commands, envelopes, broker messaging SPIs, and batch barrier policies. |
-| **`dispersion-orchestration-core`** | `com.github.f442y.dispersion.orchestration.core` | Macro orchestration driver, virtual thread parallel executor, batch engine, signal watcher, and in-memory stores. |
+| **`dispersion-orchestration-api`** | `com.github.f442y.dispersion.orchestration.api` | Contracts for checkpoints, compensation actions (`CompensationRecord`), `WorkloadInvocation`, `WorkloadExecutionMode`, saga commands, envelopes, broker messaging SPIs, and batch barrier policies. |
+| **`dispersion-orchestration-core`** | `com.github.f442y.dispersion.orchestration.core` | Macro orchestration driver, unified workload router integration, virtual thread parallel executor, batch engine, signal watcher, and in-memory stores. |
 | **`dispersion-orchestration-test`** | `com.github.f442y.dispersion.orchestration.test` | Reusable test doubles (`FakeSignalBroker`, `RecordingCheckpointStore`) for deterministic unit and saga recovery testing. |
 
 ---
@@ -57,16 +57,23 @@ Workflows execute in **turns**. A turn continues until:
 When suspended, Dispersion snapshots the context into an `OrchestrationCheckpoint`, saves it via `CheckpointStore`, and unmounts the virtual thread. When an external signal arrives correlated by `correlationKey`, the workflow is rehydrated to execute the next turn.
 
 ### 2. Automated LIFO Saga Rollbacks
-Each forward action can register a `CompensationAction`. If any downstream step fails:
+Each forward action can register a `CompensationAction` (local lambda) or a routed compensation request. If any downstream step fails:
 1. Forward execution stops immediately.
 2. The `OrchestrationStepDriver` unwinds the compensation stack in **reverse chronological order (Last-In, First-Out)**.
-3. Each registered compensation executes safely on a virtual thread.
+3. Local compensations execute directly on virtual threads; routed compensations are dispatched across the network to matching worker nodes via `WorkloadRouter`.
 4. A `TurnCompensatedEvent` telemetry record is emitted.
 
-### 3. Parallel Fork-Join Concurrency
+### 3. Location-Agnostic Workload Routing & Traffic Control
+Workload execution is unified under `WorkloadInvocation`:
+* **In-Process Monolith:** Invocations resolve to `LocalFsmEndpoint` (< 1 µs, zero serialization, direct object passing).
+* **Distributed Microservices:** Invocations dispatch via `RemoteWorkloadEndpoint` across network transports.
+* **Developer Sandboxes:** Strict tag matching (`RoutingSelector.requireTag("developer", "faizan")`) directs traffic to custom test workers.
+* **Canary Rolling Updates:** Configured Canary policies route weighted percentages (e.g. 10% canary, 90% production) dynamically.
+
+### 4. Parallel Fork-Join Concurrency
 Using `.parallel()`, Dispersion forks child branches concurrently across virtual threads. Workflows join when all branches finish or abort if any branch fails, immediately cancelling sibling tasks.
 
-### 4. Turn-Based Batch Processing (`BatchOrchestrationExecutor`)
+### 5. Turn-Based Batch Processing (`BatchOrchestrationExecutor`)
 The batch engine processes collections of items through synchronized steps. Workflows support **Barrier Policies**:
 * **`ALL_ITEMS`**: Every item in the batch must reach the barrier before the batch advances to the next step.
 * **`QUORUM`**: The batch advances as soon as a defined quorum threshold of items reaches the barrier.
@@ -381,6 +388,7 @@ public class OrchestrationTestingExampleTests {
 
 * 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level landing page, quickstarts, and architecture map.
 * ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Build sub-microsecond atomic machines to embed as child saga steps.
+* 🚦 [**Routing Subsystem (`routing/`)**](../routing/README.md) — Location-agnostic workload routing, Canary traffic splits, and Developer Sandboxes.
 * 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Inspect suspended checkpoints and route external signals via `DefaultControlPlane`.
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Telemetry events for saga turns, compensations, and batch barriers.
 * 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Reusable fakes and stores with `DispersionTestKit`.

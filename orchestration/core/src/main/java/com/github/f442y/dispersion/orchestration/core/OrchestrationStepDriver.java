@@ -11,6 +11,7 @@ import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
 import com.github.f442y.dispersion.orchestration.CompensationAction;
+import com.github.f442y.dispersion.orchestration.CompensationRecord;
 import com.github.f442y.dispersion.orchestration.ContextRecoverer;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationState;
@@ -19,10 +20,14 @@ import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.RetryPolicy;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
+import com.github.f442y.dispersion.orchestration.WorkloadExecutionMode;
+import com.github.f442y.dispersion.orchestration.WorkloadInvocation;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
+import com.github.f442y.dispersion.routing.WorkloadRouter;
+import com.github.f442y.dispersion.routing.endpoint.WorkloadMetadata;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -33,12 +38,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -198,6 +205,8 @@ public final class OrchestrationStepDriver {
             ));
         }
 
+        List<CompensationRecord<CONTEXT>> compensationHistory = new ArrayList<>();
+
         try {
             while (currentStateKey != null) {
                 // 1. Check if terminal
@@ -292,9 +301,9 @@ public final class OrchestrationStepDriver {
 
                 long stateStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
 
-                // 3. Child State Machine Execution with Retry and Recovery
-                if (orchState != null && orchState.hasChildStateMachine()) {
-                    context = executeChildMachineWithRetry(machineId, orchState, context);
+                // 3. Workload Invocation (Unifying child state machines and routed service workloads!)
+                if (orchState != null && orchState.hasWorkloadInvocation()) {
+                    context = executeWorkloadInvocationWithRetry(machineId, config, orchState, context, virtualThreadExecutor);
                 }
                 // 4. Parallel Fork-Join Execution with optional context isolation and reduction
                 else if (orchState != null && orchState.isParallelState()) {
@@ -352,6 +361,23 @@ public final class OrchestrationStepDriver {
 
                 // Record completed state for Saga compensation
                 completedStates.add(currentStateKey);
+                if (orchState != null) {
+                    if (orchState.compensationAction() != null) {
+                        compensationHistory.add(new CompensationRecord.LocalCompensation<>(
+                                currentStateKey.name(),
+                                orchState.compensationAction()
+                        ));
+                    }
+                    if (orchState.hasWorkloadInvocation() && orchState.workloadInvocation().hasRoutedCompensation()) {
+                        Object compPayload = orchState.workloadInvocation().routedCompensationExtractor().apply(context);
+                        compensationHistory.add(new CompensationRecord.RoutedCompensation<>(
+                                currentStateKey.name(),
+                                orchState.workloadInvocation().serviceName(),
+                                orchState.workloadInvocation().routingSelector(),
+                                compPayload
+                        ));
+                    }
+                }
 
                 // Update correlation key if changed
                 if (config.getCorrelationKeyExtractor() != null) {
@@ -421,27 +447,73 @@ public final class OrchestrationStepDriver {
 
             List<String> compStateNames = new ArrayList<>();
             // Execute Saga Compensation Rollback in Reverse Chronological Order (LIFO)
-            for (int i = completedStates.size() - 1; i >= 0; i--) {
-                STATE_KEY compStateKey = completedStates.get(i);
-                try {
-                    State<CONTEXT, STATE_KEY> s = stateMap.getState(compStateKey);
-                    if (s instanceof OrchestrationState<CONTEXT, STATE_KEY> os) {
-                        CompensationAction<CONTEXT> compAction = os.compensationAction();
-                        if (compAction != null) {
+            if (!compensationHistory.isEmpty()) {
+                for (int i = compensationHistory.size() - 1; i >= 0; i--) {
+                    CompensationRecord<CONTEXT> compRecord = compensationHistory.get(i);
+                    try {
+                        if (compRecord instanceof CompensationRecord.LocalCompensation<CONTEXT> localComp) {
                             log.atDebug()
                                     .addKeyValue("machine_id", machineId)
-                                    .addKeyValue("compensating_state", compStateKey.name())
-                                    .log("Compensating completed state");
-                            context = compAction.compensate(context);
-                            compStateNames.add(compStateKey.name());
+                                    .addKeyValue("compensating_state", localComp.stateKey())
+                                    .log("Compensating local completed state");
+                            context = localComp.action().compensate(context);
+                            compStateNames.add(localComp.stateKey());
+                        } else if (compRecord instanceof CompensationRecord.RoutedCompensation<CONTEXT, ?> routedComp) {
+                            log.atInfo()
+                                    .addKeyValue("machine_id", machineId)
+                                    .addKeyValue("service_name", routedComp.serviceName())
+                                    .addKeyValue("compensating_state", routedComp.stateKey())
+                                    .log("Dispatching routed Saga compensation to worker service");
+                            WorkloadRouter router = config.workloadRouter();
+                            if (router != null) {
+                                WorkloadMetadata compMetadata = WorkloadMetadata.builder(
+                                        routedComp.serviceName(),
+                                        UUID.randomUUID().toString()
+                                )
+                                        .selector(routedComp.routingSelector())
+                                        .header("parentMachineId", machineId.toString())
+                                        .header("action", "compensate")
+                                        .build();
+                                router.routeSync(
+                                        routedComp.serviceName(),
+                                        routedComp.payload(),
+                                        compMetadata,
+                                        Duration.ofSeconds(30)
+                                );
+                            }
+                            compStateNames.add(routedComp.stateKey());
                         }
+                    } catch (Throwable compErr) {
+                        log.atError()
+                                .setCause(compErr)
+                                .addKeyValue("machine_id", machineId)
+                                .addKeyValue("state", compRecord.stateKey())
+                                .log("Compensation error in state");
                     }
-                } catch (Throwable compErr) {
-                    log.atError()
-                            .setCause(compErr)
-                            .addKeyValue("machine_id", machineId)
-                            .addKeyValue("state", compStateKey.name())
-                            .log("Compensation error in state");
+                }
+            } else {
+                for (int i = completedStates.size() - 1; i >= 0; i--) {
+                    STATE_KEY compStateKey = completedStates.get(i);
+                    try {
+                        State<CONTEXT, STATE_KEY> s = stateMap.getState(compStateKey);
+                        if (s instanceof OrchestrationState<CONTEXT, STATE_KEY> os) {
+                            CompensationAction<CONTEXT> compAction = os.compensationAction();
+                            if (compAction != null) {
+                                log.atDebug()
+                                        .addKeyValue("machine_id", machineId)
+                                        .addKeyValue("compensating_state", compStateKey.name())
+                                        .log("Compensating completed state");
+                                context = compAction.compensate(context);
+                                compStateNames.add(compStateKey.name());
+                            }
+                        }
+                    } catch (Throwable compErr) {
+                        log.atError()
+                                .setCause(compErr)
+                                .addKeyValue("machine_id", machineId)
+                                .addKeyValue("state", compStateKey.name())
+                                .log("Compensation error in state");
+                    }
                 }
             }
 
@@ -493,6 +565,116 @@ public final class OrchestrationStepDriver {
             }
             throw new RuntimeException(t);
         }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static <
+            CONTEXT extends StateMachineContext,
+            STATE_KEY extends Enum<STATE_KEY> & StateKey>
+    CONTEXT executeWorkloadInvocationWithRetry(
+            @NonNull UUID parentMachineId,
+            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, ?, ?> config,
+            @NonNull OrchestrationState<CONTEXT, STATE_KEY> orchState,
+            @NonNull CONTEXT parentContext,
+            @NonNull ExecutorService virtualThreadExecutor
+    ) throws Exception {
+
+        WorkloadInvocation<CONTEXT, Object, Object> invocation = (WorkloadInvocation) orchState.workloadInvocation();
+        if (invocation == null) {
+            return parentContext;
+        }
+
+        RetryPolicy retryPolicy = invocation.retryPolicy();
+        ContextRecoverer recoverer = invocation.recoverer();
+
+        int maxAttempts = retryPolicy.maxAttempts();
+        Throwable lastError = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                if (attempt > 1) {
+                    Duration delay = retryPolicy.computeDelay(attempt);
+                    if (!delay.isZero()) {
+                        Thread.sleep(delay);
+                    }
+                }
+
+                Object inputPayload;
+                if (attempt > 1 && recoverer != null) {
+                    inputPayload = recoverer.recover(parentContext, lastError, attempt);
+                } else {
+                    inputPayload = invocation.inputExtractor().apply(parentContext);
+                }
+
+                Object result;
+                if (invocation.hasLocalStateMachine()) {
+                    StateMachineConfiguration childConfig = invocation.localStateMachine();
+                    if (childConfig instanceof OrchestrationStateMachineConfiguration orchChildConfig) {
+                        UUID childMachineId = UUID.randomUUID();
+                        OrchestrationTurnResult<?, ?, ?> turn = executeChildOrchestrationTurn(childMachineId, orchChildConfig, inputPayload);
+                        if (turn.isFailed() || turn.isCompensated()) {
+                            throw (turn.error() != null) ? new RuntimeException(turn.error()) : new IllegalStateException("Child orchestration failed");
+                        }
+                        if (turn.isSuspended()) {
+                            throw new IllegalStateException("Child orchestration [" + childMachineId + "] unexpectedly suspended at state [" + turn.currentStateKey() + "]");
+                        }
+                        result = turn.output();
+                    } else {
+                        result = executeChildStateMachineDirect(childConfig, inputPayload);
+                    }
+                } else {
+                    WorkloadRouter router = (config != null) ? config.workloadRouter() : null;
+                    if (router == null) {
+                        throw new IllegalStateException("WorkloadRouter must be configured on OrchestrationStateMachineConfiguration to invoke service: " + invocation.serviceName());
+                    }
+
+                    WorkloadMetadata metadata = WorkloadMetadata.builder(
+                            invocation.serviceName(),
+                            UUID.randomUUID().toString()
+                    )
+                            .selector(invocation.routingSelector())
+                            .header("parentMachineId", parentMachineId.toString())
+                            .build();
+
+                    if (invocation.executionMode() == WorkloadExecutionMode.SYNCHRONOUS_VIRTUAL_THREAD) {
+                        result = router.routeSync(
+                                invocation.serviceName(),
+                                inputPayload,
+                                metadata,
+                                invocation.timeout()
+                        );
+                    } else {
+                        result = router.routeAsync(
+                                invocation.serviceName(),
+                                inputPayload,
+                                metadata
+                        ).get(invocation.timeout().toMillis(), TimeUnit.MILLISECONDS);
+                    }
+                }
+
+                BiFunction<CONTEXT, Object, CONTEXT> outputMerger = invocation.outputMerger();
+                if (outputMerger != null) {
+                    return outputMerger.apply(parentContext, result);
+                }
+                return parentContext;
+
+            } catch (Throwable t) {
+                lastError = t;
+                log.atWarn()
+                        .setCause(t)
+                        .addKeyValue("parent_machine_id", parentMachineId)
+                        .addKeyValue("service_name", invocation.serviceName())
+                        .addKeyValue("attempt", attempt)
+                        .addKeyValue("max_attempts", maxAttempts)
+                        .log("Workload invocation attempt failed");
+                if (attempt >= maxAttempts) {
+                    if (t instanceof Exception ex) throw ex;
+                    throw new RuntimeException(t);
+                }
+            }
+        }
+
+        throw new RuntimeException(lastError);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

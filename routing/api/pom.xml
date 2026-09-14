@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>dispersion-routing-api</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Dispersion :: Routing API</name>
+    <description>Core contracts, endpoint models, tags, policies, and worker SPIs for location-transparent routing</description>
+    <url>https://github.com/f442y/dispersion</url>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-event-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+        </dependency>
+    </dependencies>
+</project>

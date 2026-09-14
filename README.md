@@ -69,6 +69,18 @@
       <p>👉 <i>Explore the <a href="control/README.md"><b>Control Subsystem</b></a> & <a href="event/README.md"><b>Telemetry Pipeline</b></a></i></p>
     </td>
   </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🚦 Location-Agnostic Routing</h3>
+      <p>Run identically as <b>sub-microsecond in-process monoliths</b> or <b>distributed worker nodes</b>, with dynamic Canary updates and Developer Sandboxes.</p>
+      <p>👉 <i>Explore the <a href="routing/README.md"><b>Routing Subsystem</b></a></i></p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🧪 Zero-Mock Testkit</h3>
+      <p>Deterministic in-memory test doubles across all subsystems. Verify saga recovery, network routing, and checkpoints without mocks or containers.</p>
+      <p>👉 <i>Explore the <a href="testing/README.md"><b>Testing Subsystem</b></a></i></p>
+    </td>
+  </tr>
 </table>
 
 ---
@@ -336,30 +348,33 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane()) {
 
 ## 📦 Encompassing Modules
 
-Dispersion is engineered as 16 modular components partitioned into 5 functional subsystems. Click each subsystem below for its dedicated guide:
+Dispersion is engineered as 19 modular components partitioned into 6 functional subsystems. Click each subsystem below for its dedicated guide:
 
 ```mermaid
 graph LR
     subgraph Subsystems["Encompassing Subsystems"]
         E["<b>event/</b><br/>Telemetry & Events"]
         F["<b>fsm/</b><br/>Tier 1 Atomic Engine"]
+        R["<b>routing/</b><br/>Workload Router"]
         O["<b>orchestration/</b><br/>Tier 2 Saga & Batching"]
         C["<b>control/</b><br/>Control Plane & SPI"]
         T["<b>testing/</b><br/>DispersionTestKit"]
     end
 
     F --> E
-    O --> F & E
-    C --> E
-    T --> E & F & O & C
+    R --> E
+    O --> F & E & R
+    C --> E & R
+    T --> E & F & R & O & C
 ```
 
 | Subsystem | Included Modules | Focus & Capabilities | Documentation |
 | :--- | :--- | :--- | :--- |
 | **`event/`** | `dispersion-event-api`<br/>`dispersion-event-core`<br/>`dispersion-event-test` | 13 sealed `ExecutionEvent` records, lock-free ring-buffer bus, push/pull streams, and historical replay. | [**`event/README.md`**](event/README.md) |
 | **`fsm/`** | `dispersion-fsm-api`<br/>`dispersion-fsm-core`<br/>`dispersion-fsm-test` | Sub-microsecond atomic FSM engine, pre-compiled `StateMap` ordinal arrays, and adaptive admission control. | [**`fsm/README.md`**](fsm/README.md) |
-| **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, signal rehydration, parallel branches, and batch barriers. | [**`orchestration/README.md`**](orchestration/README.md) |
-| **`control/`** | `dispersion-control-api`<br/>`dispersion-control-core`<br/>`dispersion-control-test` | Decoupled `InspectableMachine` SPI, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control/README.md`**](control/README.md) |
+| **`routing/`** | `dispersion-routing-api`<br/>`dispersion-routing-core`<br/>`dispersion-routing-test` | Location-agnostic workload router, Canary traffic splits, Developer Sandboxes, backpressure admission, and worker hosting. | [**`routing/README.md`**](routing/README.md) |
+| **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, routed compensations, signal rehydration, parallel branches, and batch barriers. | [**`orchestration/README.md`**](orchestration/README.md) |
+| **`control/`** | `dispersion-control-api`<br/>`dispersion-control-core`<br/>`dispersion-control-test` | Decoupled `InspectableMachine` and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control/README.md`**](control/README.md) |
 | **`testing/`** | `dispersion-testing` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testing/README.md`**](testing/README.md) |
 
 ---
@@ -401,6 +416,12 @@ Add the modules required by your application:
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-fsm-core</artifactId>
+    </dependency>
+
+    <!-- Workload Routing & Traffic Control (Optional) -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-routing-core</artifactId>
     </dependency>
 
     <!-- Tier 2: Distributed Saga Orchestration (Optional) -->

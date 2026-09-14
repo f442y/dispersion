@@ -3,6 +3,7 @@ package com.github.f442y.dispersion.control;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.routing.InspectableRouter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -169,6 +170,27 @@ public interface ControlPlane extends AutoCloseable {
      */
     @NonNull
     ExecutionEventListener getEventListener();
+
+    /**
+     * Registers an inspectable workload router with the Control Plane.
+     *
+     * @param router The inspectable router
+     * @return this ControlPlane for fluent chaining
+     */
+    @NonNull
+    default ControlPlane registerRouter(@NonNull InspectableRouter router) {
+        return this;
+    }
+
+    /**
+     * Retrieves the registered inspectable router if configured.
+     *
+     * @return Optional containing the router
+     */
+    @NonNull
+    default Optional<InspectableRouter> getRouter() {
+        return Optional.empty();
+    }
 
     @Override
     default void close() {}

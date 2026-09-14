@@ -66,6 +66,12 @@ To prevent unbounded memory growth and eliminate expensive full-table scans, `De
 * **Active Execution Pool:** A concurrent hash map indexed by execution ID and correlation key for fast $O(1)$ lookups of active or suspended workflows.
 * **Bounded Terminal Ring Buffer:** A thread-safe, bounded circular pool retaining completed and failed workflows. As new executions terminate, older executions are evicted with zero lock contention and zero GC pauses.
 
+### 3. Workload Router & Worker Node Topology Inspection
+The Control Plane integrates with `dispersion-routing` via `InspectableRouter`:
+* **Router Registration:** `controlPlane.registerRouter(inspectableRouter)` connects the active routing subsystem.
+* **Live Worker Topology:** Discover all registered monolith and distributed endpoints, grouped by service name.
+* **Health & Backpressure Metrics:** Query real-time endpoint health statuses, active concurrency counters, and traffic-split ratios.
+
 ---
 
 ## 3. End-to-End Control Plane Example
@@ -269,6 +275,7 @@ public class ControlPlaneTestingExampleTests {
 
 * 🏠 [**Project Showcase (`README.md`)**](../README.md) — Landing page, architecture overview, and quickstarts.
 * ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Adapting atomic state machines via `executor.asInspectableMachine()`.
+* 🚦 [**Routing Subsystem (`routing/`)**](../routing/README.md) — Inspectable workload router, Canary traffic splits, and Developer Sandboxes.
 * 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Adapting saga orchestrators and batch engines via `executor.asInspectableMachine()`.
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Connecting event buses and telemetry listeners to `DefaultControlPlane`.
 * 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Unit testing control plane workflows with `FakeInspectableMachine`.

@@ -9,7 +9,12 @@ import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.test.TestStateContext;
 import com.github.f442y.dispersion.orchestration.test.FakeSignalBroker;
 import com.github.f442y.dispersion.orchestration.test.RecordingCheckpointStore;
+import com.github.f442y.dispersion.routing.test.FakeWorkloadEndpoint;
+import com.github.f442y.dispersion.routing.test.RecordingWorkloadRouter;
+import com.github.f442y.dispersion.routing.test.SimulatedNetworkTransport;
 import org.jspecify.annotations.NonNull;
+
+import java.util.function.Function;
 
 /**
  * Convenient fluent factory providing instant access to all Dispersion test doubles, fakes, and harnesses.
@@ -67,5 +72,23 @@ public final class DispersionTestKit {
     @NonNull
     public static TestStateContext testContext(@NonNull String id) {
         return new TestStateContext(id);
+    }
+
+    @NonNull
+    public static RecordingWorkloadRouter recordingWorkloadRouter() {
+        return new RecordingWorkloadRouter();
+    }
+
+    @NonNull
+    public static SimulatedNetworkTransport simulatedNetworkTransport() {
+        return new SimulatedNetworkTransport();
+    }
+
+    @NonNull
+    public static <WORKLOAD_INPUT, WORKLOAD_OUTPUT> FakeWorkloadEndpoint<WORKLOAD_INPUT, WORKLOAD_OUTPUT> fakeWorkloadEndpoint(
+            @NonNull String endpointId,
+            @NonNull Function<WORKLOAD_INPUT, WORKLOAD_OUTPUT> handler
+    ) {
+        return FakeWorkloadEndpoint.of(endpointId, handler);
     }
 }

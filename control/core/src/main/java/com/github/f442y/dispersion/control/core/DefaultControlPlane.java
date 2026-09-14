@@ -10,6 +10,7 @@ import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.routing.InspectableRouter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -91,6 +92,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     private final int maxTrackedExecutions;
     private final int maxTimelineEventsPerExecution;
     private final int maxRecentEvents;
+    private volatile InspectableRouter router;
 
     /**
      * Creates a Control Plane with standard capacity defaults (10,000 terminal executions, 100 timeline events, 2,000 recent events).
@@ -122,6 +124,22 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     // =========================================================================
     // Registration & Topology Discovery
     // =========================================================================
+
+    @Override
+    @NonNull
+    public ControlPlane registerRouter(@NonNull InspectableRouter router) {
+        this.router = Objects.requireNonNull(router, "router must not be null");
+        log.atInfo()
+                .addKeyValue("services_count", router.registeredServices().size())
+                .log("Registered InspectableRouter in ControlPlane");
+        return this;
+    }
+
+    @Override
+    @NonNull
+    public Optional<InspectableRouter> getRouter() {
+        return Optional.ofNullable(router);
+    }
 
     @Override
     @NonNull

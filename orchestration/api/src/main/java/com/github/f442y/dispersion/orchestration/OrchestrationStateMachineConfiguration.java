@@ -8,6 +8,7 @@ import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
+import com.github.f442y.dispersion.routing.WorkloadRouter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -33,6 +34,7 @@ public class OrchestrationStateMachineConfiguration<
     private final Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener;
     private final Function<CONTEXT, String> correlationKeyExtractor;
     private final CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
+    private final WorkloadRouter workloadRouter;
 
     public OrchestrationStateMachineConfiguration(
             @NonNull String machineName,
@@ -48,7 +50,7 @@ public class OrchestrationStateMachineConfiguration<
             @Nullable CheckpointStore<CONTEXT, STATE_KEY> checkpointStore
     ) {
         this(machineName, stateMap, maxTransitions, contextFactory, inputFunction, outputFunction,
-                exceptionTrigger, finishTrigger, checkpointListener, correlationKeyExtractor, checkpointStore, null);
+                exceptionTrigger, finishTrigger, checkpointListener, correlationKeyExtractor, checkpointStore, null, null);
     }
 
     public OrchestrationStateMachineConfiguration(
@@ -65,12 +67,32 @@ public class OrchestrationStateMachineConfiguration<
             @Nullable CheckpointStore<CONTEXT, STATE_KEY> checkpointStore,
             @Nullable ExecutionEventListener eventListener
     ) {
+        this(machineName, stateMap, maxTransitions, contextFactory, inputFunction, outputFunction,
+                exceptionTrigger, finishTrigger, checkpointListener, correlationKeyExtractor, checkpointStore, eventListener, null);
+    }
+
+    public OrchestrationStateMachineConfiguration(
+            @NonNull String machineName,
+            @NonNull StateMap<CONTEXT, STATE_KEY> stateMap,
+            int maxTransitions,
+            @Nullable StateMachineContextFactory<CONTEXT> contextFactory,
+            @Nullable InputFunction<CONTEXT, INPUT> inputFunction,
+            @Nullable OutputFunction<CONTEXT, OUTPUT> outputFunction,
+            @Nullable BiConsumer<CONTEXT, Throwable> exceptionTrigger,
+            @Nullable Consumer<CONTEXT> finishTrigger,
+            @Nullable Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener,
+            @Nullable Function<CONTEXT, String> correlationKeyExtractor,
+            @Nullable CheckpointStore<CONTEXT, STATE_KEY> checkpointStore,
+            @Nullable ExecutionEventListener eventListener,
+            @Nullable WorkloadRouter workloadRouter
+    ) {
         super(Objects.requireNonNull(machineName, "machineName must not be null"),
                 stateMap, maxTransitions, contextFactory, inputFunction, outputFunction,
                 exceptionTrigger, finishTrigger, eventListener);
         this.checkpointListener = checkpointListener;
         this.correlationKeyExtractor = correlationKeyExtractor;
         this.checkpointStore = checkpointStore;
+        this.workloadRouter = workloadRouter;
     }
 
     @Nullable
@@ -86,5 +108,15 @@ public class OrchestrationStateMachineConfiguration<
     @Nullable
     public CheckpointStore<CONTEXT, STATE_KEY> getCheckpointStore() {
         return checkpointStore;
+    }
+
+    @Nullable
+    public WorkloadRouter getWorkloadRouter() {
+        return workloadRouter;
+    }
+
+    @Nullable
+    public WorkloadRouter workloadRouter() {
+        return workloadRouter;
     }
 }

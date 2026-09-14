@@ -19,12 +19,14 @@ graph TD
         FT["dispersion-fsm-test<br/><code>TestStateContext</code><br/><code>TestStateKey</code>"]
         OT["dispersion-orchestration-test<br/><code>FakeSignalBroker</code><br/><code>RecordingCheckpointStore</code>"]
         CT["dispersion-control-test<br/><code>FakeInspectableMachine</code>"]
+        RT["dispersion-routing-test<br/><code>FakeWorkloadEndpoint</code><br/><code>RecordingWorkloadRouter</code><br/><code>SimulatedNetworkTransport</code>"]
     end
 
     DTK --> ET
     DTK --> FT
     DTK --> OT
     DTK --> CT
+    DTK --> RT
 ```
 
 ### Test Double Catalog
@@ -38,6 +40,9 @@ graph TD
 | **`FakeSignalBroker`** | `SignalPublisher`, `SignalConsumer` | `orchestration` | Synchronous, in-memory pub-sub broker capturing all outbound messages and routing test signals. |
 | **`RecordingCheckpointStore`** | `CheckpointStore` | `orchestration` | In-memory store tracking every `save`, `find`, and `remove` operation for saga verification. |
 | **`FakeInspectableMachine`** | `InspectableMachine` | `control` | Configurable mock machine for testing Control Plane registries, dashboards, and signal endpoints. |
+| **`FakeWorkloadEndpoint`** | `WorkloadEndpoint` | `routing` | Deterministic endpoint with configurable response lambdas, latency, and injected errors. |
+| **`RecordingWorkloadRouter`** | `WorkloadRouter` | `routing` | In-memory router recording all synchronous and asynchronous route invocations for assertions. |
+| **`SimulatedNetworkTransport`** | `ChannelTransport` | `routing` | In-memory network simulator with artificial latency, packet drop rates, and network partitioning. |
 
 ---
 
@@ -54,6 +59,9 @@ import com.github.f442y.dispersion.fsm.test.TestStateContext;
 import com.github.f442y.dispersion.fsm.test.TestStateKey;
 import com.github.f442y.dispersion.orchestration.test.FakeSignalBroker;
 import com.github.f442y.dispersion.orchestration.test.RecordingCheckpointStore;
+import com.github.f442y.dispersion.routing.test.FakeWorkloadEndpoint;
+import com.github.f442y.dispersion.routing.test.RecordingWorkloadRouter;
+import com.github.f442y.dispersion.routing.test.SimulatedNetworkTransport;
 import com.github.f442y.dispersion.testing.DispersionTestKit;
 
 // 1. Telemetry and Event Testing
@@ -67,7 +75,12 @@ TestStateContext context = DispersionTestKit.testContext("TEST-01");
 RecordingCheckpointStore<TestStateContext, TestStateKey> store = DispersionTestKit.recordingCheckpointStore();
 FakeSignalBroker broker = DispersionTestKit.fakeSignalBroker();
 
-// 4. Control Plane Testing
+// 4. Routing & Network Testing
+RecordingWorkloadRouter router = DispersionTestKit.recordingWorkloadRouter();
+SimulatedNetworkTransport transport = DispersionTestKit.simulatedNetworkTransport();
+FakeWorkloadEndpoint<String, String> endpoint = DispersionTestKit.fakeWorkloadEndpoint("echo-ep", in -> "ECHO:" + in);
+
+// 5. Control Plane Testing
 FakeInspectableMachine machine = DispersionTestKit.fakeMachine("MockEngine", MachineType.ORCHESTRATION);
 ```
 
