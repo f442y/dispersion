@@ -55,32 +55,36 @@ graph TD
 
 ---
 
-## 2. Sealed Telemetry Hierarchy (`ExecutionEvent`)
+## 2. Telemetry Hierarchy (`ExecutionEvent`)
 
-Dispersion emits an immutable sealed record at every execution milestone:
+Dispersion emits immutable telemetry records at every execution milestone. The foundational `ExecutionEvent` interface defines core lifecycle events nested directly within `ExecutionEvent.*`, while domain-specific events implement `ExecutionEvent` directly from their respective modules:
 
-| Event Record | Emitted When | Payload Highlights |
-| :--- | :--- | :--- |
-| `TurnStartedEvent` | Orchestration or atomic turn begins | `machineId`, `machineName`, `turnId`, `stateName` |
-| `StateEnteredEvent` | Workflow transitions into a state node | `machineId`, `stateName` |
-| `ActionExecutedEvent` | State action logic successfully runs | `machineId`, `stateName`, `duration` |
-| `TransitionEvaluatedEvent` | Routing evaluation chooses next target state | `machineId`, `sourceState`, `targetState` |
-| `StateExitedEvent` | Workflow leaves a state node | `machineId`, `stateName`, `duration` |
-| `SignalAwaitedEvent` | Workflow suspends waiting for an external signal | `machineId`, `stateName`, `expectedSignal`, `correlationKey` |
-| `SignalDeliveredEvent` | Inbound signal arrives and resumes workflow | `machineId`, `signalName`, `correlationKey` |
-| `TurnSuspendedEvent` | Workflow snapshots checkpoint and releases thread | `machineId`, `stateName`, `correlationKey` |
-| `TurnCompensatedEvent` | Downstream error triggers LIFO Saga rollback | `machineId`, `failedStateName`, `cause` |
-| `TurnCompletedEvent` | Workflow reaches a terminal end state | `machineId`, `duration`, `output` |
-| `TurnFailedEvent` | Unhandled error terminates workflow | `machineId`, `failedStateName`, `cause` |
-| `BatchBarrierReachedEvent` | Batch item arrives at barrier policy | `machineId`, `batchId`, `itemKey`, `stateName` |
-| `BatchBarrierUnlockedEvent` | Batch barrier condition satisfied; stage advances | `machineId`, `batchId`, `stateName`, `itemCount` |
+| Event Record | Module | Emitted When | Payload Highlights |
+| :--- | :--- | :--- | :--- |
+| `TurnStartedEvent` | `dispersion-event-api` | Orchestration or atomic turn begins | `machineId`, `machineName`, `turnId`, `stateName` |
+| `StateEnteredEvent` | `dispersion-event-api` | Workflow transitions into a state node | `machineId`, `stateName` |
+| `ActionExecutedEvent` | `dispersion-event-api` | State action logic successfully runs | `machineId`, `stateName`, `duration` |
+| `TransitionEvaluatedEvent` | `dispersion-event-api` | Routing evaluation chooses next target state | `machineId`, `sourceState`, `targetState` |
+| `StateExitedEvent` | `dispersion-event-api` | Workflow leaves a state node | `machineId`, `stateName`, `duration` |
+| `SignalAwaitedEvent` | `dispersion-event-api` | Workflow suspends waiting for an external signal | `machineId`, `stateName`, `expectedSignal`, `correlationKey` |
+| `SignalDeliveredEvent` | `dispersion-event-api` | Inbound signal arrives and resumes workflow | `machineId`, `signalName`, `correlationKey` |
+| `TurnSuspendedEvent` | `dispersion-event-api` | Workflow snapshots checkpoint and releases thread | `machineId`, `stateName`, `correlationKey` |
+| `TurnCompensatedEvent` | `dispersion-event-api` | Downstream error triggers LIFO Saga rollback | `machineId`, `failedStateName`, `cause` |
+| `TurnCompletedEvent` | `dispersion-event-api` | Workflow reaches a terminal end state | `machineId`, `duration`, `output` |
+| `TurnFailedEvent` | `dispersion-event-api` | Unhandled error terminates workflow | `machineId`, `failedStateName`, `cause` |
+| `CommandDeduplicatedEvent` | `dispersion-orchestration-api` | Duplicate command envelope skipped | `machineId`, `commandId`, `correlationKey` |
+| `BatchBarrierReachedEvent` | `dispersion-orchestration-batch` | Batch item arrives at barrier policy | `machineId`, `batchId`, `itemKey`, `stateName` |
+| `BatchBarrierUnlockedEvent` | `dispersion-orchestration-batch` | Batch barrier condition satisfied; stage advances | `machineId`, `batchId`, `stateName`, `itemCount` |
 
-### Exhaustive Pattern Matching in Java 25
+### Pattern Matching in Java 25
 
 ```java
 package com.example.observability;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.orchestration.batch.BatchBarrierReachedEvent;
+import com.github.f442y.dispersion.orchestration.batch.BatchBarrierUnlockedEvent;
+import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -152,15 +156,25 @@ public final class TelemetryDispatcher {
                    .setCause(failed.cause())
                    .log("Execution failed with unhandled error");
 
-            case ExecutionEvent.BatchBarrierReachedEvent barrier ->
+            case BatchBarrierReachedEvent barrier ->
                 log.atDebug()
                    .addKeyValue("item_key", barrier.itemKey())
                    .log("Item arrived at batch barrier");
 
-            case ExecutionEvent.BatchBarrierUnlockedEvent unlocked ->
+            case BatchBarrierUnlockedEvent unlocked ->
                 log.atInfo()
                    .addKeyValue("state", unlocked.stateName())
                    .log("Batch barrier unlocked");
+
+            case CommandDeduplicatedEvent dedup ->
+                log.atWarn()
+                   .addKeyValue("command_id", dedup.commandId())
+                   .log("Duplicate command discarded");
+
+            default ->
+                log.atDebug()
+                   .addKeyValue("event_type", event.getClass().getSimpleName())
+                   .log("Received custom execution event");
         }
     }
 }

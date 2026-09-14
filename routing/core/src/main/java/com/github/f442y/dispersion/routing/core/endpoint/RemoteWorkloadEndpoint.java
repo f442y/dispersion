@@ -1,11 +1,11 @@
 package com.github.f442y.dispersion.routing.core.endpoint;
 
-import com.github.f442y.dispersion.routing.transport.ChannelTransport;
 import com.github.f442y.dispersion.routing.endpoint.EndpointStatus;
 import com.github.f442y.dispersion.routing.endpoint.EndpointType;
 import com.github.f442y.dispersion.routing.endpoint.WorkloadEndpoint;
 import com.github.f442y.dispersion.routing.endpoint.WorkloadMetadata;
 import com.github.f442y.dispersion.routing.policy.EndpointTags;
+import com.github.f442y.dispersion.routing.transport.ChannelTransport;
 import com.github.f442y.dispersion.routing.worker.WorkloadEnvelope;
 import org.jspecify.annotations.NonNull;
 

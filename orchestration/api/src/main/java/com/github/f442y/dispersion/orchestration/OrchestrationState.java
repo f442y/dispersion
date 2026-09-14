@@ -7,7 +7,6 @@ import com.github.f442y.dispersion.fsm.state.State;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.Transition;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
-import com.github.f442y.dispersion.routing.policy.RoutingSelector;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -169,7 +168,7 @@ public class OrchestrationState<
             @Nullable String publishDestination,
             @Nullable Function<CONTEXT, ?> publishPayloadExtractor,
             @Nullable String serviceName,
-            @Nullable RoutingSelector routingSelector,
+            @Nullable WorkloadSelector workloadSelector,
             @Nullable Function<CONTEXT, ?> routedCompensationExtractor
     ) {
         this(
@@ -187,7 +186,7 @@ public class OrchestrationState<
                         contextRecoverer,
                         retryPolicy,
                         serviceName,
-                        routingSelector,
+                        workloadSelector,
                         routedCompensationExtractor
                 ),
                 parallelBranches,
@@ -209,7 +208,7 @@ public class OrchestrationState<
             @Nullable ContextRecoverer<CONTEXT, ?> contextRecoverer,
             @Nullable RetryPolicy retryPolicy,
             @Nullable String serviceName,
-            @Nullable RoutingSelector routingSelector,
+            @Nullable WorkloadSelector workloadSelector,
             @Nullable Function<CONTEXT, ?> routedCompensationExtractor
     ) {
         if (childStateMachine != null) {
@@ -217,7 +216,7 @@ public class OrchestrationState<
             Function inFn = (childInputExtractor != null) ? childInputExtractor : (Function<Object, Object>) ctx -> null;
             BiFunction outFn = (childOutputMerger != null) ? childOutputMerger : (BiFunction<Object, Object, Object>) (ctx, out) -> ctx;
             RetryPolicy rp = (retryPolicy != null) ? retryPolicy : RetryPolicy.noRetries();
-            RoutingSelector sel = (routingSelector != null) ? routingSelector : RoutingSelector.any();
+            WorkloadSelector sel = (workloadSelector != null) ? workloadSelector : WorkloadSelector.any();
             return new WorkloadInvocation<>(
                     name,
                     (StateMachineConfiguration) childStateMachine,
@@ -237,7 +236,7 @@ public class OrchestrationState<
             Function inFn = (childInputExtractor != null) ? childInputExtractor : (Function<Object, Object>) ctx -> null;
             BiFunction outFn = (childOutputMerger != null) ? childOutputMerger : (BiFunction<Object, Object, Object>) (ctx, out) -> ctx;
             RetryPolicy rp = (retryPolicy != null) ? retryPolicy : RetryPolicy.noRetries();
-            RoutingSelector sel = (routingSelector != null) ? routingSelector : RoutingSelector.any();
+            WorkloadSelector sel = (workloadSelector != null) ? workloadSelector : WorkloadSelector.any();
             return new WorkloadInvocation<>(
                     serviceName,
                     null,
@@ -325,12 +324,12 @@ public class OrchestrationState<
         return (workloadInvocation != null) ? workloadInvocation.recoverer() : null;
     }
 
-    @NonNull
+    @Nullable
     public RetryPolicy retryPolicy() {
-        return (workloadInvocation != null) ? workloadInvocation.retryPolicy() : RetryPolicy.noRetries();
+        return (workloadInvocation != null) ? workloadInvocation.retryPolicy() : null;
     }
 
-    public boolean hasChildStateMachine() {
+    public boolean hasChildMachine() {
         return workloadInvocation != null && workloadInvocation.hasLocalStateMachine();
     }
 
@@ -344,8 +343,13 @@ public class OrchestrationState<
     }
 
     @NonNull
-    public RoutingSelector routingSelector() {
-        return (workloadInvocation != null) ? workloadInvocation.routingSelector() : RoutingSelector.any();
+    public WorkloadSelector workloadSelector() {
+        return (workloadInvocation != null) ? workloadInvocation.workloadSelector() : WorkloadSelector.any();
+    }
+
+    @NonNull
+    public WorkloadSelector routingSelector() {
+        return workloadSelector();
     }
 
     @Nullable

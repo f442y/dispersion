@@ -2,7 +2,6 @@ package com.github.f442y.dispersion.orchestration;
 
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.routing.policy.RoutingSelector;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -29,7 +28,7 @@ public record WorkloadInvocation<
         @NonNull Class<RESPONSE> responseType,
         @NonNull Function<CONTEXT, REQUEST> inputExtractor,
         @NonNull BiFunction<CONTEXT, RESPONSE, CONTEXT> outputMerger,
-        @NonNull RoutingSelector routingSelector,
+        @NonNull WorkloadSelector workloadSelector,
         @NonNull RetryPolicy retryPolicy,
         @Nullable ContextRecoverer<CONTEXT, REQUEST> recoverer,
         @NonNull WorkloadExecutionMode executionMode,
@@ -43,7 +42,7 @@ public record WorkloadInvocation<
         Objects.requireNonNull(responseType, "responseType must not be null");
         Objects.requireNonNull(inputExtractor, "inputExtractor must not be null");
         Objects.requireNonNull(outputMerger, "outputMerger must not be null");
-        Objects.requireNonNull(routingSelector, "routingSelector must not be null");
+        Objects.requireNonNull(workloadSelector, "workloadSelector must not be null");
         Objects.requireNonNull(retryPolicy, "retryPolicy must not be null");
         Objects.requireNonNull(executionMode, "executionMode must not be null");
         Objects.requireNonNull(timeout, "timeout must not be null");

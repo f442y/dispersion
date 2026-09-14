@@ -7,6 +7,4 @@ module com.github.f442y.dispersion.orchestration.core {
     requires transitive com.github.f442y.dispersion.routing.api;
 
     exports com.github.f442y.dispersion.orchestration.core;
-    exports com.github.f442y.dispersion.orchestration.core.batch;
-    exports com.github.f442y.dispersion.orchestration.core.messaging;
 }

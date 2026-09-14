@@ -52,6 +52,16 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-batch</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-messaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-control-api</artifactId>
                 <version>${project.version}</version>
             </dependency>

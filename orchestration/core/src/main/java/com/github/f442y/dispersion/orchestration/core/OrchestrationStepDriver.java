@@ -26,8 +26,8 @@ import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
-import com.github.f442y.dispersion.routing.WorkloadRouter;
-import com.github.f442y.dispersion.routing.endpoint.WorkloadMetadata;
+import com.github.f442y.dispersion.orchestration.WorkloadDispatcher;
+import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -133,7 +133,7 @@ public final class OrchestrationStepDriver {
                         .addKeyValue("command_id", env.commandId())
                         .log("Ignoring duplicate command envelope");
                 if (config.eventListener() != null) {
-                    safeNotify(config.eventListener(), new ExecutionEvent.CommandDeduplicatedEvent(
+                    safeNotify(config.eventListener(), new CommandDeduplicatedEvent(
                             checkpoint.machineId(),
                             config.getMachineName(),
                             env.commandId(),
@@ -373,7 +373,7 @@ public final class OrchestrationStepDriver {
                         compensationHistory.add(new CompensationRecord.RoutedCompensation<>(
                                 currentStateKey.name(),
                                 orchState.workloadInvocation().serviceName(),
-                                orchState.workloadInvocation().routingSelector(),
+                                orchState.workloadInvocation().workloadSelector(),
                                 compPayload
                         ));
                     }
@@ -464,21 +464,15 @@ public final class OrchestrationStepDriver {
                                     .addKeyValue("service_name", routedComp.serviceName())
                                     .addKeyValue("compensating_state", routedComp.stateKey())
                                     .log("Dispatching routed Saga compensation to worker service");
-                            WorkloadRouter router = config.workloadRouter();
-                            if (router != null) {
-                                WorkloadMetadata compMetadata = WorkloadMetadata.builder(
-                                        routedComp.serviceName(),
-                                        UUID.randomUUID().toString()
-                                )
-                                        .selector(routedComp.routingSelector())
-                                        .header("parentMachineId", machineId.toString())
-                                        .header("action", "compensate")
-                                        .build();
-                                router.routeSync(
+                            WorkloadDispatcher dispatcher = config.workloadDispatcher();
+                            if (dispatcher != null) {
+                                dispatcher.dispatchSync(
                                         routedComp.serviceName(),
                                         routedComp.payload(),
-                                        compMetadata,
-                                        Duration.ofSeconds(30)
+                                        routedComp.workloadSelector(),
+                                        Duration.ofSeconds(30),
+                                        Map.of("parentMachineId", machineId.toString(), "action", "compensate"),
+                                        Object.class
                                 );
                             }
                             compStateNames.add(routedComp.stateKey());
@@ -623,31 +617,30 @@ public final class OrchestrationStepDriver {
                         result = executeChildStateMachineDirect(childConfig, inputPayload);
                     }
                 } else {
-                    WorkloadRouter router = (config != null) ? config.workloadRouter() : null;
-                    if (router == null) {
-                        throw new IllegalStateException("WorkloadRouter must be configured on OrchestrationStateMachineConfiguration to invoke service: " + invocation.serviceName());
+                    WorkloadDispatcher dispatcher = (config != null) ? config.workloadDispatcher() : null;
+                    if (dispatcher == null) {
+                        throw new IllegalStateException("WorkloadDispatcher must be configured on OrchestrationStateMachineConfiguration to invoke service: " + invocation.serviceName());
                     }
 
-                    WorkloadMetadata metadata = WorkloadMetadata.builder(
-                            invocation.serviceName(),
-                            UUID.randomUUID().toString()
-                    )
-                            .selector(invocation.routingSelector())
-                            .header("parentMachineId", parentMachineId.toString())
-                            .build();
+                    Map<String, String> metadata = Map.of("parentMachineId", parentMachineId.toString());
 
                     if (invocation.executionMode() == WorkloadExecutionMode.SYNCHRONOUS_VIRTUAL_THREAD) {
-                        result = router.routeSync(
+                        result = dispatcher.dispatchSync(
                                 invocation.serviceName(),
                                 inputPayload,
+                                invocation.workloadSelector(),
+                                invocation.timeout(),
                                 metadata,
-                                invocation.timeout()
+                                invocation.responseType()
                         );
                     } else {
-                        result = router.routeAsync(
+                        result = dispatcher.dispatchAsync(
                                 invocation.serviceName(),
                                 inputPayload,
-                                metadata
+                                invocation.workloadSelector(),
+                                invocation.timeout(),
+                                metadata,
+                                invocation.responseType()
                         ).get(invocation.timeout().toMillis(), TimeUnit.MILLISECONDS);
                     }
                 }

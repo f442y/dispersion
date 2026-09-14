@@ -8,7 +8,6 @@ import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.context.StateMachineContextFactory;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
-import com.github.f442y.dispersion.routing.WorkloadRouter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -34,7 +33,7 @@ public class OrchestrationStateMachineConfiguration<
     private final Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> checkpointListener;
     private final Function<CONTEXT, String> correlationKeyExtractor;
     private final CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
-    private final WorkloadRouter workloadRouter;
+    private final WorkloadDispatcher workloadDispatcher;
 
     public OrchestrationStateMachineConfiguration(
             @NonNull String machineName,
@@ -84,7 +83,7 @@ public class OrchestrationStateMachineConfiguration<
             @Nullable Function<CONTEXT, String> correlationKeyExtractor,
             @Nullable CheckpointStore<CONTEXT, STATE_KEY> checkpointStore,
             @Nullable ExecutionEventListener eventListener,
-            @Nullable WorkloadRouter workloadRouter
+            @Nullable WorkloadDispatcher workloadDispatcher
     ) {
         super(Objects.requireNonNull(machineName, "machineName must not be null"),
                 stateMap, maxTransitions, contextFactory, inputFunction, outputFunction,
@@ -92,7 +91,7 @@ public class OrchestrationStateMachineConfiguration<
         this.checkpointListener = checkpointListener;
         this.correlationKeyExtractor = correlationKeyExtractor;
         this.checkpointStore = checkpointStore;
-        this.workloadRouter = workloadRouter;
+        this.workloadDispatcher = workloadDispatcher;
     }
 
     @Nullable
@@ -111,12 +110,12 @@ public class OrchestrationStateMachineConfiguration<
     }
 
     @Nullable
-    public WorkloadRouter getWorkloadRouter() {
-        return workloadRouter;
+    public WorkloadDispatcher workloadDispatcher() {
+        return workloadDispatcher;
     }
 
     @Nullable
-    public WorkloadRouter workloadRouter() {
-        return workloadRouter;
+    public WorkloadDispatcher getWorkloadDispatcher() {
+        return workloadDispatcher;
     }
 }

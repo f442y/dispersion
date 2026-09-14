@@ -1,7 +1,6 @@
 package com.github.f442y.dispersion.orchestration;
 
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
-import com.github.f442y.dispersion.routing.policy.RoutingSelector;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -42,13 +41,13 @@ public sealed interface CompensationRecord<CONTEXT extends StateMachineContext> 
     record RoutedCompensation<CONTEXT extends StateMachineContext, PAYLOAD>(
             @NonNull String stateKey,
             @NonNull String serviceName,
-            @NonNull RoutingSelector routingSelector,
+            @NonNull WorkloadSelector workloadSelector,
             @Nullable PAYLOAD payload
     ) implements CompensationRecord<CONTEXT> {
         public RoutedCompensation {
             Objects.requireNonNull(stateKey, "stateKey must not be null");
             Objects.requireNonNull(serviceName, "serviceName must not be null");
-            Objects.requireNonNull(routingSelector, "routingSelector must not be null");
+            Objects.requireNonNull(workloadSelector, "workloadSelector must not be null");
         }
     }
 }

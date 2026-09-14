@@ -20,8 +20,10 @@ import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfig
 import com.github.f442y.dispersion.orchestration.ParallelBranch;
 import com.github.f442y.dispersion.orchestration.RetryPolicy;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
+import com.github.f442y.dispersion.orchestration.WorkloadDispatcher;
 import com.github.f442y.dispersion.orchestration.WorkloadExecutionMode;
 import com.github.f442y.dispersion.orchestration.WorkloadInvocation;
+import com.github.f442y.dispersion.orchestration.WorkloadSelector;
 import com.github.f442y.dispersion.orchestration.command.SagaCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
@@ -76,6 +78,7 @@ public class OrchestrationStateMachineBuilder<
     private Function<CONTEXT, String> correlationKeyExtractor;
     private CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
     private WorkloadRouter workloadRouter;
+    private WorkloadDispatcher workloadDispatcher;
 
     private OrchestrationStateMachineBuilder(@NonNull String machineName, @NonNull Class<STATE_KEY> stateKeyClass) {
         this.machineName = Objects.requireNonNull(machineName, "machineName must not be null");
@@ -87,6 +90,13 @@ public class OrchestrationStateMachineBuilder<
     @NonNull
     public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> workloadRouter(@NonNull WorkloadRouter router) {
         this.workloadRouter = Objects.requireNonNull(router, "router must not be null");
+        this.workloadDispatcher = new WorkloadRouterDispatcher(router);
+        return this;
+    }
+
+    @NonNull
+    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> workloadDispatcher(@NonNull WorkloadDispatcher dispatcher) {
+        this.workloadDispatcher = Objects.requireNonNull(dispatcher, "dispatcher must not be null");
         return this;
     }
 
@@ -439,7 +449,7 @@ public class OrchestrationStateMachineBuilder<
         private final Class<RES> responseClass;
         private Function<CONTEXT, REQ> inputExtractor;
         private BiFunction<CONTEXT, RES, CONTEXT> outputMerger;
-        private RoutingSelector routingSelector = RoutingSelector.any();
+        private WorkloadSelector workloadSelector = WorkloadSelector.any();
         private RetryPolicy retryPolicy = RetryPolicy.noRetries();
         private ContextRecoverer<CONTEXT, REQ> recoverer;
         private WorkloadExecutionMode executionMode = WorkloadExecutionMode.SYNCHRONOUS_VIRTUAL_THREAD;
@@ -472,7 +482,18 @@ public class OrchestrationStateMachineBuilder<
 
         @NonNull
         public RoutedWorkloadStepBuilder<REQ, RES> routingSelector(@NonNull RoutingSelector selector) {
-            this.routingSelector = Objects.requireNonNull(selector, "selector must not be null");
+            Objects.requireNonNull(selector, "selector must not be null");
+            this.workloadSelector = new WorkloadSelector(
+                    selector.requiredTags(),
+                    Collections.emptyMap(),
+                    Collections.emptyMap()
+            );
+            return this;
+        }
+
+        @NonNull
+        public RoutedWorkloadStepBuilder<REQ, RES> workloadSelector(@NonNull WorkloadSelector selector) {
+            this.workloadSelector = Objects.requireNonNull(selector, "selector must not be null");
             return this;
         }
 
@@ -540,7 +561,7 @@ public class OrchestrationStateMachineBuilder<
                     responseClass,
                     in,
                     out,
-                    routingSelector,
+                    workloadSelector,
                     retryPolicy,
                     recoverer,
                     executionMode,
@@ -723,6 +744,9 @@ public class OrchestrationStateMachineBuilder<
 
         StateMap<CONTEXT, STATE_KEY> stateMap = stateMapBuilder.build();
 
+        WorkloadDispatcher dispatcher = workloadDispatcher != null ? workloadDispatcher :
+                (workloadRouter != null ? new WorkloadRouterDispatcher(workloadRouter) : null);
+
         return new OrchestrationStateMachineConfiguration<>(
                 machineName,
                 stateMap,
@@ -736,7 +760,7 @@ public class OrchestrationStateMachineBuilder<
                 correlationKeyExtractor,
                 checkpointStore,
                 eventListener,
-                workloadRouter
+                dispatcher
         );
     }
 

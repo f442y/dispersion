@@ -1,7 +1,6 @@
 package com.github.f442y.dispersion.routing.test;
 
 import com.github.f442y.dispersion.routing.endpoint.WorkloadMetadata;
-import com.github.f442y.dispersion.routing.policy.EndpointTags;
 import com.github.f442y.dispersion.routing.worker.WorkloadEnvelope;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

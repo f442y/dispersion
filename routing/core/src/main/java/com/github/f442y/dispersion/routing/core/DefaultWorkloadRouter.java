@@ -6,7 +6,6 @@ import com.github.f442y.dispersion.routing.backpressure.BackpressureStrategy;
 import com.github.f442y.dispersion.routing.backpressure.CapacityExceededException;
 import com.github.f442y.dispersion.routing.backpressure.NoMatchingEndpointException;
 import com.github.f442y.dispersion.routing.core.policy.LocalFirstRoutingPolicy;
-import com.github.f442y.dispersion.routing.endpoint.EndpointStatus;
 import com.github.f442y.dispersion.routing.endpoint.WorkloadEndpoint;
 import com.github.f442y.dispersion.routing.endpoint.WorkloadMetadata;
 import com.github.f442y.dispersion.routing.policy.EndpointTags;

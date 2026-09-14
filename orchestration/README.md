@@ -1,32 +1,46 @@
 # Dispersion Orchestration Subsystem (`orchestration`)
 
-The **Dispersion Orchestration Subsystem** delivers a distributed **Tier 2 (Saga Orchestration) and Tier 3 (Turn-Based Batching)** engine engineered for **Java 25+ Virtual Threads**. It coordinates long-running, multi-step distributed workflows, automated LIFO Saga compensation rollbacks, asynchronous signal suspensions, parallel fork-join branching, and batch barrier synchronization.
+The **Dispersion Orchestration Subsystem** delivers a distributed **Tier 2 (Saga Orchestration) and Tier 3 (Turn-Based Batching)** engine engineered for **Java 25+ Virtual Threads**. It coordinates long-running, multi-step distributed workflows, automated LIFO Saga compensation rollbacks, asynchronous signal suspensions, parallel fork-join branching, broker-agnostic messaging, and batch barrier synchronization.
 
 ---
 
 ## 1. Module Structure & Hexagonal Architecture
 
-The orchestration subsystem is divided into three decoupled modules following strict Ports-and-Adapters boundaries:
+The orchestration subsystem is divided into five decoupled modules following strict Ports-and-Adapters boundaries:
 
 ```mermaid
 graph TD
     subgraph API["dispersion-orchestration-api (Contract)"]
         CPS["CheckpointStore (Persistence SPI)"]
         CA["CompensationAction (Saga Rollback)"]
+        WD["WorkloadDispatcher / WorkloadSelector (SPI)"]
         SIG["SignalCommand / SignalMessage"]
         PB["ParallelBranch (Fork-Join)"]
-        BP["BarrierPolicy (Batch Sync)"]
         CE["CommandEnvelope (Deduplication)"]
+        CDE["CommandDeduplicatedEvent"]
     end
 
-    subgraph Core["dispersion-orchestration-core (Engine)"]
+    subgraph Core["dispersion-orchestration-core (Saga Engine)"]
         OSMB["OrchestrationStateMachineBuilder"]
         OSME["OrchestrationStateMachineExecutor"]
         OSD["OrchestrationStepDriver (LIFO Sagas)"]
+        WRD["WorkloadRouterDispatcher (Adapter)"]
+        IMCS["InMemoryCheckpointStore"]
+    end
+
+    subgraph Batch["dispersion-orchestration-batch (Batch Engine)"]
         BOSMB["BatchOrchestrationStateMachineBuilder"]
         BOSE["BatchOrchestrationExecutor"]
-        IMCS["InMemoryCheckpointStore"]
+        BOSD["BatchOrchestrationStepDriver"]
+        BP["BarrierPolicy (ALL_ITEMS / QUORUM)"]
+        BBR["BatchBarrierReachedEvent"]
+        BBU["BatchBarrierUnlockedEvent"]
+    end
+
+    subgraph Messaging["dispersion-orchestration-messaging (Brokers)"]
         IMSB["InMemorySignalBroker"]
+        SR["SignalReceiver"]
+        BM["BrokerMessage"]
     end
 
     subgraph Test["dispersion-orchestration-test (Test Doubles)"]
@@ -35,6 +49,10 @@ graph TD
     end
 
     Core --> API
+    Batch --> API
+    Messaging --> API
+    Core -.->|optional| Batch
+    Core -.->|optional| Messaging
     Test --> API
 ```
 
@@ -42,8 +60,10 @@ graph TD
 
 | Module | JPMS Module Name | Description |
 | :--- | :--- | :--- |
-| **`dispersion-orchestration-api`** | `com.github.f442y.dispersion.orchestration.api` | Contracts for checkpoints, compensation actions (`CompensationRecord`), `WorkloadInvocation`, `WorkloadExecutionMode`, saga commands, envelopes, broker messaging SPIs, and batch barrier policies. |
-| **`dispersion-orchestration-core`** | `com.github.f442y.dispersion.orchestration.core` | Macro orchestration driver, unified workload router integration, virtual thread parallel executor, batch engine, signal watcher, and in-memory stores. |
+| **`dispersion-orchestration-api`** | `com.github.f442y.dispersion.orchestration.api` | Contracts for checkpoints, compensation records, `WorkloadDispatcher` SPI, saga commands, envelopes, and `CommandDeduplicatedEvent`. Zero dependencies on routing implementations. |
+| **`dispersion-orchestration-core`** | `com.github.f442y.dispersion.orchestration.core` | Macro orchestration driver, automated LIFO saga rollbacks, virtual thread parallel fork-join, signal watcher, and in-memory checkpoint store. Adapts `WorkloadDispatcher` to `WorkloadRouter`. |
+| **`dispersion-orchestration-batch`** | `com.github.f442y.dispersion.orchestration.batch` | Turn-based synchronized batch engine (`BatchOrchestrationExecutor`), barrier policies (`ALL_ITEMS`, `QUORUM`), batch barrier events, and item isolation. |
+| **`dispersion-orchestration-messaging`** | `com.github.f442y.dispersion.orchestration.messaging` | Broker-agnostic asynchronous messaging abstraction, in-memory reference broker (`InMemorySignalBroker`), and signal ingestion receiver (`SignalReceiver`). |
 | **`dispersion-orchestration-test`** | `com.github.f442y.dispersion.orchestration.test` | Reusable test doubles (`FakeSignalBroker`, `RecordingCheckpointStore`) for deterministic unit and saga recovery testing. |
 
 ---
@@ -60,23 +80,29 @@ When suspended, Dispersion snapshots the context into an `OrchestrationCheckpoin
 Each forward action can register a `CompensationAction` (local lambda) or a routed compensation request. If any downstream step fails:
 1. Forward execution stops immediately.
 2. The `OrchestrationStepDriver` unwinds the compensation stack in **reverse chronological order (Last-In, First-Out)**.
-3. Local compensations execute directly on virtual threads; routed compensations are dispatched across the network to matching worker nodes via `WorkloadRouter`.
+3. Local compensations execute directly on virtual threads; routed compensations are dispatched across the network to matching worker nodes via `WorkloadDispatcher`.
 4. A `TurnCompensatedEvent` telemetry record is emitted.
 
-### 3. Location-Agnostic Workload Routing & Traffic Control
-Workload execution is unified under `WorkloadInvocation`:
+### 3. Location-Agnostic Workload Dispatching
+Workload execution is unified under the `WorkloadDispatcher` SPI:
+* **Decoupled API:** `dispersion-orchestration-api` defines `WorkloadDispatcher` and `WorkloadSelector` without depending on concrete routing packages.
+* **Routing Adapter:** In `dispersion-orchestration-core`, `WorkloadRouterDispatcher` adapts `WorkloadDispatcher` to `dispersion-routing-api`'s `WorkloadRouter`.
 * **In-Process Monolith:** Invocations resolve to `LocalFsmEndpoint` (< 1 µs, zero serialization, direct object passing).
 * **Distributed Microservices:** Invocations dispatch via `RemoteWorkloadEndpoint` across network transports.
-* **Developer Sandboxes:** Strict tag matching (`RoutingSelector.requireTag("developer", "faizan")`) directs traffic to custom test workers.
-* **Canary Rolling Updates:** Configured Canary policies route weighted percentages (e.g. 10% canary, 90% production) dynamically.
+* **Developer Sandboxes & Canary Splits:** Dynamically route by tag selectors or weighted percentage traffic splits.
 
 ### 4. Parallel Fork-Join Concurrency
 Using `.parallel()`, Dispersion forks child branches concurrently across virtual threads. Workflows join when all branches finish or abort if any branch fails, immediately cancelling sibling tasks.
 
-### 5. Turn-Based Batch Processing (`BatchOrchestrationExecutor`)
-The batch engine processes collections of items through synchronized steps. Workflows support **Barrier Policies**:
+### 5. Turn-Based Batch Processing (`dispersion-orchestration-batch`)
+The dedicated batch engine processes collections of items through synchronized steps. Workflows support **Barrier Policies**:
 * **`ALL_ITEMS`**: Every item in the batch must reach the barrier before the batch advances to the next step.
 * **`QUORUM`**: The batch advances as soon as a defined quorum threshold of items reaches the barrier.
+
+### 6. Broker-Agnostic Messaging (`dispersion-orchestration-messaging`)
+The messaging module decouples signal dispatch and reception from underlying queue brokers (Kafka, RabbitMQ, SQS):
+* **`InMemorySignalBroker`**: High-performance, virtual-thread backed topic bus with subscriber fault isolation.
+* **`SignalReceiver`**: Deserializes inbound envelopes and dispatches signals into registered orchestrators.
 
 ---
 
@@ -353,7 +379,7 @@ public class OrchestrationTestingExampleTests {
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-bom</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -367,10 +393,22 @@ public class OrchestrationTestingExampleTests {
         <artifactId>dispersion-orchestration-api</artifactId>
     </dependency>
 
-    <!-- Runtime Engine -->
+    <!-- Runtime Engine (Sagas & Step Driver) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-orchestration-core</artifactId>
+    </dependency>
+
+    <!-- Batch Processing Engine (Optional) -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-orchestration-batch</artifactId>
+    </dependency>
+
+    <!-- Messaging Broker & Signal Receiver (Optional) -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-orchestration-messaging</artifactId>
     </dependency>
 
     <!-- Testing Doubles (Scope: Test) -->
@@ -393,4 +431,3 @@ public class OrchestrationTestingExampleTests {
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Telemetry events for saga turns, compensations, and batch barriers.
 * 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Reusable fakes and stores with `DispersionTestKit`.
 * 🔄 [**Distributed Sagas & Batching Deep Dive**](../docs/saga-orchestration-and-batching.md) — Saga theory, LIFO rollbacks, and barrier policies.
-

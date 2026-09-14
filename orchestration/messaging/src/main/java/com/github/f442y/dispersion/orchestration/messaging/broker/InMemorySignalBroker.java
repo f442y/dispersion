@@ -1,4 +1,4 @@
-package com.github.f442y.dispersion.orchestration.core.messaging;
+package com.github.f442y.dispersion.orchestration.messaging.broker;
 
 import com.github.f442y.dispersion.orchestration.messaging.SignalConsumer;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;

@@ -11,7 +11,7 @@ The event subsystem is decomposed into three strictly decoupled modules conformi
 ```mermaid
 graph TD
     subgraph API["dispersion-event-api (Contract)"]
-        EE["ExecutionEvent (Sealed Hierarchy)"]
+        EE["ExecutionEvent (Core Hierarchy)"]
         EB["EventBus (SPI)"]
         EEL["ExecutionEventListener (SPI)"]
         ES["EventStream (Reactive Pull)"]
@@ -39,15 +39,17 @@ graph TD
 
 | Module | JPMS Module Name | Description |
 | :--- | :--- | :--- |
-| **`dispersion-event-api`** | `com.github.f442y.dispersion.event.api` | Sealed event records, SPI listener interfaces, overflow policies, and event stream contracts. Zero runtime dependencies. |
+| **`dispersion-event-api`** | `com.github.f442y.dispersion.event.api` | Core telemetry event records, SPI listener interfaces, overflow policies, and event stream contracts. Zero runtime dependencies. |
 | **`dispersion-event-core`** | `com.github.f442y.dispersion.event.core` | High-performance virtual thread event bus with lock-free ring buffering, bounded history replay, and configurable overflow policies. |
 | **`dispersion-event-test`** | `com.github.f442y.dispersion.event.test` | Reusable in-memory test doubles (`RecordingEventBus`, `CapturingEventListener`) for zero-dependency unit and integration testing. |
 
 ---
 
-## 2. Sealed Telemetry Events (`ExecutionEvent`)
+## 2. Telemetry Events (`ExecutionEvent`)
 
-Every milestone in a state machine lifecycle emits an immutable, strongly-typed record extending `ExecutionEvent`. In Java 25, the sealed interface permits exhaustive pattern-matching `switch` expressions with arrow (`->`) syntax:
+Every milestone in a state machine lifecycle emits an immutable, strongly-typed record implementing `ExecutionEvent`. Core state machine lifecycle events are defined directly within `ExecutionEvent.*`, while domain-specific events (such as `CommandDeduplicatedEvent` in `orchestration/api` or `BatchBarrierReachedEvent` in `orchestration/batch`) implement `ExecutionEvent` cleanly from their own modules without cyclic dependencies.
+
+In Java 25, pattern-matching `switch` expressions with arrow (`->`) syntax allow elegant consumption:
 
 ```java
 package com.example.telemetry;
@@ -133,17 +135,11 @@ public final class TelemetryLogger {
                    .setCause(failed.cause())
                    .log("Turn execution failed");
 
-            case ExecutionEvent.BatchBarrierReachedEvent barrier ->
+            default ->
                 log.atDebug()
-                   .addKeyValue("machine_id", barrier.machineId())
-                   .addKeyValue("item_key", barrier.itemKey())
-                   .log("Batch item reached synchronization barrier");
-
-            case ExecutionEvent.BatchBarrierUnlockedEvent unlocked ->
-                log.atInfo()
-                   .addKeyValue("machine_id", unlocked.machineId())
-                   .addKeyValue("state", unlocked.stateName())
-                   .log("Batch barrier unlocked; advancing to next stage");
+                   .addKeyValue("machine_id", event.machineId())
+                   .addKeyValue("event_type", event.getClass().getSimpleName())
+                   .log("Domain telemetry event received");
         }
     }
 }
@@ -199,30 +195,20 @@ public final class EventBusExample {
 
             // 3. Open a pull stream for dedicated processing
             try (EventStream stream = bus.openStream()) {
-                // Polling events with timeouts
-                ExecutionEvent nextEvent = stream.poll(Duration.ofSeconds(2));
-                if (nextEvent != null) {
-                    log.atInfo()
-                       .addKeyValue("stream_event", nextEvent.getClass().getSimpleName())
-                       .log("Polled event from stream");
-                }
+                // ... state machine dispatches occur ...
+
+                // Drain events with virtual-thread non-blocking poll
+                List<ExecutionEvent> drained = stream.poll(Duration.ofMillis(100), 100);
+                log.atInfo().addKeyValue("drained_count", drained.size()).log("Polled telemetry events");
             }
 
-            // 4. Inspect historical events
-            List<ExecutionEvent> history = bus.history(50);
-            log.atInfo()
-               .addKeyValue("history_size", history.size())
-               .log("Queried historical execution events");
-
-            // 5. Query metrics
+            // 4. Query runtime bus metrics
             EventBusMetrics metrics = bus.metrics();
             log.atInfo()
-               .addKeyValue("published_count", metrics.publishedCount())
-               .addKeyValue("dropped_count", metrics.droppedCount())
-               .log("Event bus performance metrics");
-
-            // Unsubscribe listener when done
-            subscription.unsubscribe();
+               .addKeyValue("published", metrics.publishedCount())
+               .addKeyValue("dropped", metrics.droppedCount())
+               .addKeyValue("subscribers", metrics.activeSubscribers())
+               .log("Event bus health report");
         }
     }
 }
@@ -230,12 +216,11 @@ public final class EventBusExample {
 
 ---
 
-## 4. Testing with Reusable Fakes (`dispersion-event-test`)
+## 4. Testing Events (`dispersion-event-test`)
 
-The `dispersion-event-test` module provides lightweight, zero-dependency test doubles that eliminate the need for mocking frameworks like Mockito:
-
-* **`RecordingEventBus`**: Captures every emitted event synchronously into thread-safe collections. Exposes fluent assertions (`hasEventMatching(...)`, `clear()`, `allEvents()`).
-* **`CapturingEventListener`**: Synchronous listener collecting events for immediate test inspection.
+Use `dispersion-event-test` for deterministic unit testing:
+* **`RecordingEventBus`**: Captures published events synchronously in an append-only list for immediate test assertions.
+* **`CapturingEventListener`**: Thread-safe listener capturing delivered events.
 
 ```java
 package com.example.event;
@@ -246,24 +231,29 @@ import com.github.f442y.dispersion.event.test.RecordingEventBus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
+import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class EventTestingExampleTests {
 
     @Test
-    @DisplayName("Should capture published events synchronously using RecordingEventBus")
+    @DisplayName("Should capture published events using RecordingEventBus")
     public void testRecordingEventBus() {
         RecordingEventBus bus = new RecordingEventBus();
         CapturingEventListener listener = new CapturingEventListener();
         bus.subscribe(listener);
 
-        // State machine publishes events to the bus...
-        // bus.publish(event);
+        ExecutionEvent event = new ExecutionEvent.TurnStartedEvent(
+            UUID.randomUUID(),
+            "SampleMachine",
+            Instant.now()
+        );
+        bus.publish(event);
 
-        List<ExecutionEvent> captured = listener.capturedEvents();
-        assertThat(captured).isNotNull();
+        assertThat(bus.events()).containsExactly(event);
+        assertThat(listener.capturedEvents()).containsExactly(event);
     }
 }
 ```
@@ -272,15 +262,13 @@ public class EventTestingExampleTests {
 
 ## 5. Maven Dependency Setup
 
-Include the Event modules using the centralized BOM:
-
 ```xml
 <dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-bom</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -294,13 +282,13 @@ Include the Event modules using the centralized BOM:
         <artifactId>dispersion-event-api</artifactId>
     </dependency>
 
-    <!-- Runtime Engine -->
+    <!-- Runtime Virtual Thread Bus -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-event-core</artifactId>
     </dependency>
 
-    <!-- Testing Utilities (Scope: Test) -->
+    <!-- Testing Doubles (Scope: Test) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-event-test</artifactId>
@@ -313,10 +301,9 @@ Include the Event modules using the centralized BOM:
 
 ## 🔗 Related Subsystems & Guides
 
-* 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level overview, quickstarts, and architecture map.
-* ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — State transitions emitting `TurnStartedEvent`, `StateEnteredEvent`, etc.
-* 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Distributed sagas emitting compensation, signal, and batch events.
-* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Connecting event buses to `DefaultControlPlane` for real-time monitoring.
-* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Capture events in unit tests using `DispersionTestKit.recordingEventBus()`.
-* 🔭 [**Observability Architecture Guide**](../docs/observability-and-control-plane.md) — In-depth guide to telemetry streaming and UI integration.
-
+* 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level landing page, quickstarts, and architecture map.
+* ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Microsecond atomic machines emitting telemetry events.
+* 🔄 [**Tier 2 Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Long-lived sagas, checkpoints, and automated rollbacks.
+* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Observability control plane consuming `ExecutionEvent` streams.
+* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Unified test doubles with `DispersionTestKit`.
+* 🔭 [**Observability Deep Dive**](../docs/observability-and-control-plane.md) — High-throughput event delivery and React UI integration patterns.

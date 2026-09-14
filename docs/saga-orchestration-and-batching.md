@@ -183,13 +183,13 @@ public record PaymentConfirmedSignal(
 }
 ```
 
-The orchestrator checks `CommandEnvelope.commandId()` against its sliding deduplication history. If a duplicate command arrives, Dispersion skips redundant state transitions and emits an `ExecutionEvent.CommandDeduplicatedEvent`.
+The orchestrator checks `CommandEnvelope.commandId()` against its sliding deduplication history. If a duplicate command arrives, Dispersion skips redundant state transitions and emits a `CommandDeduplicatedEvent` (`com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent`).
 
 ---
 
-## 6. Turn-Based Batch Processing & Barrier Policies
+## 6. Turn-Based Batch Processing & Barrier Policies (`dispersion-orchestration-batch`)
 
-`BatchOrchestrationExecutor` manages bulk workflows (e.g. daily settlement runs, bulk data migrations, payroll processing) where batches of items advance through coordinated stages.
+Batch processing is provided by the dedicated module `dispersion-orchestration-batch`. `BatchOrchestrationExecutor` manages bulk workflows (e.g. daily settlement runs, bulk data migrations, payroll processing) where batches of items advance through coordinated stages.
 
 ```mermaid
 graph TD
@@ -229,3 +229,4 @@ BarrierPolicy quorumPolicy = BarrierPolicy.quorum(0.80);
 * **Item-Level Virtual Threads:** Each item in the batch is processed concurrently on its own virtual thread.
 * **Item-Level Signal Routing:** External signals can target individual items within a batch or the batch as a whole.
 * **Granular Checkpointing:** The `BatchOrchestrationCheckpoint` records the progress of every individual item, allowing interrupted batches to resume without reprocessing completed items.
+* **Batch Telemetry:** Emits `BatchBarrierReachedEvent` and `BatchBarrierUnlockedEvent` directly to the `ExecutionEvent` bus.

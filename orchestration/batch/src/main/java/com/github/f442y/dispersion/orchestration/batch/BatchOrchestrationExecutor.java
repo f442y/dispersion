@@ -1,4 +1,4 @@
-package com.github.f442y.dispersion.orchestration.core.batch;
+package com.github.f442y.dispersion.orchestration.batch;
 
 import com.github.f442y.dispersion.control.InspectableMachine;
 import com.github.f442y.dispersion.control.MachineDescriptor;
@@ -11,7 +11,7 @@ import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.ItemSignalCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStepDriver.BatchConfiguration;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStepDriver.BatchConfiguration;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 

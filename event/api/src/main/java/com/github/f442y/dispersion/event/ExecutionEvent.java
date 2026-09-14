@@ -10,9 +10,13 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Sealed hierarchy of immutable lifecycle events emitted during state machine execution.
+ * Foundational contract for immutable telemetry and lifecycle events emitted during state machine execution.
  *
- * <p>Supports exhaustive pattern matching in Java 25+ without requiring a default branch:</p>
+ * <p>Core lifecycle events are provided as nested records within this interface. Domain-specific events
+ * (such as batch barrier synchronization or messaging deduplication) can implement this interface directly
+ * from their respective modules.</p>
+ *
+ * <p>Example pattern matching with Java pattern matching switches:</p>
  * <pre>{@code
  * switch (event) {
  *     case ExecutionEvent.TurnStartedEvent started -> log.atInfo().addKeyValue("machine_id", started.machineId()).log("Turn started");
@@ -21,30 +25,15 @@ import java.util.UUID;
  *     case ExecutionEvent.TransitionEvaluatedEvent trans -> log.atDebug().addKeyValue("source", trans.sourceState()).addKeyValue("target", trans.targetState()).log("Transition evaluated");
  *     case ExecutionEvent.SignalAwaitedEvent awaited -> log.atInfo().addKeyValue("signal", awaited.expectedSignal()).log("Awaiting signal");
  *     case ExecutionEvent.SignalDeliveredEvent delivered -> log.atInfo().addKeyValue("signal", delivered.signalName()).log("Signal delivered");
- *     case ExecutionEvent.CommandDeduplicatedEvent dedup -> log.atWarn().addKeyValue("command_id", dedup.commandId()).log("Command deduplicated");
  *     case ExecutionEvent.TurnSuspendedEvent suspended -> log.atInfo().addKeyValue("state", suspended.stateName()).log("Turn suspended");
  *     case ExecutionEvent.TurnCompletedEvent completed -> log.atInfo().addKeyValue("machine_id", completed.machineId()).log("Turn completed");
  *     case ExecutionEvent.TurnCompensatedEvent compensated -> log.atWarn().addKeyValue("failed_state", compensated.failedStateName()).log("Turn compensated");
  *     case ExecutionEvent.TurnFailedEvent failed -> log.atError().addKeyValue("failed_state", failed.failedStateName()).setCause(failed.cause()).log("Turn failed");
- *     case ExecutionEvent.BatchBarrierReachedEvent barrier -> log.atDebug().addKeyValue("item_key", barrier.itemKey()).log("Item reached barrier");
- *     case ExecutionEvent.BatchBarrierUnlockedEvent unlocked -> log.atDebug().addKeyValue("state", unlocked.stateName()).log("Barrier unlocked");
+ *     default -> log.atDebug().addKeyValue("event_type", event.getClass().getSimpleName()).log("Custom event received");
  * }
  * }</pre>
  */
-public sealed interface ExecutionEvent permits
-        ExecutionEvent.TurnStartedEvent,
-        ExecutionEvent.TurnSuspendedEvent,
-        ExecutionEvent.TurnCompletedEvent,
-        ExecutionEvent.TurnCompensatedEvent,
-        ExecutionEvent.TurnFailedEvent,
-        ExecutionEvent.StateEnteredEvent,
-        ExecutionEvent.StateExitedEvent,
-        ExecutionEvent.TransitionEvaluatedEvent,
-        ExecutionEvent.SignalAwaitedEvent,
-        ExecutionEvent.SignalDeliveredEvent,
-        ExecutionEvent.CommandDeduplicatedEvent,
-        ExecutionEvent.BatchBarrierReachedEvent,
-        ExecutionEvent.BatchBarrierUnlockedEvent {
+public interface ExecutionEvent {
 
     /**
      * Unique identifier of the state machine execution instance.
@@ -257,61 +246,6 @@ public sealed interface ExecutionEvent permits
             Objects.requireNonNull(machineName, "machineName must not be null");
             Objects.requireNonNull(stateName, "stateName must not be null");
             Objects.requireNonNull(signalName, "signalName must not be null");
-            Objects.requireNonNull(timestamp, "timestamp must not be null");
-        }
-    }
-
-    /**
-     * Emitted when an incoming command envelope is recognized as a duplicate and ignored.
-     */
-    record CommandDeduplicatedEvent(
-            @NonNull UUID machineId,
-            @NonNull String machineName,
-            @NonNull UUID commandId,
-            @Nullable String correlationKey,
-            @NonNull Instant timestamp
-    ) implements ExecutionEvent {
-        public CommandDeduplicatedEvent {
-            Objects.requireNonNull(machineId, "machineId must not be null");
-            Objects.requireNonNull(machineName, "machineName must not be null");
-            Objects.requireNonNull(commandId, "commandId must not be null");
-            Objects.requireNonNull(timestamp, "timestamp must not be null");
-        }
-    }
-
-    /**
-     * Emitted in batch orchestrations when an item reaches a synchronization barrier.
-     */
-    record BatchBarrierReachedEvent(
-            @NonNull UUID machineId,
-            @NonNull String machineName,
-            @NonNull String itemKey,
-            @NonNull String stateName,
-            @NonNull Instant timestamp
-    ) implements ExecutionEvent {
-        public BatchBarrierReachedEvent {
-            Objects.requireNonNull(machineId, "machineId must not be null");
-            Objects.requireNonNull(machineName, "machineName must not be null");
-            Objects.requireNonNull(itemKey, "itemKey must not be null");
-            Objects.requireNonNull(stateName, "stateName must not be null");
-            Objects.requireNonNull(timestamp, "timestamp must not be null");
-        }
-    }
-
-    /**
-     * Emitted in batch orchestrations when a barrier unlocks and all items proceed.
-     */
-    record BatchBarrierUnlockedEvent(
-            @NonNull UUID machineId,
-            @NonNull String machineName,
-            @NonNull String stateName,
-            int itemCount,
-            @NonNull Instant timestamp
-    ) implements ExecutionEvent {
-        public BatchBarrierUnlockedEvent {
-            Objects.requireNonNull(machineId, "machineId must not be null");
-            Objects.requireNonNull(machineName, "machineName must not be null");
-            Objects.requireNonNull(stateName, "stateName must not be null");
             Objects.requireNonNull(timestamp, "timestamp must not be null");
         }
     }

@@ -15,7 +15,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-22c55e?style=for-the-badge&logo=apache&logoColor=white)](LICENSE)
 [![Build & Test](https://img.shields.io/github/actions/workflow/status/f442y/dispersion/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/f442y/dispersion/actions/workflows/ci.yml)
 [![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20Dual--Tier-6366f1?style=for-the-badge)](docs/architecture-and-design.md)
-[![Hot Path](https://img.shields.io/badge/Latency-%3C%201%20μs%20(Zero--Allocation)-06b6d4?style=for-the-badge)](docs/virtual-threads-and-performance.md)
+[![Hot Path](https://img.shields.io/badge/Latency-%3C%201%20%CE%BCs%20(Zero--Allocation)-06b6d4?style=for-the-badge)](docs/virtual-threads-and-performance.md)
 
 <p align="center">
   <a href="#-why-dispersion"><b>Why Dispersion?</b></a> •
@@ -147,16 +147,16 @@ graph TD
 
 | Feature | Tier 1: Atomic State Machine | Tier 2: Saga Orchestrator | Tier 3: Turn-Based Batching |
 | :--- | :--- | :--- | :--- |
-| **Target Subsystem** | [**`fsm/`** (`dispersion-fsm-core`)](fsm/README.md) | [**`orchestration/`** (`dispersion-orchestration-core`)](orchestration/README.md) | [**`orchestration/`** (`dispersion-orchestration-core`)](orchestration/README.md) |
-| **Execution Latency** | **Sub-microsecond (< 1 μs)** | Turn-based (~ 10–50 μs) | Parallel items with barrier sync |
+| **Target Subsystem** | [**`fsm/`** (`dispersion-fsm-core`)](fsm/README.md) | [**`orchestration/`** (`dispersion-orchestration-core`)](orchestration/README.md) | [**`orchestration/batch/`** (`dispersion-orchestration-batch`)](orchestration/README.md#5-turn-based-batch-processing-dispersion-orchestration-batch) |
+| **Execution Latency** | **Sub-microsecond (< 1 µs)** | Turn-based (~ 10–50 µs) | Parallel items with barrier sync |
 | **Threading Model** | Single Virtual Thread (confined) | Virtual Thread per turn | Virtual Thread per batch item |
 | **State Mutability** | Lock-free POJO direct mutation | Checkpoint snapshots on suspension | Isolated item contexts |
 | **Lifecycle** | Ephemeral, in-memory | Long-lived, suspendable (`waitForCommand`) | Batch-synchronized turns |
 | **Failure Recovery** | Fast-fail terminal diverting | [**Automated LIFO Saga rollbacks**](orchestration/README.md#2-automated-lifo-saga-rollbacks) | Item-level error isolation |
-| **Concurrency** | Sequential graph traversal | [**Parallel fork-join (`.parallel()`)**](orchestration/README.md#3-parallel-fork-join-concurrency) | Concurrent item processing |
-| **Telemetry & Events** | [13 Sealed `ExecutionEvent`s](event/README.md#2-sealed-telemetry-events-executionevent) | [13 Sealed `ExecutionEvent`s](event/README.md#2-sealed-telemetry-events-executionevent) | [Batch Barrier Events](event/README.md#2-sealed-telemetry-events-executionevent) |
-| **Persistence** | None (zero overhead) | Pluggable [`CheckpointStore`](orchestration/README.md#2-core-architectural-capabilities) | [`BatchOrchestrationCheckpoint`](orchestration/README.md#4-turn-based-batch-processing-batchorchestrationexecutor) |
-| **Testing Doubles** | [`TestStateContext`, `TestStateKey`](fsm/README.md#4-testing-atomic-state-machines-dispersion-fsm-test) | [`FakeSignalBroker`, `RecordingCheckpointStore`](orchestration/README.md#5-testing-orchestrations-dispersion-orchestration-test) | [`DispersionTestKit`](testing/README.md) |
+| **Concurrency** | Sequential graph traversal | [**Parallel fork-join (`.parallel()`)**](orchestration/README.md#4-parallel-fork-join-concurrency) | Concurrent item processing |
+| **Telemetry & Events** | Core `ExecutionEvent` records | Core `ExecutionEvent` records | `BatchBarrierReachedEvent`, `BatchBarrierUnlockedEvent` |
+| **Persistence** | None (zero overhead) | Pluggable [`CheckpointStore`](orchestration/README.md#1-turn-based-execution--signal-suspension) | [`BatchOrchestrationCheckpoint`](orchestration/README.md#5-turn-based-batch-processing-dispersion-orchestration-batch) |
+| **Testing Doubles** | [`TestStateContext`, `TestStateKey`](fsm/README.md#4-testing-atomic-state-machines-dispersion-fsm-test) | [`FakeSignalBroker`, `RecordingCheckpointStore`](orchestration/README.md#6-testing-orchestrations-dispersion-orchestration-test) | [`DispersionTestKit`](testing/README.md) |
 | **Best Used For** | Rules, protocol parsing, trading engines | Multi-service sagas, checkout, approvals | Bulk ingest, payroll, daily reconciliations |
 
 ---
@@ -168,7 +168,7 @@ How Dispersion compares to legacy orchestration and state machine engines:
 | Dimension | Legacy BPMN Engines | Traditional Actor / FSM Libs | Dispersion |
 | :--- | :--- | :--- | :--- |
 | **Runtime Threading** | Heavy OS Thread Pools (Starvation risk) | Reactive Event Loops (Callback hell) | [**Java 25 Virtual Threads (Millions concurrent)**](docs/virtual-threads-and-performance.md#1-project-loom--virtual-thread-mechanics) |
-| **Transition Latency** | 15–50 ms (Mandatory DB roundtrip) | 50–200 μs (Object hashing & reflection) | [**< 1 μs (Pre-compiled ordinal arrays)**](fsm/README.md#1-pre-compiled-graph-topology-statemap) |
+| **Transition Latency** | 15–50 ms (Mandatory DB roundtrip) | 50–200 µs (Object hashing & reflection) | [**< 1 µs (Pre-compiled ordinal arrays)**](fsm/README.md#1-pre-compiled-graph-topology-statemap) |
 | **Hot-Path Allocations** | Hundreds of objects per transition | Medium (Map entries, wrappers) | [**0 heap allocations on transition hot paths**](docs/virtual-threads-and-performance.md#3-zero-allocation-hot-paths--jvm-c2-optimization) |
 | **Thread Synchronization** | Synchronized locks & DB mutexes | Concurrent maps & atomic references | [**100% Lock-Free Thread Confinement**](docs/architecture-and-design.md#3-concurrency-guarantees--thread-confinement) |
 | **Saga Compensation** | Manual compensation choreography | Ad-hoc error handlers | [**Automated LIFO Saga Rollback Unwind**](orchestration/README.md#2-automated-lifo-saga-rollbacks) |
@@ -308,7 +308,7 @@ OrchestrationTurnResult<OrderContext, OrderState, String> turn2 =
 
 > [!TIP]
 > 📖 **Related Documentation:**
-> * Suspension & Checkpoint Stores: [**`orchestration/README.md#4-signal-suspensions--rehydration`**](orchestration/README.md#4-signal-suspensions--rehydration)
+> * Suspension & Checkpoint Stores: [**`orchestration/README.md#1-turn-based-execution--signal-suspension`**](orchestration/README.md#1-turn-based-execution--signal-suspension)
 > * Routing Signals through Control Plane: [**`control/README.md#3-end-to-end-control-plane-example`**](control/README.md#3-end-to-end-control-plane-example)
 > * Testing Checkpoints: [**`testing/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga`**](testing/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga)
 
@@ -341,39 +341,39 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane()) {
 > [!TIP]
 > 📖 **Related Documentation:**
 > * Full Control Plane Guide: [**`control/README.md`**](control/README.md)
-> * Telemetry & 13 Sealed Events: [**`event/README.md`**](event/README.md)
+> * Telemetry & Extensible Events: [**`event/README.md`**](event/README.md)
 > * UI Integration Patterns (React + TanStack Router): [**`docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router`**](docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router)
 
 ---
 
 ## 📦 Encompassing Modules
 
-Dispersion is engineered as 19 modular components partitioned into 6 functional subsystems. Click each subsystem below for its dedicated guide:
+Dispersion is engineered as 21 modular components partitioned into 6 functional subsystems. Click each subsystem below for its dedicated guide:
 
 ```mermaid
 graph LR
     subgraph Subsystems["Encompassing Subsystems"]
-        E["<b>event/</b><br/>Telemetry & Events"]
+        E["<b>event/</b><br/>Telemetry Backbone"]
         F["<b>fsm/</b><br/>Tier 1 Atomic Engine"]
-        R["<b>routing/</b><br/>Workload Router"]
-        O["<b>orchestration/</b><br/>Tier 2 Saga & Batching"]
+        R["<b>routing/</b><br/>Workload Router SPI & Core"]
+        O["<b>orchestration/</b><br/>Tier 2 Saga, Batch & Messaging"]
         C["<b>control/</b><br/>Control Plane & SPI"]
         T["<b>testing/</b><br/>DispersionTestKit"]
     end
 
     F --> E
-    R --> E
-    O --> F & E & R
+    O --> F & E
+    O -.->|adapter| R
     C --> E & R
     T --> E & F & R & O & C
 ```
 
 | Subsystem | Included Modules | Focus & Capabilities | Documentation |
 | :--- | :--- | :--- | :--- |
-| **`event/`** | `dispersion-event-api`<br/>`dispersion-event-core`<br/>`dispersion-event-test` | 13 sealed `ExecutionEvent` records, lock-free ring-buffer bus, push/pull streams, and historical replay. | [**`event/README.md`**](event/README.md) |
+| **`event/`** | `dispersion-event-api`<br/>`dispersion-event-core`<br/>`dispersion-event-test` | Core `ExecutionEvent` hierarchy, lock-free ring-buffer bus, push/pull streams, and historical replay. | [**`event/README.md`**](event/README.md) |
 | **`fsm/`** | `dispersion-fsm-api`<br/>`dispersion-fsm-core`<br/>`dispersion-fsm-test` | Sub-microsecond atomic FSM engine, pre-compiled `StateMap` ordinal arrays, and adaptive admission control. | [**`fsm/README.md`**](fsm/README.md) |
 | **`routing/`** | `dispersion-routing-api`<br/>`dispersion-routing-core`<br/>`dispersion-routing-test` | Location-agnostic workload router, Canary traffic splits, Developer Sandboxes, backpressure admission, and worker hosting. | [**`routing/README.md`**](routing/README.md) |
-| **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, routed compensations, signal rehydration, parallel branches, and batch barriers. | [**`orchestration/README.md`**](orchestration/README.md) |
+| **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, routed compensations, signal rehydration, parallel branches, batch barriers, and broker-agnostic messaging. | [**`orchestration/README.md`**](orchestration/README.md) |
 | **`control/`** | `dispersion-control-api`<br/>`dispersion-control-core`<br/>`dispersion-control-test` | Decoupled `InspectableMachine` and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control/README.md`**](control/README.md) |
 | **`testing/`** | `dispersion-testing` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testing/README.md`**](testing/README.md) |
 
@@ -386,7 +386,7 @@ For comprehensive technical deep dives into engine internals:
 * 📐 [**Architecture & Hexagonal Design**](docs/architecture-and-design.md) — Hexagonal ports and adapters, symmetrical triplet patterns, and thread confinement guarantees.
 * ⚡ [**Virtual Threads & Performance Guide**](docs/virtual-threads-and-performance.md) — Loom mechanics, carrier thread unmounting, zero-pinning guarantees, and JVM escape analysis.
 * 🔄 [**Saga Orchestration & Batch Processing**](docs/saga-orchestration-and-batching.md) — Distributed saga theory, checkpoint storage, durable signal rehydration, and batch barrier policies.
-* 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — 13 sealed telemetry records, $O(1)$ dual-pool memory topology, and React UI integration patterns.
+* 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — Telemetry events, $O(1)$ dual-pool memory topology, and React UI integration patterns.
 
 ---
 
@@ -400,7 +400,7 @@ Import the Bill of Materials (BOM) to manage dependency versions uniformly:
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-bom</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -430,6 +430,18 @@ Add the modules required by your application:
         <artifactId>dispersion-orchestration-core</artifactId>
     </dependency>
 
+    <!-- Tier 3: Turn-Based Batch Processing (Optional) -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-orchestration-batch</artifactId>
+    </dependency>
+
+    <!-- Broker-Agnostic Messaging & Deduplication (Optional) -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-orchestration-messaging</artifactId>
+    </dependency>
+
     <!-- Observability & Control Plane (Optional) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
@@ -454,7 +466,7 @@ Add the modules required by your application:
 * Apache Maven 3.9+ (or use the included wrapper `./mvnw`)
 
 ```bash
-# Fast parallel compilation and unit test execution across all 16 modules
+# Fast parallel compilation and unit test execution across all 21 modules
 ./mvnw test -B -ntp -T 1C
 
 # Execute end-to-end integration tests (500-thread pipeline bursts, distributed sagas)

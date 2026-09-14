@@ -14,6 +14,7 @@ import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfig
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
+import com.github.f442y.dispersion.orchestration.messaging.SignalDispatcher;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -41,7 +42,7 @@ public class OrchestrationStateMachineExecutor<
         CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
         INPUT,
-        OUTPUT> implements StateMachineExecutor<CONTEXT, INPUT, OUTPUT> {
+        OUTPUT> implements StateMachineExecutor<CONTEXT, INPUT, OUTPUT>, SignalDispatcher {
 
     private final OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration;
     private final ExecutorService virtualThreadExecutor;
@@ -160,6 +161,7 @@ public class OrchestrationStateMachineExecutor<
     /**
      * Delivers an external signal to a suspended orchestration by its machine UUID.
      */
+    @Override
     @NonNull
     public CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> sendSignal(
             @NonNull UUID machineId,
@@ -172,6 +174,7 @@ public class OrchestrationStateMachineExecutor<
     /**
      * Delivers an external signal to a suspended orchestration by its domain correlation key.
      */
+    @Override
     @NonNull
     public CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> sendSignalByCorrelationKey(
             @NonNull String correlationKey,
@@ -194,9 +197,10 @@ public class OrchestrationStateMachineExecutor<
     /**
      * Routes an idempotent {@link CommandEnvelope} ensuring deduplication against network retries.
      */
+    @Override
     @NonNull
     public CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> handleCommand(
-            @NonNull CommandEnvelope<? extends SignalCommand> envelope
+            @NonNull CommandEnvelope<?> envelope
     ) {
         return signalWatcher.handleCommand(envelope);
     }
@@ -296,4 +300,3 @@ public class OrchestrationStateMachineExecutor<
         virtualThreadExecutor.close();
     }
 }
-

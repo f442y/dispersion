@@ -14,7 +14,7 @@ Dispersion resolves these challenges through a unified design rooted in **thread
 
 ## 1. Hexagonal Decoupling & Module Symmetrical Topology
 
-Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 16 Maven modules:
+Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 21 Maven modules:
 
 ```mermaid
 graph TD
@@ -23,7 +23,7 @@ graph TD
     end
 
     subgraph Event["1. Event Subsystem"]
-        E_API["dispersion-event-api<br/>(Ports & Sealed Events)"]
+        E_API["dispersion-event-api<br/>(Ports & Telemetry Events)"]
         E_CORE["dispersion-event-core<br/>(Virtual Thread Bus)"]
         E_TEST["dispersion-event-test<br/>(Recording Doubles)"]
         E_CORE --> E_API
@@ -40,42 +40,61 @@ graph TD
         F_TEST --> F_API
     end
 
-    subgraph Orch["3. Orchestration Subsystem (Tier 2/3)"]
-        O_API["dispersion-orchestration-api<br/>(Sagas, Checkpoints, Signals)"]
-        O_CORE["dispersion-orchestration-core<br/>(Turn Driver & Batch Engine)"]
+    subgraph Routing["3. Routing Subsystem"]
+        R_API["dispersion-routing-api<br/>(WorkloadRouter & Selector SPI)"]
+        R_CORE["dispersion-routing-core<br/>(Endpoint Dispatch & Policies)"]
+        R_TEST["dispersion-routing-test<br/>(Simulated Endpoints)"]
+        R_CORE --> R_API
+        R_TEST --> R_API
+    end
+
+    subgraph Orch["4. Orchestration Subsystem (Tier 2/3)"]
+        O_API["dispersion-orchestration-api<br/>(Sagas, Checkpoints, Dispatcher SPI)"]
+        O_CORE["dispersion-orchestration-core<br/>(Turn Driver & Saga Engine)"]
+        O_BATCH["dispersion-orchestration-batch<br/>(Turn-Based Batch Barriers)"]
+        O_MSG["dispersion-orchestration-messaging<br/>(Signal Broker & Receiver)"]
         O_TEST["dispersion-orchestration-test<br/>(Fake Signal Broker & Store)"]
+
         O_API --> F_API
         O_API --> E_API
         O_CORE --> O_API
         O_CORE --> F_CORE
+        O_CORE -.->|adapter| R_API
+        O_BATCH --> O_API
+        O_BATCH --> F_API
+        O_BATCH --> E_API
+        O_MSG --> O_API
         O_TEST --> O_API
     end
 
-    subgraph Control["4. Control Subsystem (Observability)"]
+    subgraph Control["5. Control Subsystem (Observability)"]
         C_API["dispersion-control-api<br/>(InspectableMachine SPI)"]
         C_CORE["dispersion-control-core<br/>(Registry & Signal Router)"]
         C_TEST["dispersion-control-test<br/>(Fake Inspectable Machine)"]
         C_API --> E_API
+        C_API --> R_API
         C_CORE --> C_API
         C_TEST --> C_API
     end
 
-    subgraph Testing["5. Testing Facade"]
+    subgraph Testing["6. Testing Facade"]
         TESTING["dispersion-testing<br/>(DispersionTestKit)"]
-        TESTING --> E_TEST & F_TEST & O_TEST & C_TEST
-        TESTING --> E_API & F_API & O_API & C_API
+        TESTING --> E_TEST & F_TEST & R_TEST & O_TEST & C_TEST
+        TESTING --> E_API & F_API & R_API & O_API & C_API
     end
 ```
 
 ### Decoupling Rules & Architectural Invariants
 
 1. **`*-api` Modules Are Pure Contracts:**
-   Contain only interfaces, sealed records, and domain exceptions. They depend exclusively on standard Java and JSpecify annotations—never on third-party frameworks or runtime engines.
-2. **`*-core` Modules Contain Runtimes:**
-   Implement the corresponding API. A core module **never depends on other core modules** unless architecturally hierarchical (`orchestration-core` relies on `fsm-core` to embed atomic child machines).
-3. **`*-test` Modules Are Zero-Dependency Doubles:**
+   Contain only interfaces, immutable records, and domain exceptions. They depend exclusively on standard Java and JSpecify annotations—never on third-party frameworks or runtime engines.
+2. **Decoupled Cross-Domain Boundaries:**
+   `dispersion-routing-api` has zero compile-time dependencies on `dispersion-event-api`, and `dispersion-orchestration-api` interacts with routing solely via its internal `WorkloadDispatcher` SPI. Concrete bridges exist exclusively in engine modules (e.g. `WorkloadRouterDispatcher` in `orchestration-core`).
+3. **`*-core` Modules Contain Runtimes:**
+   Implement the corresponding API. Core modules isolate business logic and runtime machinery, depending strictly on API boundaries.
+4. **`*-test` Modules Are Zero-Dependency Doubles:**
    Contain deterministic fakes and recorders. A test companion module **never depends on `*-core`**, ensuring test doubles cannot accidentally rely on engine internals.
-4. **Control Plane Inversion via `InspectableMachine`:**
+5. **Control Plane Inversion via `InspectableMachine`:**
    `dispersion-control-core` has **zero compile-time dependencies** on `fsm-core` or `orchestration-core`. Executors implement the `InspectableMachine` SPI and adapt themselves via `.asInspectableMachine()`, allowing the control plane to observe any engine generically.
 
 ---
@@ -104,7 +123,7 @@ graph TB
         O_STEP4 -.->|"Payment Error"| O_ROLLBACK["Automated LIFO Saga Rollback"]
     end
 
-    subgraph Tier3["Tier 3: Turn-Based Batch Processing (dispersion-orchestration-core)"]
+    subgraph Tier3["Tier 3: Turn-Based Batch Processing (dispersion-orchestration-batch)"]
         direction LR
         B_ITEMS["Batch Items [1..N]"] --> B_BARRIER{"Barrier Policy: ALL_ITEMS | QUORUM"}
         B_BARRIER --> B_ADVANCE["Advance to Next Batch Step"]
@@ -117,8 +136,8 @@ graph TB
 
 | Dimension | Tier 1: Atomic (Micro) Machine | Tier 2: Orchestration (Macro) Saga | Tier 3: Turn-Based Batching |
 | :--- | :--- | :--- | :--- |
-| **Primary Module** | `dispersion-fsm-core` | `dispersion-orchestration-core` | `dispersion-orchestration-core` |
-| **Execution Latency** | Sub-microsecond (< 1 μs) | Turn-based (< 50 μs per in-memory step) | Parallel items with barrier sync |
+| **Primary Module** | `dispersion-fsm-core` | `dispersion-orchestration-core` | `dispersion-orchestration-batch` |
+| **Execution Latency** | Sub-microsecond (< 1 µs) | Turn-based (< 50 µs per in-memory step) | Parallel items with barrier sync |
 | **Thread Model** | Single Virtual Thread (confined) | Virtual Thread per turn | Virtual Thread per batch item |
 | **State Mutability** | Direct POJO mutations (lock-free) | Checkpoint snapshots at turn boundaries | Item-level isolated context |
 | **Lifecycle** | Ephemeral, in-memory only | Long-lived, suspendable (`waitForCommand`) | Batch-synchronized turns |
@@ -152,7 +171,7 @@ Dispersion relies instead on **Thread Confinement**:
                        │         │                     ▲                         │
                        │         ▼                     │                         │
                        │  ┌──────────────┐      ┌──────────────┐                 │
-                       │  │   Action 1   │─────►│   Action 2   │                 │
+                       │  │   Action 1   │──────►│   Action 2   │                 │
                        │  └──────────────┘      └──────────────┘                 │
                        └─────────────────────────────────────────────────────────┘
                                    Zero Locks • Zero Volatiles
@@ -168,7 +187,7 @@ Dispersion relies instead on **Thread Confinement**:
 
 Dispersion is built strictly for the Java Platform Module System (JPMS). Every module owns an isolated package namespace, guaranteeing **zero split-package collisions**:
 
-| Module Artifact | JPMS Automatic Module Name | Package Namespace Root |
+| Module Artifact | JPMS Module Name | Package Namespace Root |
 | :--- | :--- | :--- |
 | `dispersion-bom` | `com.github.f442y.dispersion.bom` | *N/A (BOM POM)* |
 | `dispersion-event-api` | `com.github.f442y.dispersion.event.api` | `com.github.f442y.dispersion.event` |
@@ -177,8 +196,13 @@ Dispersion is built strictly for the Java Platform Module System (JPMS). Every m
 | `dispersion-fsm-api` | `com.github.f442y.dispersion.fsm.api` | `com.github.f442y.dispersion.fsm` |
 | `dispersion-fsm-core` | `com.github.f442y.dispersion.fsm.core` | `com.github.f442y.dispersion.fsm.core` |
 | `dispersion-fsm-test` | `com.github.f442y.dispersion.fsm.test` | `com.github.f442y.dispersion.fsm.test` |
+| `dispersion-routing-api` | `com.github.f442y.dispersion.routing.api` | `com.github.f442y.dispersion.routing` |
+| `dispersion-routing-core` | `com.github.f442y.dispersion.routing.core` | `com.github.f442y.dispersion.routing.core` |
+| `dispersion-routing-test` | `com.github.f442y.dispersion.routing.test` | `com.github.f442y.dispersion.routing.test` |
 | `dispersion-orchestration-api` | `com.github.f442y.dispersion.orchestration.api` | `com.github.f442y.dispersion.orchestration` |
 | `dispersion-orchestration-core` | `com.github.f442y.dispersion.orchestration.core` | `com.github.f442y.dispersion.orchestration.core` |
+| `dispersion-orchestration-batch` | `com.github.f442y.dispersion.orchestration.batch` | `com.github.f442y.dispersion.orchestration.batch` |
+| `dispersion-orchestration-messaging` | `com.github.f442y.dispersion.orchestration.messaging` | `com.github.f442y.dispersion.orchestration.messaging` |
 | `dispersion-orchestration-test` | `com.github.f442y.dispersion.orchestration.test` | `com.github.f442y.dispersion.orchestration.test` |
 | `dispersion-control-api` | `com.github.f442y.dispersion.control.api` | `com.github.f442y.dispersion.control` |
 | `dispersion-control-core` | `com.github.f442y.dispersion.control.core` | `com.github.f442y.dispersion.control.core` |

@@ -1,4 +1,4 @@
-package com.github.f442y.dispersion.orchestration.core.batch;
+package com.github.f442y.dispersion.orchestration.batch;
 
 
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;

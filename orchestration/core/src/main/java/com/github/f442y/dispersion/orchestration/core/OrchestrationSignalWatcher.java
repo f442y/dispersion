@@ -168,10 +168,15 @@ public class OrchestrationSignalWatcher<
 
     @NonNull
     public CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> handleCommand(
-            @NonNull CommandEnvelope<? extends SignalCommand> envelope
+            @NonNull CommandEnvelope<?> envelope
     ) {
         Objects.requireNonNull(envelope, "envelope must not be null");
-        SignalCommand cmd = envelope.command();
+        Object rawCmd = envelope.command();
+        if (!(rawCmd instanceof SignalCommand cmd)) {
+            CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new IllegalArgumentException("Envelope command must implement SignalCommand"));
+            return failed;
+        }
         String corrKey = cmd.correlationKey();
 
         if (corrKey == null || corrKey.isBlank()) {

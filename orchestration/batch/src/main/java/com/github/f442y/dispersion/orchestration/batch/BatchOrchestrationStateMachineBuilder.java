@@ -1,4 +1,4 @@
-package com.github.f442y.dispersion.orchestration.core.batch;
+package com.github.f442y.dispersion.orchestration.batch;
 
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.Action;
@@ -8,8 +8,8 @@ import com.github.f442y.dispersion.orchestration.CompensationAction;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStepDriver.BatchConfiguration;
-import com.github.f442y.dispersion.orchestration.core.batch.BatchOrchestrationStepDriver.ItemStateDefinition;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStepDriver.BatchConfiguration;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStepDriver.ItemStateDefinition;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Arrays;

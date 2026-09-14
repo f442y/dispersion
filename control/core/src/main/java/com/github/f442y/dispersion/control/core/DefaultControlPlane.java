@@ -735,9 +735,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                 }
                 yield null;
             }
-            case ExecutionEvent.CommandDeduplicatedEvent _ -> current;
-            case ExecutionEvent.BatchBarrierReachedEvent _ -> current;
-            case ExecutionEvent.BatchBarrierUnlockedEvent _ -> current;
+            default -> current;
         };
     }
 

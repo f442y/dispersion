@@ -7,6 +7,7 @@ import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
+import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
@@ -197,7 +198,7 @@ class EventLifecycleOrchestrationTests {
             OrchestrationTurnResult<SimpleContext, OrchFlowState, String> turn3 = dupFuture.get();
             assertNotNull(turn3);
 
-            assertTrue(events.stream().anyMatch(e -> e instanceof ExecutionEvent.CommandDeduplicatedEvent cde && cde.commandId().equals(commandId)));
+            assertTrue(events.stream().anyMatch(e -> e instanceof CommandDeduplicatedEvent cde && cde.commandId().equals(commandId)));
         }
     }
 
@@ -267,13 +268,10 @@ class EventLifecycleOrchestrationTests {
                 new ExecutionEvent.TransitionEvaluatedEvent(id, "TestM", "STATE_A", "STATE_B", now),
                 new ExecutionEvent.SignalAwaitedEvent(id, "TestM", "WAIT", "Sig1", "CORR", now),
                 new ExecutionEvent.SignalDeliveredEvent(id, "TestM", "WAIT", "Sig1", "CORR", now),
-                new ExecutionEvent.CommandDeduplicatedEvent(id, "TestM", id, "CORR", now),
-                new ExecutionEvent.BatchBarrierReachedEvent(id, "TestM", "item-1", "BATCH_WAIT", now),
-                new ExecutionEvent.BatchBarrierUnlockedEvent(id, "TestM", "BATCH_WAIT", 10, now)
+                new CommandDeduplicatedEvent(id, "TestM", id, "CORR", now)
         );
 
         for (ExecutionEvent event : testEvents) {
-            // Java 25 exhaustive switch without default branch
             String description = switch (event) {
                 case ExecutionEvent.TurnStartedEvent tse -> "STARTED: " + tse.machineName();
                 case ExecutionEvent.TurnSuspendedEvent tse -> "SUSPENDED: " + tse.stateName();
@@ -285,9 +283,8 @@ class EventLifecycleOrchestrationTests {
                 case ExecutionEvent.TransitionEvaluatedEvent tee -> "TRANSITION: " + tee.sourceState() + "->" + tee.targetState();
                 case ExecutionEvent.SignalAwaitedEvent sae -> "AWAITING: " + sae.expectedSignal();
                 case ExecutionEvent.SignalDeliveredEvent sde -> "DELIVERED: " + sde.signalName();
-                case ExecutionEvent.CommandDeduplicatedEvent cde -> "DEDUP: " + cde.commandId();
-                case ExecutionEvent.BatchBarrierReachedEvent bbe -> "BARRIER: " + bbe.itemKey();
-                case ExecutionEvent.BatchBarrierUnlockedEvent bue -> "UNLOCKED: " + bue.itemCount();
+                case CommandDeduplicatedEvent cde -> "DEDUP: " + cde.commandId();
+                default -> "UNKNOWN: " + event.getClass().getSimpleName();
             };
             assertNotNull(description);
         }

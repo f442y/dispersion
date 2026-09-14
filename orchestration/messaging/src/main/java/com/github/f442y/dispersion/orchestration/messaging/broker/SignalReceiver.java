@@ -1,10 +1,10 @@
-package com.github.f442y.dispersion.orchestration.core.messaging;
+package com.github.f442y.dispersion.orchestration.messaging.broker;
 
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
 import com.github.f442y.dispersion.orchestration.messaging.SignalConsumer;
+import com.github.f442y.dispersion.orchestration.messaging.SignalDispatcher;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
@@ -22,14 +22,18 @@ public class SignalReceiver implements SignalConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(SignalReceiver.class);
 
-    private final OrchestrationStateMachineExecutor<?, ?, ?, ?> executor;
+    private final SignalDispatcher dispatcher;
 
-    public SignalReceiver(@NonNull OrchestrationStateMachineExecutor<?, ?, ?, ?> executor) {
-        this.executor = Objects.requireNonNull(executor, "executor must not be null");
+    public SignalReceiver(@NonNull SignalDispatcher dispatcher) {
+        this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher must not be null");
     }
 
-    public static SignalReceiver forExecutor(@NonNull OrchestrationStateMachineExecutor<?, ?, ?, ?> executor) {
-        return new SignalReceiver(executor);
+    public static SignalReceiver forDispatcher(@NonNull SignalDispatcher dispatcher) {
+        return new SignalReceiver(dispatcher);
+    }
+
+    public static SignalReceiver forExecutor(@NonNull SignalDispatcher dispatcher) {
+        return new SignalReceiver(dispatcher);
     }
 
     @Override
@@ -48,24 +52,24 @@ public class SignalReceiver implements SignalConsumer {
             Object payload = message.payload();
 
             if (payload instanceof CommandEnvelope<?> env) {
-                return (CompletableFuture) executor.handleCommand(env);
+                return (CompletableFuture) dispatcher.handleCommand(env);
             }
 
             if (payload instanceof SignalCommand cmd) {
                 CommandEnvelope<SignalCommand> env = new CommandEnvelope<>(message.messageId(), message.timestamp(), cmd);
-                return (CompletableFuture) executor.handleCommand(env);
+                return (CompletableFuture) dispatcher.handleCommand(env);
             }
 
             String corrKey = message.correlationKey();
             if (corrKey != null && !corrKey.isBlank()) {
-                return (CompletableFuture) executor.sendSignalByCorrelationKey(corrKey, message.signalName(), payload);
+                return (CompletableFuture) dispatcher.sendSignalByCorrelationKey(corrKey, message.signalName(), payload);
             }
 
             Map<String, String> headers = message.headers();
             String machineIdHeader = headers != null ? headers.get("machineId") : null;
             if (machineIdHeader != null && !machineIdHeader.isBlank()) {
                 UUID machineId = UUID.fromString(machineIdHeader);
-                return (CompletableFuture) executor.sendSignal(machineId, message.signalName(), payload);
+                return (CompletableFuture) dispatcher.sendSignal(machineId, message.signalName(), payload);
             }
 
             CompletableFuture<OrchestrationTurnResult<?, ?, ?>> failed = new CompletableFuture<>();

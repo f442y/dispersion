@@ -50,6 +50,8 @@
         <module>fsm/test</module>
         <module>orchestration/api</module>
         <module>orchestration/core</module>
+        <module>orchestration/batch</module>
+        <module>orchestration/messaging</module>
         <module>orchestration/test</module>
         <module>control/api</module>
         <module>control/core</module>
@@ -128,6 +130,16 @@
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-orchestration-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-batch</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-messaging</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

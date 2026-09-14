@@ -1,7 +1,7 @@
 # Dispersion — Roadmap & Next Steps Plan
 
-> **Last Updated:** September 12, 2026
-> **Current Git State:** `main` branch clean, all tests passing (11 reactor modules, 50/50 tests passing).
+> **Last Updated:** September 14, 2026
+> **Current Git State:** `main` branch clean, all tests passing (21 reactor modules, 38/38 tests passing across unit and integration suites).
 > **Overall Goal:** Connect the Dispersion distributed state engine to a modern React + TanStack Router Control Panel Web UI for real-time inspection, monitoring, and operator control.
 
 ---
@@ -10,12 +10,14 @@
 
 ### ✅ Completed Milestones
 
-1. **Multi-Module Decomposition (Option A — Symmetrical API/Core Split & Hybrid Topic-Nesting)**
-   - Decomposed monolithic modules into topic-nested directories with zero split-package collisions:
-     - `event/api` (`dispersion-event-api`) & `event/core` (`dispersion-event-core`): Telemetry event hierarchy and high-throughput async dispatcher.
-     - `fsm/api` (`dispersion-fsm-api`) & `fsm/core` (`dispersion-fsm-core`): Atomic FSM contracts, builders, virtual thread runner, and token-bucket admission control.
-     - `orchestration/api` (`dispersion-orchestration-api`) & `orchestration/core` (`dispersion-orchestration-core`): Macro saga contracts, checkpoint stores, step driver, signal watcher, parallel branches, and broker-agnostic messaging.
-     - `control/api` (`dispersion-control-api`) & `control/core` (`dispersion-control-core`): Control plane query SPI, registry, and topology discovery.
+1. **Multi-Module Decomposition & Reorganization (Hexagonal Boundaries & Nested Domains)**
+   - Decomposed monolithic modules into topic-nested directories with zero split-package collisions across 21 modules:
+     - `event/api` (`dispersion-event-api`), `event/core` (`dispersion-event-core`), `event/test` (`dispersion-event-test`): Telemetry event hierarchy and high-throughput virtual thread ring buffer dispatcher.
+     - `fsm/api` (`dispersion-fsm-api`), `fsm/core` (`dispersion-fsm-core`), `fsm/test` (`dispersion-fsm-test`): Atomic FSM contracts, builders, virtual thread runner, and token-bucket admission control.
+     - `routing/api` (`dispersion-routing-api`), `routing/core` (`dispersion-routing-core`), `routing/test` (`dispersion-routing-test`): Location-agnostic workload routing, Canary traffic control, and developer sandboxes.
+     - `orchestration/api` (`dispersion-orchestration-api`), `orchestration/core` (`dispersion-orchestration-core`), `orchestration/batch` (`dispersion-orchestration-batch`), `orchestration/messaging` (`dispersion-orchestration-messaging`), `orchestration/test` (`dispersion-orchestration-test`): Macro sagas, automated LIFO rollbacks, turn-based batch barriers, broker-agnostic messaging, and test doubles.
+     - `control/api` (`dispersion-control-api`), `control/core` (`dispersion-control-core`), `control/test` (`dispersion-control-test`): Control plane query SPI, registry, and topology discovery.
+     - `testing` (`dispersion-testing`): Unified static testing facade.
      - `bom` (`dispersion-bom`): Centralized dependency management.
      - `examples` (`dispersion-examples`): High-throughput virtual-thread pipeline bursts (500 threads) and multi-step distributed Saga rollbacks.
 
@@ -34,26 +36,17 @@
    - Child machine composition with automatic retry, recovery, and result mapping.
    - Network idempotency deduplication (`CommandEnvelope`).
 
-4. **Observability & Control Plane Subsystem (`dispersion-control-api` & `dispersion-control-core`)**
-   - Exhaustive sealed hierarchy of 12 telemetry event records in [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java).
-   - Thread-safe functional listener contract [`ExecutionEventListener`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEventListener.java).
-   - High-throughput, bounded, lock-free ring buffer dispatcher ([`AsyncExecutionEventDispatcher`](file:///C:/Users/faiza/development/dispersion/event/core/src/main/java/com/github/f442y/dispersion/event/dispatcher/AsyncExecutionEventDispatcher.java)) running on dedicated virtual threads.
-   - Unified operator control SPI ([`ControlPlane`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ControlPlane.java)) with thread-safe in-memory reference implementation ([`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java)).
-   - Complete event emission telemetry instrumented across both atomic state execution and orchestration step driver.
+4. **Tier 3: Turn-Based Batch Processing (`dispersion-orchestration-batch`)**
+   - Item-level virtual thread concurrency with isolated context state.
+   - Synchronized stage progression via `ALL_ITEMS` and `QUORUM` barrier policies.
+   - Granular item checkpoints for safe workflow resumption.
 
-5. **Comprehensive Documentation Suite (`docs/`, Module READMEs & `README.md`)**
-   - [`README.md`](file:///C:/Users/faiza/development/dispersion/README.md): Showcase, architecture overview, quickstarts, and module index.
-   - Encompassing Module Documentation:
-     - [`event/README.md`](file:///C:/Users/faiza/development/dispersion/event/README.md): Event bus, sealed telemetry records, and stream consumption.
-     - [`fsm/README.md`](file:///C:/Users/faiza/development/dispersion/fsm/README.md): Tier 1 Atomic FSM, dense ordinal lookup tables, and admission backpressure.
-     - [`orchestration/README.md`](file:///C:/Users/faiza/development/dispersion/orchestration/README.md): Tier 2 Saga Orchestration, LIFO compensation, signal suspension, and turn-based batching.
-     - [`control/README.md`](file:///C:/Users/faiza/development/dispersion/control/README.md): Control plane, InspectableMachine SPI, dynamic Mermaid diagrams, and signal routing.
-     - [`testing/README.md`](file:///C:/Users/faiza/development/dispersion/testing/README.md): DispersionTestKit facade, test double catalog, and unit testing recipes.
-   - Architectural Deep-Dive Guides:
-     - [`docs/architecture-and-design.md`](file:///C:/Users/faiza/development/dispersion/docs/architecture-and-design.md): Hexagonal architecture, decoupling invariants, and thread confinement.
-     - [`docs/virtual-threads-and-performance.md`](file:///C:/Users/faiza/development/dispersion/docs/virtual-threads-and-performance.md): Project Loom mechanics, zero carrier pinning, and escape analysis.
-     - [`docs/saga-orchestration-and-batching.md`](file:///C:/Users/faiza/development/dispersion/docs/saga-orchestration-and-batching.md): Distributed saga theory, checkpoint storage, and batch barriers.
-     - [`docs/observability-and-control-plane.md`](file:///C:/Users/faiza/development/dispersion/docs/observability-and-control-plane.md): Telemetry pipeline, O(1) dual-pool memory topology, and React UI integration.
+5. **Observability & Control Plane Subsystem (`dispersion-control-api` & `dispersion-control-core`)**
+   - Clean, extensible telemetry event hierarchy in [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java).
+   - Thread-safe functional listener contract [`ExecutionEventListener`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEventListener.java).
+   - High-throughput, bounded, lock-free ring buffer dispatcher running on dedicated virtual threads.
+   - Unified operator control SPI ([`ControlPlane`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ControlPlane.java)) with thread-safe in-memory reference implementation ([`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java)).
+   - Dynamic Mermaid diagram generation and inspection.
 
 ---
 
@@ -62,10 +55,11 @@
 ```mermaid
 flowchart TD
     subgraph Done["✅ Phase 1: Core Telemetry, SPI & Decomposition (Complete)"]
-        DEC["Multi-Module Decomposition (Option A)"]
+        DEC["Multi-Module Decomposition (21 Modules)"]
         CP["ControlPlane SPI"]
         EE["ExecutionEvent Records"]
         DISP["AsyncEventDispatcher"]
+        ROUT["Workload Routing & Sandboxes"]
     end
 
     subgraph Next["🚀 Phase 2: Serialization & API Gateway (Next Up)"]
@@ -99,7 +93,7 @@ flowchart TD
 
 - [ ] **Step 2.1 — Event & Descriptor JSON Serialization (`serialization/json` / `dispersion-serialization-json`)**
   - Implement zero-dependency or lightweight Jackson / standard JSON serializers for:
-    - All 12 sealed [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java) records using polymorphic type discrimination (`@type` or `eventType`).
+    - All [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java) records using polymorphic type discrimination (`@type` or `eventType`).
     - [`MachineDescriptor`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/MachineDescriptor.java) (topology metadata: states, transitions, initial/terminal states).
     - [`ExecutionSummary`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ExecutionSummary.java) and [`SignalDeliveryResult`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/SignalDeliveryResult.java).
 - [ ] **Step 2.2 — Pluggable Transport Server Module (`server/http` / `dispersion-server-http`)**
