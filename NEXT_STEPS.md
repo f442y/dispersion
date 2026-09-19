@@ -1,7 +1,7 @@
 # Dispersion — Roadmap & Next Steps Plan
 
-> **Last Updated:** September 14, 2026
-> **Current Git State:** `main` branch clean, all tests passing (21 reactor modules, 38/38 tests passing across unit and integration suites).
+> **Last Updated:** September 19, 2026
+> **Current Git State:** `main` clean, all 21 reactor modules passing, granular lifecycle events (Sagas, Retries, Parallel Concurrency, Child Machines, Guardrails) fully wired.
 > **Overall Goal:** Connect the Dispersion distributed state engine to a modern React + TanStack Router Control Panel Web UI for real-time inspection, monitoring, and operator control.
 
 ---

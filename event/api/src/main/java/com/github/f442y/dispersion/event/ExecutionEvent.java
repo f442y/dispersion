@@ -249,4 +249,356 @@ public interface ExecutionEvent {
             Objects.requireNonNull(timestamp, "timestamp must not be null");
         }
     }
+
+    /**
+     * Emitted immediately after executing a state's business logic action.
+     */
+    record ActionExecutedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull Duration duration,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ActionExecutedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(duration, "duration must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted immediately before executing a single state's compensation rollback action.
+     */
+    record CompensationStepStartedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            boolean isRouted,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public CompensationStepStartedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted immediately after a single state's compensation rollback action completes successfully.
+     */
+    record CompensationStepCompletedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull Duration duration,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public CompensationStepCompletedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(duration, "duration must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when an individual compensation step fails.
+     */
+    record CompensationStepFailedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull Throwable cause,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public CompensationStepFailedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(cause, "cause must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when an action fails and is scheduled for retry after a backoff delay.
+     */
+    record RetryAttemptedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            int attempt,
+            int maxAttempts,
+            @NonNull Duration delay,
+            @NonNull Throwable lastCause,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public RetryAttemptedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(delay, "delay must not be null");
+            Objects.requireNonNull(lastCause, "lastCause must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when all configured retry attempts have failed.
+     */
+    record RetryExhaustedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            int attempts,
+            @NonNull Throwable finalCause,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public RetryExhaustedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(finalCause, "finalCause must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when an orchestration state invokes a sub-workflow, establishing parent-child lineage.
+     */
+    record ChildMachineSpawnedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull UUID childMachineId,
+            @NonNull String childMachineName,
+            @NonNull String parentStateName,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ChildMachineSpawnedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(childMachineId, "childMachineId must not be null");
+            Objects.requireNonNull(childMachineName, "childMachineName must not be null");
+            Objects.requireNonNull(parentStateName, "parentStateName must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when a child sub-workflow finishes execution.
+     */
+    record ChildMachineCompletedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull UUID childMachineId,
+            @NonNull String childMachineName,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ChildMachineCompletedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(childMachineId, "childMachineId must not be null");
+            Objects.requireNonNull(childMachineName, "childMachineName must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when a parallel state forks concurrent execution branches on virtual threads.
+     */
+    record ParallelForkStartedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull List<String> branchNames,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ParallelForkStartedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(branchNames, "branchNames must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+            branchNames = List.copyOf(branchNames);
+        }
+    }
+
+    /**
+     * Emitted when an individual parallel branch finishes its action.
+     */
+    record ParallelBranchCompletedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull String branchName,
+            @NonNull Duration duration,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ParallelBranchCompletedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(branchName, "branchName must not be null");
+            Objects.requireNonNull(duration, "duration must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when all parallel branches join and reduction completes.
+     */
+    record ParallelJoinCompletedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            int totalBranches,
+            @NonNull Duration duration,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ParallelJoinCompletedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(duration, "duration must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when a workflow halts waiting for an external signal and the deadline expires.
+     */
+    record SignalTimedOutEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull String expectedSignal,
+            @Nullable String correlationKey,
+            @NonNull Duration timeout,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public SignalTimedOutEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(expectedSignal, "expectedSignal must not be null");
+            Objects.requireNonNull(timeout, "timeout must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when an incoming signal arrives but cannot be delivered.
+     */
+    record SignalDiscardedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String signalName,
+            @Nullable String correlationKey,
+            @NonNull String reason,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public SignalDiscardedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(signalName, "signalName must not be null");
+            Objects.requireNonNull(reason, "reason must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when a state's loop visit count exceeds maxVisits.
+     */
+    record StateVisitLimitExceededEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            int visitLimit,
+            @Nullable String fallbackState,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public StateVisitLimitExceededEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when total transitions breach the safety circuit breaker threshold.
+     */
+    record CircuitBreakerTrippedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            int maxTransitions,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public CircuitBreakerTrippedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when an operator or control plane cancels an active execution.
+     */
+    record ExecutionCancelledEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @Nullable String stateName,
+            @NonNull String operatorId,
+            @NonNull String reason,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ExecutionCancelledEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(operatorId, "operatorId must not be null");
+            Objects.requireNonNull(reason, "reason must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when an execution is paused by an operator or control plane.
+     */
+    record ExecutionPausedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull String reason,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ExecutionPausedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(reason, "reason must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
+
+    /**
+     * Emitted when a paused execution is resumed.
+     */
+    record ExecutionResumedEvent(
+            @NonNull UUID machineId,
+            @NonNull String machineName,
+            @NonNull String stateName,
+            @NonNull Instant timestamp
+    ) implements ExecutionEvent {
+        public ExecutionResumedEvent {
+            Objects.requireNonNull(machineId, "machineId must not be null");
+            Objects.requireNonNull(machineName, "machineName must not be null");
+            Objects.requireNonNull(stateName, "stateName must not be null");
+            Objects.requireNonNull(timestamp, "timestamp must not be null");
+        }
+    }
 }

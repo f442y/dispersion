@@ -28,5 +28,16 @@ public enum ExecutionStatus {
     /**
      * Workflow failed due to an unhandled exception or non-recoverable error without compensation.
      */
-    FAILED
+    FAILED,
+
+    /**
+     * Workflow was explicitly cancelled by an operator or control plane command.
+     */
+    CANCELLED,
+
+    /**
+     * Workflow execution has been temporarily paused by an operator.
+     */
+    PAUSED
 }
+

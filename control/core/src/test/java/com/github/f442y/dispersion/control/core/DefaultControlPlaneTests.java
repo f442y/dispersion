@@ -468,4 +468,34 @@ class DefaultControlPlaneTests {
             assertTrue(terminalList.size() <= maxTerminal, "Terminal executions must never exceed maxTrackedExecutions limit");
         }
     }
+
+    @Test
+    @DisplayName("Should track ExecutionCancelledEvent, ExecutionPausedEvent, and timeline events in ControlPlane")
+    void testControlPlaneNewEventsTracking() {
+        UUID execId = UUID.randomUUID();
+        Instant now = Instant.now();
+
+        controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(execId, "OrderFulfillmentFSM", "ORD-CAN-1", now));
+        controlPlane.onEvent(new ExecutionEvent.ExecutionPausedEvent(execId, "OrderFulfillmentFSM", "VALIDATE", "Operator hold", now.plusMillis(10)));
+
+        Optional<ExecutionSummary> pausedSummary = controlPlane.getExecution(execId.toString());
+        assertTrue(pausedSummary.isPresent());
+        assertEquals(ExecutionStatus.PAUSED, pausedSummary.get().status());
+        assertEquals("VALIDATE", pausedSummary.get().currentState());
+
+        controlPlane.onEvent(new ExecutionEvent.ExecutionResumedEvent(execId, "OrderFulfillmentFSM", "VALIDATE", now.plusMillis(20)));
+        Optional<ExecutionSummary> resumedSummary = controlPlane.getExecution(execId.toString());
+        assertTrue(resumedSummary.isPresent());
+        assertEquals(ExecutionStatus.RUNNING, resumedSummary.get().status());
+
+        controlPlane.onEvent(new ExecutionEvent.ExecutionCancelledEvent(execId, "OrderFulfillmentFSM", "VALIDATE", "admin-user", "Customer cancelled order", now.plusMillis(30)));
+        Optional<ExecutionSummary> cancelledSummary = controlPlane.getExecution(execId.toString());
+        assertTrue(cancelledSummary.isPresent());
+        assertEquals(ExecutionStatus.CANCELLED, cancelledSummary.get().status());
+        assertTrue(cancelledSummary.get().errorMessage().contains("Customer cancelled order"));
+
+        List<ExecutionEvent> timeline = controlPlane.getExecutionTimeline(execId.toString());
+        assertEquals(4, timeline.size());
+    }
 }
+

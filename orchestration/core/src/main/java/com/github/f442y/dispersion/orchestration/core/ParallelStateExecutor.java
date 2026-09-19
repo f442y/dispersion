@@ -1,5 +1,7 @@
 package com.github.f442y.dispersion.orchestration.core;
 
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.ExecutionEventListener;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.orchestration.ParallelBranch;
 import org.jspecify.annotations.NonNull;
@@ -7,9 +9,12 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -50,31 +55,41 @@ public final class ParallelStateExecutor {
     /**
      * Concurrently executes parallel branches on Java Virtual Threads with optional context isolation
      * and fork-join result reduction.
+     */
+    @NonNull
+    public static <CONTEXT extends StateMachineContext> CONTEXT executeParallel(
+            @NonNull List<ParallelBranch<CONTEXT>> branches,
+            @NonNull CONTEXT context,
+            @Nullable Function<CONTEXT, CONTEXT> cloner,
+            @Nullable BinaryOperator<CONTEXT> reducer,
+            @NonNull ExecutorService executor
+    ) throws Exception {
+        return executeParallel(null, null, null, null, branches, context, cloner, reducer, executor);
+    }
+
+    /**
+     * Concurrently executes parallel branches on Java Virtual Threads with execution telemetry,
+     * optional context isolation, and fork-join result reduction.
      *
-     * <h2>Concurrency &amp; Isolation Semantics</h2>
-     * <ul>
-     *   <li>If a {@code cloner} is configured, each branch receives an independent context snapshot,
-     *       protecting non-thread-safe context variables from concurrent write hazards.</li>
-     *   <li>Branch actions return an updated {@link StateMachineContext} instance. These results are
-     *       preserved in branch declaration order.</li>
-     *   <li>When all branches complete successfully, the results are folded sequentially into the
-     *       primary context via {@code reducer}. If no reducer is specified, the primary context
-     *       (or sole branch result) is returned.</li>
-     *   <li>If any branch encounters a failure, remaining pending branches are cancelled, and all
-     *       completed sibling branches undergo LIFO Saga compensation rollback.</li>
-     * </ul>
-     *
-     * @param <CONTEXT>  The context type
-     * @param branches   The list of parallel branches to execute concurrently
-     * @param context    The primary input context
-     * @param cloner     Optional function creating an isolated context copy for each branch
-     * @param reducer    Optional reducer combining branch outputs back into the primary context
-     * @param executor   The virtual thread executor
+     * @param <CONTEXT>      The context type
+     * @param machineId      Optional machine execution ID for telemetry
+     * @param machineName    Optional machine name for telemetry
+     * @param stateName      Optional state name for telemetry
+     * @param eventListener  Optional event listener for telemetry emission
+     * @param branches       The list of parallel branches to execute concurrently
+     * @param context        The primary input context
+     * @param cloner         Optional function creating an isolated context copy for each branch
+     * @param reducer        Optional reducer combining branch outputs back into the primary context
+     * @param executor       The virtual thread executor
      * @return The updated or merged context after all branches finish
      * @throws Exception If any branch fails
      */
     @NonNull
     public static <CONTEXT extends StateMachineContext> CONTEXT executeParallel(
+            @Nullable UUID machineId,
+            @Nullable String machineName,
+            @Nullable String stateName,
+            @Nullable ExecutionEventListener eventListener,
             @NonNull List<ParallelBranch<CONTEXT>> branches,
             @NonNull CONTEXT context,
             @Nullable Function<CONTEXT, CONTEXT> cloner,
@@ -96,6 +111,18 @@ public final class ParallelStateExecutor {
         AtomicReference<Throwable> firstFailure = new AtomicReference<>();
         List<CompletableFuture<Void>> futures = new ArrayList<>(count);
 
+        long forkStartNanos = System.nanoTime();
+        if (eventListener != null && machineId != null && machineName != null && stateName != null) {
+            List<String> branchNames = branches.stream().map(ParallelBranch::name).toList();
+            safeNotify(eventListener, new ExecutionEvent.ParallelForkStartedEvent(
+                    machineId,
+                    machineName,
+                    stateName,
+                    branchNames,
+                    Instant.now()
+            ));
+        }
+
         for (int i = 0; i < count; i++) {
             final int branchIndex = i;
             ParallelBranch<CONTEXT> branch = branches.get(i);
@@ -107,6 +134,7 @@ public final class ParallelStateExecutor {
 
             try {
                 executor.submit(() -> {
+                    long branchStartNanos = System.nanoTime();
                     try {
                         if (firstFailure.get() != null) {
                             branchFuture.cancel(true);
@@ -115,6 +143,18 @@ public final class ParallelStateExecutor {
                         CONTEXT result = branch.action().execute(branchInput);
                         branchResults[branchIndex] = (result != null) ? result : branchInput;
                         completedBranches.add(branch);
+
+                        if (eventListener != null && machineId != null && machineName != null && stateName != null) {
+                            safeNotify(eventListener, new ExecutionEvent.ParallelBranchCompletedEvent(
+                                    machineId,
+                                    machineName,
+                                    stateName,
+                                    branch.name(),
+                                    Duration.ofNanos(System.nanoTime() - branchStartNanos),
+                                    Instant.now()
+                            ));
+                        }
+
                         branchFuture.complete(null);
                     } catch (Throwable t) {
                         firstFailure.compareAndSet(null, t);
@@ -166,17 +206,39 @@ public final class ParallelStateExecutor {
         }
 
         // Merge branch results into final context
+        CONTEXT merged = context;
         if (reducer != null) {
-            CONTEXT merged = context;
             for (CONTEXT branchResult : branchResults) {
                 if (branchResult != null) {
                     merged = reducer.apply(merged, branchResult);
                 }
             }
-            return merged;
+        } else if (count == 1 && branchResults[0] != null) {
+            merged = branchResults[0];
         }
 
-        // If no reducer, return context (or sole branch result if count == 1)
-        return (count == 1 && branchResults[0] != null) ? branchResults[0] : context;
+        if (eventListener != null && machineId != null && machineName != null && stateName != null) {
+            safeNotify(eventListener, new ExecutionEvent.ParallelJoinCompletedEvent(
+                    machineId,
+                    machineName,
+                    stateName,
+                    count,
+                    Duration.ofNanos(System.nanoTime() - forkStartNanos),
+                    Instant.now()
+            ));
+        }
+
+        return merged;
+    }
+
+    private static void safeNotify(@NonNull ExecutionEventListener listener, @NonNull ExecutionEvent event) {
+        try {
+            listener.onEvent(event);
+        } catch (Throwable t) {
+            log.atError()
+                    .setCause(t)
+                    .addKeyValue("listener_class", listener.getClass().getName())
+                    .log("ExecutionEventListener threw exception in ParallelStateExecutor");
+        }
     }
 }

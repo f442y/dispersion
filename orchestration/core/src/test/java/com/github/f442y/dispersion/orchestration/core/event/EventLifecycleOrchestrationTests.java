@@ -349,4 +349,123 @@ class EventLifecycleOrchestrationTests {
         assertTrue(hasTurnFailed, "Atomic machine failure must emit TurnFailedEvent");
         assertFalse(hasTurnCompensated, "Atomic machine failure must NOT emit TurnCompensatedEvent");
     }
+
+    @Test
+    @DisplayName("Should capture granular CompensationStepStarted and CompensationStepCompleted events during Saga rollback")
+    void testGranularCompensationStepEvents() {
+        List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
+        List<String> compensated = new ArrayList<>();
+
+        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
+                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("SagaCompensationMachine", OrchFlowState.class)
+                        .context(SimpleContext::new)
+                        .initialState(OrchFlowState.INIT)
+                        .endStates(OrchFlowState.DONE)
+                        .eventListener(events::add)
+                        .state(OrchFlowState.INIT)
+                            .action(ctx -> {
+                                ctx.status = "STEP_1_OK";
+                                return ctx;
+                            })
+                            .compensate(ctx -> {
+                                compensated.add("INIT");
+                                ctx.status = "INIT_COMPENSATED";
+                                return ctx;
+                            })
+                            .transition(OrchFlowState.FINALIZE)
+                        .state(OrchFlowState.FINALIZE)
+                            .action(_ -> {
+                                throw new IllegalStateException("Simulated step failure triggering Saga rollback");
+                            })
+                            .transition(OrchFlowState.DONE)
+                        .buildExecutor()) {
+
+            assertThrows(Exception.class, () -> executor.dispatchSync(null));
+
+            boolean hasCompStarted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.CompensationStepStartedEvent cs
+                    && cs.stateName().equals("INIT") && !cs.isRouted());
+            boolean hasCompCompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.CompensationStepCompletedEvent cc
+                    && cc.stateName().equals("INIT") && cc.duration() != null);
+            boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompensatedEvent tc
+                    && tc.compensatedStates().contains("INIT"));
+
+            assertTrue(hasCompStarted, "Must emit CompensationStepStartedEvent for INIT state");
+            assertTrue(hasCompCompleted, "Must emit CompensationStepCompletedEvent for INIT state");
+            assertTrue(hasTurnCompensated, "Must emit TurnCompensatedEvent after compensations finish");
+            assertEquals(List.of("INIT"), compensated);
+        }
+    }
+
+    @Test
+    @DisplayName("Should capture ParallelForkStarted, ParallelBranchCompleted, and ParallelJoinCompleted events")
+    void testParallelForkJoinEvents() throws Exception {
+        List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
+
+        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
+                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("ParallelMachine", OrchFlowState.class)
+                        .context(SimpleContext::new)
+                        .initialState(OrchFlowState.INIT)
+                        .endStates(OrchFlowState.DONE)
+                        .eventListener(events::add)
+                        .state(OrchFlowState.INIT)
+                            .parallel()
+                                .branch("BranchA", ctx -> {
+                                    ctx.count += 10;
+                                    return ctx;
+                                })
+                                .branch("BranchB", ctx -> {
+                                    ctx.count += 20;
+                                    return ctx;
+                                })
+                            .transition(OrchFlowState.DONE)
+                        .buildExecutor()) {
+
+            executor.dispatchSync(null);
+
+            boolean hasForkStarted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelForkStartedEvent pf
+                    && pf.branchNames().containsAll(List.of("BranchA", "BranchB")));
+            boolean hasBranchACompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelBranchCompletedEvent pb
+                    && pb.branchName().equals("BranchA"));
+            boolean hasBranchBCompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelBranchCompletedEvent pb
+                    && pb.branchName().equals("BranchB"));
+            boolean hasJoinCompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelJoinCompletedEvent pj
+                    && pj.totalBranches() == 2);
+
+            assertTrue(hasForkStarted, "Must emit ParallelForkStartedEvent");
+            assertTrue(hasBranchACompleted, "Must emit ParallelBranchCompletedEvent for BranchA");
+            assertTrue(hasBranchBCompleted, "Must emit ParallelBranchCompletedEvent for BranchB");
+            assertTrue(hasJoinCompleted, "Must emit ParallelJoinCompletedEvent");
+        }
+    }
+
+    @Test
+    @DisplayName("Should capture ActionExecutedEvent and FSM loop limit StateVisitLimitExceededEvent")
+    void testActionExecutedAndGuardrailEvents() throws Exception {
+        List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
+
+        StateMachineConfiguration<SimpleContext, SimpleState, Integer, String> machine =
+                AtomicStateMachineBuilder.<SimpleContext, SimpleState, Integer, String>create("LoopGuardedMachine", SimpleState.class)
+                        .context(SimpleContext::new)
+                        .initialState(SimpleState.START)
+                        .endStates(SimpleState.COMPLETED)
+                        .eventListener(events::add)
+                        .state(SimpleState.START)
+                            .maxVisits(2, SimpleState.COMPLETED)
+                            .action(ctx -> {
+                                ctx.count++;
+                                return ctx;
+                            })
+                            .transition(SimpleState.START) // loop back to START
+                        .build();
+
+        AbstractStateMachineCallable.executeDirect(UUID.randomUUID(), machine, null, 0);
+
+        boolean hasActionExecuted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ActionExecutedEvent ae
+                && ae.stateName().equals("START"));
+        boolean hasLoopLimitExceeded = events.stream().anyMatch(e -> e instanceof ExecutionEvent.StateVisitLimitExceededEvent sle
+                && sle.stateName().equals("START") && "COMPLETED".equals(sle.fallbackState()));
+
+        assertTrue(hasActionExecuted, "Must emit ActionExecutedEvent");
+        assertTrue(hasLoopLimitExceeded, "Must emit StateVisitLimitExceededEvent when visit limit exceeded");
+    }
 }

@@ -303,11 +303,15 @@ public final class OrchestrationStepDriver {
 
                 // 3. Workload Invocation (Unifying child state machines and routed service workloads!)
                 if (orchState != null && orchState.hasWorkloadInvocation()) {
-                    context = executeWorkloadInvocationWithRetry(machineId, config, orchState, context, virtualThreadExecutor);
+                    context = executeWorkloadInvocationWithRetry(machineId, config, orchState, currentStateKey, eventListener, context, virtualThreadExecutor);
                 }
                 // 4. Parallel Fork-Join Execution with optional context isolation and reduction
                 else if (orchState != null && orchState.isParallelState()) {
                     context = ParallelStateExecutor.executeParallel(
+                            machineId,
+                            config.getMachineName(),
+                            currentStateKey.name(),
+                            eventListener,
                             orchState.parallelBranches(),
                             context,
                             orchState.parallelContextCloner(),
@@ -321,12 +325,21 @@ public final class OrchestrationStepDriver {
                 }
 
                 if (eventListener != null) {
+                    Duration stateDuration = Duration.ofNanos(System.nanoTime() - stateStartNanos);
+                    Instant now = Instant.now();
+                    safeNotify(eventListener, new ExecutionEvent.ActionExecutedEvent(
+                            machineId,
+                            config.getMachineName(),
+                            currentStateKey.name(),
+                            stateDuration,
+                            now
+                    ));
                     safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
                             machineId,
                             config.getMachineName(),
                             currentStateKey.name(),
-                            Duration.ofNanos(System.nanoTime() - stateStartNanos),
-                            Instant.now()
+                            stateDuration,
+                            now
                     ));
                 }
 
@@ -450,6 +463,17 @@ public final class OrchestrationStepDriver {
             if (!compensationHistory.isEmpty()) {
                 for (int i = compensationHistory.size() - 1; i >= 0; i--) {
                     CompensationRecord<CONTEXT> compRecord = compensationHistory.get(i);
+                    boolean isRouted = compRecord instanceof CompensationRecord.RoutedCompensation;
+                    long compStartNanos = System.nanoTime();
+                    if (eventListener != null) {
+                        safeNotify(eventListener, new ExecutionEvent.CompensationStepStartedEvent(
+                                machineId,
+                                config.getMachineName(),
+                                compRecord.stateKey(),
+                                isRouted,
+                                Instant.now()
+                        ));
+                    }
                     try {
                         if (compRecord instanceof CompensationRecord.LocalCompensation<CONTEXT> localComp) {
                             log.atDebug()
@@ -477,36 +501,82 @@ public final class OrchestrationStepDriver {
                             }
                             compStateNames.add(routedComp.stateKey());
                         }
+                        if (eventListener != null) {
+                            safeNotify(eventListener, new ExecutionEvent.CompensationStepCompletedEvent(
+                                    machineId,
+                                    config.getMachineName(),
+                                    compRecord.stateKey(),
+                                    Duration.ofNanos(System.nanoTime() - compStartNanos),
+                                    Instant.now()
+                            ));
+                        }
                     } catch (Throwable compErr) {
                         log.atError()
                                 .setCause(compErr)
                                 .addKeyValue("machine_id", machineId)
                                 .addKeyValue("state", compRecord.stateKey())
                                 .log("Compensation error in state");
+                        if (eventListener != null) {
+                            safeNotify(eventListener, new ExecutionEvent.CompensationStepFailedEvent(
+                                    machineId,
+                                    config.getMachineName(),
+                                    compRecord.stateKey(),
+                                    compErr,
+                                    Instant.now()
+                            ));
+                        }
                     }
                 }
             } else {
                 for (int i = completedStates.size() - 1; i >= 0; i--) {
                     STATE_KEY compStateKey = completedStates.get(i);
-                    try {
-                        State<CONTEXT, STATE_KEY> s = stateMap.getState(compStateKey);
-                        if (s instanceof OrchestrationState<CONTEXT, STATE_KEY> os) {
-                            CompensationAction<CONTEXT> compAction = os.compensationAction();
-                            if (compAction != null) {
+                    State<CONTEXT, STATE_KEY> s = stateMap.getState(compStateKey);
+                    if (s instanceof OrchestrationState<CONTEXT, STATE_KEY> os) {
+                        CompensationAction<CONTEXT> compAction = os.compensationAction();
+                        if (compAction != null) {
+                            long compStartNanos = System.nanoTime();
+                            if (eventListener != null) {
+                                safeNotify(eventListener, new ExecutionEvent.CompensationStepStartedEvent(
+                                        machineId,
+                                        config.getMachineName(),
+                                        compStateKey.name(),
+                                        false,
+                                        Instant.now()
+                                ));
+                            }
+                            try {
                                 log.atDebug()
                                         .addKeyValue("machine_id", machineId)
                                         .addKeyValue("compensating_state", compStateKey.name())
                                         .log("Compensating completed state");
                                 context = compAction.compensate(context);
                                 compStateNames.add(compStateKey.name());
+                                if (eventListener != null) {
+                                    safeNotify(eventListener, new ExecutionEvent.CompensationStepCompletedEvent(
+                                            machineId,
+                                            config.getMachineName(),
+                                            compStateKey.name(),
+                                            Duration.ofNanos(System.nanoTime() - compStartNanos),
+                                            Instant.now()
+                                    ));
+                                }
+                            } catch (Throwable compErr) {
+                                log.atError()
+                                        .setCause(compErr)
+                                        .addKeyValue("machine_id", machineId)
+                                        .addKeyValue("state", compStateKey.name())
+                                        .log("Compensation error in state");
+                                if (eventListener != null) {
+                                    safeNotify(eventListener, new ExecutionEvent.CompensationStepFailedEvent(
+                                            machineId,
+                                            config.getMachineName(),
+                                            compStateKey.name(),
+                                            compErr,
+                                            Instant.now()
+                                    ));
+                                }
                             }
                         }
-                    } catch (Throwable compErr) {
-                        log.atError()
-                                .setCause(compErr)
-                                .addKeyValue("machine_id", machineId)
-                                .addKeyValue("state", compStateKey.name())
-                                .log("Compensation error in state");
                     }
                 }
             }
@@ -569,6 +639,8 @@ public final class OrchestrationStepDriver {
             @NonNull UUID parentMachineId,
             @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, ?, ?> config,
             @NonNull OrchestrationState<CONTEXT, STATE_KEY> orchState,
+            @NonNull STATE_KEY currentStateKey,
+            @Nullable ExecutionEventListener eventListener,
             @NonNull CONTEXT parentContext,
             @NonNull ExecutorService virtualThreadExecutor
     ) throws Exception {
@@ -588,6 +660,18 @@ public final class OrchestrationStepDriver {
             try {
                 if (attempt > 1) {
                     Duration delay = retryPolicy.computeDelay(attempt);
+                    if (eventListener != null) {
+                        safeNotify(eventListener, new ExecutionEvent.RetryAttemptedEvent(
+                                parentMachineId,
+                                config.getMachineName(),
+                                currentStateKey.name(),
+                                attempt,
+                                maxAttempts,
+                                delay,
+                                lastError != null ? lastError : new RuntimeException("Workload retry attempt"),
+                                Instant.now()
+                        ));
+                    }
                     if (!delay.isZero()) {
                         Thread.sleep(delay);
                     }
@@ -605,12 +689,31 @@ public final class OrchestrationStepDriver {
                     StateMachineConfiguration childConfig = invocation.localStateMachine();
                     if (childConfig instanceof OrchestrationStateMachineConfiguration orchChildConfig) {
                         UUID childMachineId = UUID.randomUUID();
+                        if (eventListener != null) {
+                            safeNotify(eventListener, new ExecutionEvent.ChildMachineSpawnedEvent(
+                                    parentMachineId,
+                                    config.getMachineName(),
+                                    childMachineId,
+                                    orchChildConfig.getMachineName(),
+                                    currentStateKey.name(),
+                                    Instant.now()
+                            ));
+                        }
                         OrchestrationTurnResult<?, ?, ?> turn = executeChildOrchestrationTurn(childMachineId, orchChildConfig, inputPayload);
                         if (turn.isFailed() || turn.isCompensated()) {
                             throw (turn.error() != null) ? new RuntimeException(turn.error()) : new IllegalStateException("Child orchestration failed");
                         }
                         if (turn.isSuspended()) {
                             throw new IllegalStateException("Child orchestration [" + childMachineId + "] unexpectedly suspended at state [" + turn.currentStateKey() + "]");
+                        }
+                        if (eventListener != null) {
+                            safeNotify(eventListener, new ExecutionEvent.ChildMachineCompletedEvent(
+                                    parentMachineId,
+                                    config.getMachineName(),
+                                    childMachineId,
+                                    orchChildConfig.getMachineName(),
+                                    Instant.now()
+                            ));
                         }
                         result = turn.output();
                     } else {
@@ -661,6 +764,16 @@ public final class OrchestrationStepDriver {
                         .addKeyValue("max_attempts", maxAttempts)
                         .log("Workload invocation attempt failed");
                 if (attempt >= maxAttempts) {
+                    if (eventListener != null) {
+                        safeNotify(eventListener, new ExecutionEvent.RetryExhaustedEvent(
+                                parentMachineId,
+                                config.getMachineName(),
+                                currentStateKey.name(),
+                                maxAttempts,
+                                t,
+                                Instant.now()
+                        ));
+                    }
                     if (t instanceof Exception ex) throw ex;
                     throw new RuntimeException(t);
                 }

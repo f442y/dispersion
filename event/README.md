@@ -135,6 +135,98 @@ public final class TelemetryLogger {
                    .setCause(failed.cause())
                    .log("Turn execution failed");
 
+            case ExecutionEvent.CompensationStepStartedEvent compStarted ->
+                log.atInfo()
+                   .addKeyValue("machine_id", compStarted.machineId())
+                   .addKeyValue("state", compStarted.stateName())
+                   .addKeyValue("routed", compStarted.isRouted())
+                   .log("Executing single state Saga compensation rollback");
+
+            case ExecutionEvent.CompensationStepCompletedEvent compCompleted ->
+                log.atInfo()
+                   .addKeyValue("machine_id", compCompleted.machineId())
+                   .addKeyValue("state", compCompleted.stateName())
+                   .addKeyValue("duration_ms", compCompleted.duration().toMillis())
+                   .log("State compensation completed");
+
+            case ExecutionEvent.CompensationStepFailedEvent compFailed ->
+                log.atError()
+                   .addKeyValue("machine_id", compFailed.machineId())
+                   .addKeyValue("state", compFailed.stateName())
+                   .setCause(compFailed.cause())
+                   .log("State compensation failed");
+
+            case ExecutionEvent.RetryAttemptedEvent retry ->
+                log.atWarn()
+                   .addKeyValue("machine_id", retry.machineId())
+                   .addKeyValue("state", retry.stateName())
+                   .addKeyValue("attempt", retry.attempt())
+                   .addKeyValue("delay_ms", retry.delay().toMillis())
+                   .log("Workload action failed; scheduling retry");
+
+            case ExecutionEvent.RetryExhaustedEvent retryExhausted ->
+                log.atError()
+                   .addKeyValue("machine_id", retryExhausted.machineId())
+                   .addKeyValue("state", retryExhausted.stateName())
+                   .addKeyValue("attempts", retryExhausted.attempts())
+                   .setCause(retryExhausted.finalCause())
+                   .log("Workload retries exhausted");
+
+            case ExecutionEvent.ChildMachineSpawnedEvent childSpawned ->
+                log.atInfo()
+                   .addKeyValue("parent_machine_id", childSpawned.machineId())
+                   .addKeyValue("child_machine_id", childSpawned.childMachineId())
+                   .addKeyValue("child_machine_name", childSpawned.childMachineName())
+                   .log("Spawned sub-workflow execution");
+
+            case ExecutionEvent.ChildMachineCompletedEvent childCompleted ->
+                log.atInfo()
+                   .addKeyValue("parent_machine_id", childCompleted.machineId())
+                   .addKeyValue("child_machine_id", childCompleted.childMachineId())
+                   .log("Sub-workflow completed");
+
+            case ExecutionEvent.ParallelForkStartedEvent fork ->
+                log.atInfo()
+                   .addKeyValue("machine_id", fork.machineId())
+                   .addKeyValue("state", fork.stateName())
+                   .addKeyValue("branch_count", fork.branchNames().size())
+                   .log("Forked concurrent parallel branches on virtual threads");
+
+            case ExecutionEvent.ParallelBranchCompletedEvent branch ->
+                log.atDebug()
+                   .addKeyValue("machine_id", branch.machineId())
+                   .addKeyValue("branch", branch.branchName())
+                   .addKeyValue("duration_ms", branch.duration().toMillis())
+                   .log("Parallel branch finished");
+
+            case ExecutionEvent.ParallelJoinCompletedEvent join ->
+                log.atInfo()
+                   .addKeyValue("machine_id", join.machineId())
+                   .addKeyValue("state", join.stateName())
+                   .addKeyValue("total_branches", join.totalBranches())
+                   .addKeyValue("duration_ms", join.duration().toMillis())
+                   .log("Parallel branches joined and reduced successfully");
+
+            case ExecutionEvent.CircuitBreakerTrippedEvent cb ->
+                log.atError()
+                   .addKeyValue("machine_id", cb.machineId())
+                   .addKeyValue("max_transitions", cb.maxTransitions())
+                   .log("Safety circuit breaker tripped");
+
+            case ExecutionEvent.StateVisitLimitExceededEvent loop ->
+                log.atWarn()
+                   .addKeyValue("machine_id", loop.machineId())
+                   .addKeyValue("state", loop.stateName())
+                   .addKeyValue("fallback", loop.fallbackState())
+                   .log("State visit limit exceeded; loop threshold triggered");
+
+            case ExecutionEvent.ExecutionCancelledEvent cancelled ->
+                log.atWarn()
+                   .addKeyValue("machine_id", cancelled.machineId())
+                   .addKeyValue("operator", cancelled.operatorId())
+                   .addKeyValue("reason", cancelled.reason())
+                   .log("Execution cancelled by operator");
+
             default ->
                 log.atDebug()
                    .addKeyValue("machine_id", event.machineId())

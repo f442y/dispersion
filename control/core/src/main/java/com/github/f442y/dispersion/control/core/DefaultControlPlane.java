@@ -717,6 +717,140 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     yield null;
                 }
             }
+            case ExecutionEvent.ExecutionCancelledEvent e -> {
+                String error = "Execution cancelled by " + e.operatorId() + ": " + e.reason();
+                if (current != null) {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.stateName() != null ? e.stateName() : current.currentState(),
+                            ExecutionStatus.CANCELLED,
+                            current.startTime(),
+                            time,
+                            current.correlationKey(),
+                            null,
+                            current.transitionsCount(),
+                            time,
+                            error
+                    );
+                } else {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.stateName() != null ? e.stateName() : "CANCELLED",
+                            ExecutionStatus.CANCELLED,
+                            time,
+                            time,
+                            null,
+                            null,
+                            0,
+                            time,
+                            error
+                    );
+                }
+            }
+            case ExecutionEvent.ExecutionPausedEvent e -> {
+                if (current != null) {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.stateName(),
+                            ExecutionStatus.PAUSED,
+                            current.startTime(),
+                            current.endTime(),
+                            current.correlationKey(),
+                            null,
+                            current.transitionsCount(),
+                            time,
+                            current.errorMessage()
+                    );
+                } else {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.stateName(),
+                            ExecutionStatus.PAUSED,
+                            time,
+                            null,
+                            null,
+                            null,
+                            0,
+                            time,
+                            null
+                    );
+                }
+            }
+            case ExecutionEvent.ExecutionResumedEvent e -> {
+                if (current != null) {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.stateName(),
+                            ExecutionStatus.RUNNING,
+                            current.startTime(),
+                            null,
+                            current.correlationKey(),
+                            null,
+                            current.transitionsCount(),
+                            time,
+                            null
+                    );
+                } else {
+                    yield null;
+                }
+            }
+            case ExecutionEvent.SignalTimedOutEvent e -> {
+                String error = "Signal [" + e.expectedSignal() + "] timed out after " + e.timeout().toMillis() + "ms";
+                if (current != null) {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.stateName(),
+                            ExecutionStatus.FAILED,
+                            current.startTime(),
+                            time,
+                            e.correlationKey() != null ? e.correlationKey() : current.correlationKey(),
+                            null,
+                            current.transitionsCount(),
+                            time,
+                            error
+                    );
+                } else {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            e.stateName(),
+                            ExecutionStatus.FAILED,
+                            time,
+                            time,
+                            e.correlationKey(),
+                            null,
+                            0,
+                            time,
+                            error
+                    );
+                }
+            }
+            case ExecutionEvent.CircuitBreakerTrippedEvent e -> {
+                String error = "Circuit breaker tripped: max transitions (" + e.maxTransitions() + ") exceeded";
+                if (current != null) {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            current.currentState(),
+                            ExecutionStatus.FAILED,
+                            current.startTime(),
+                            time,
+                            current.correlationKey(),
+                            null,
+                            current.transitionsCount(),
+                            time,
+                            error
+                    );
+                } else {
+                    yield null;
+                }
+            }
             case ExecutionEvent.StateExitedEvent _ -> {
                 if (current != null) {
                     yield new ExecutionSummary(
@@ -735,7 +869,24 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                 }
                 yield null;
             }
-            default -> current;
+            default -> {
+                if (current != null) {
+                    yield new ExecutionSummary(
+                            execId,
+                            machine,
+                            current.currentState(),
+                            current.status(),
+                            current.startTime(),
+                            current.endTime(),
+                            current.correlationKey(),
+                            current.suspendedSignal(),
+                            current.transitionsCount(),
+                            time,
+                            current.errorMessage()
+                    );
+                }
+                yield null;
+            }
         };
     }
 

@@ -176,6 +176,14 @@ public abstract class AbstractStateMachineCallable<
 
                 // 1. Global circuit breaker check
                 if (maxTransitions > 0 && totalTransitions >= maxTransitions) {
+                    if (eventListener != null) {
+                        safeNotify(eventListener, new ExecutionEvent.CircuitBreakerTrippedEvent(
+                                effectiveId,
+                                configuration.getMachineName(),
+                                maxTransitions,
+                                Instant.now()
+                        ));
+                    }
                     throw new MaxTransitionsExceededException(maxTransitions);
                 }
 
@@ -198,6 +206,16 @@ public abstract class AbstractStateMachineCallable<
                         int currentCount = ++visitCounts[ordinal];
                         if (currentCount > maxVisits) {
                             STATE_KEY fallback = currentState.maxVisitsFallback();
+                            if (eventListener != null) {
+                                safeNotify(eventListener, new ExecutionEvent.StateVisitLimitExceededEvent(
+                                        effectiveId,
+                                        configuration.getMachineName(),
+                                        currentStateKey.name(),
+                                        maxVisits,
+                                        fallback != null ? fallback.name() : null,
+                                        Instant.now()
+                                ));
+                            }
                             if (fallback != null) {
                                 log.atWarn()
                                         .addKeyValue("execution_id", executionId)
@@ -235,12 +253,21 @@ public abstract class AbstractStateMachineCallable<
                 }
 
                 if (eventListener != null) {
+                    Duration stateDuration = Duration.ofNanos(System.nanoTime() - stateStartNanos);
+                    Instant now = Instant.now();
+                    safeNotify(eventListener, new ExecutionEvent.ActionExecutedEvent(
+                            effectiveId,
+                            configuration.getMachineName(),
+                            currentStateKey.name(),
+                            stateDuration,
+                            now
+                    ));
                     safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
                             effectiveId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
-                            Duration.ofNanos(System.nanoTime() - stateStartNanos),
-                            Instant.now()
+                            stateDuration,
+                            now
                     ));
                 }
 
