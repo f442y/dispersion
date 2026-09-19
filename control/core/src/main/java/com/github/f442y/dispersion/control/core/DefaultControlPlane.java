@@ -60,7 +60,7 @@ import java.util.stream.Stream;
  * </ul>
  *
  * <h2>Live Streaming Hub</h2>
- * <p>Backed by an internal {@link VirtualThreadEventBus}, the control plane serves real-time, non-blocking
+ * <p>Backed by an internal {@link EventBus}, the control plane serves real-time, non-blocking
  * {@link EventStream} subscriptions for individual execution instances ({@link #watchExecution(String)})
  * or entire machine topologies ({@link #watchMachine(String)}).</p>
  */

@@ -95,21 +95,35 @@ class AsyncExecutionEventDispatcherTests {
     @Test
     @DisplayName("Should drop oldest events when buffer overflows under DROP_OLDEST policy")
     void testOverflowDropOldest() throws Exception {
+        CountDownLatch pauseWorkerLatch = new CountDownLatch(1);
+        CountDownLatch firstDeliveredLatch = new CountDownLatch(1);
+
         // Buffer capacity of 2
-        AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatcher(2, OverflowPolicy.DROP_OLDEST);
+        try (AsyncExecutionEventDispatcher dispatcher = new AsyncExecutionEventDispatcher(2, OverflowPolicy.DROP_OLDEST)) {
+            dispatcher.addListener(_ -> {
+                firstDeliveredLatch.countDown();
+                try {
+                    pauseWorkerLatch.await(3, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
 
-        UUID mId = UUID.randomUUID();
-        // Fire 5 events rapidly without giving worker time to drain
-        for (int i = 1; i <= 5; i++) {
-            dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "BufferTest", "STATE_" + i, Instant.now()));
+            UUID mId = UUID.randomUUID();
+            // Emit first event to engage the worker and pause it in the listener
+            dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "BufferTest", "STATE_0", Instant.now()));
+            assertTrue(firstDeliveredLatch.await(3, TimeUnit.SECONDS), "Worker should pick up first event");
+
+            // With worker paused on event 0 and buffer capacity 2, firing 5 events forces buffer overflow
+            for (int i = 1; i <= 5; i++) {
+                dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "BufferTest", "STATE_" + i, Instant.now()));
+            }
+
+            assertTrue(dispatcher.droppedCount() > 0, "Events should have been dropped due to buffer capacity overflow");
+            assertTrue(dispatcher.publishedCount() > 0);
+
+            pauseWorkerLatch.countDown();
         }
-
-        // Wait slightly for drain
-        Thread.sleep(150);
-        assertTrue(dispatcher.droppedCount() > 0, "Events should have been dropped due to buffer capacity overflow");
-        assertTrue(dispatcher.publishedCount() > 0);
-
-        dispatcher.close();
     }
 
     @Test
@@ -120,12 +134,12 @@ class AsyncExecutionEventDispatcherTests {
 
         try (AsyncExecutionEventDispatcher dispatcher = AsyncExecutionEventDispatcher.create()) {
             // Faulty listener
-            dispatcher.addListener(event -> {
+            dispatcher.addListener(_ -> {
                 throw new RuntimeException("Faulty listener intentional error");
             });
 
             // Healthy listener
-            dispatcher.addListener(event -> {
+            dispatcher.addListener(_ -> {
                 secondListenerFired.set(true);
                 latch.countDown();
             });

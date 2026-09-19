@@ -27,6 +27,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -62,6 +63,7 @@ public class VirtualThreadEventBus implements EventBus {
     private final boolean direct;
 
     private final Deque<ExecutionEvent> historyBuffer;
+    private final ReentrantLock historyLock = new ReentrantLock();
     private final List<RegisteredListener> listeners = new CopyOnWriteArrayList<>();
     private final List<VirtualThreadEventStream> activeStreams = new CopyOnWriteArrayList<>();
 
@@ -76,15 +78,16 @@ public class VirtualThreadEventBus implements EventBus {
     }
 
     protected VirtualThreadEventBus(@NonNull Builder builder) {
-        Objects.requireNonNull(builder, "builder must not be null");
         this.overflowPolicy = builder.overflowPolicy;
         this.historyCapacity = builder.historyCapacity;
         this.streamDefaultCapacity = builder.streamDefaultCapacity;
         this.direct = builder.direct;
 
-        this.historyBuffer = (historyCapacity > 0) ? new ArrayDeque<>(historyCapacity) : null;
+        this.historyBuffer = (builder.historyCapacity > 0)
+                ? new ArrayDeque<>(Math.min(builder.historyCapacity, 1_024))
+                : null;
 
-        if (direct) {
+        if (this.direct) {
             this.buffer = null;
             this.dispatchWorkerThread = null;
         } else {
@@ -95,7 +98,6 @@ public class VirtualThreadEventBus implements EventBus {
         }
     }
 
-    @NonNull
     public static VirtualThreadEventBus create() {
         return new VirtualThreadEventBus();
     }
@@ -195,7 +197,8 @@ public class VirtualThreadEventBus implements EventBus {
         if (historyBuffer == null || limit <= 0) {
             return Collections.emptyList();
         }
-        synchronized (historyBuffer) {
+        historyLock.lock();
+        try {
             int size = historyBuffer.size();
             int start = Math.max(0, size - limit);
             List<ExecutionEvent> result = new ArrayList<>(size - start);
@@ -207,6 +210,8 @@ public class VirtualThreadEventBus implements EventBus {
                 idx++;
             }
             return Collections.unmodifiableList(result);
+        } finally {
+            historyLock.unlock();
         }
     }
 
@@ -284,9 +289,9 @@ public class VirtualThreadEventBus implements EventBus {
                 if (!running.get()) {
                     break;
                 }
-            } catch (Throwable t) {
+            } catch (Exception e) {
                 log.atError()
-                        .setCause(t)
+                        .setCause(e)
                         .log("Unexpected error in event bus worker loop");
             }
         }
@@ -306,13 +311,16 @@ public class VirtualThreadEventBus implements EventBus {
     }
 
     private void deliverSingleEvent(@NonNull ExecutionEvent event) {
-        // 1. Record in circular replay history
+        // 1. Record in circular replay history without carrier thread pinning
         if (historyBuffer != null) {
-            synchronized (historyBuffer) {
+            historyLock.lock();
+            try {
                 if (historyBuffer.size() >= historyCapacity) {
                     historyBuffer.pollFirst();
                 }
                 historyBuffer.addLast(event);
+            } finally {
+                historyLock.unlock();
             }
         }
 
@@ -323,9 +331,9 @@ public class VirtualThreadEventBus implements EventBus {
                     reg.listener.onEvent(event);
                     deliveredCount.incrementAndGet();
                 }
-            } catch (Throwable t) {
+            } catch (Exception ex) {
                 log.atError()
-                        .setCause(t)
+                        .setCause(ex)
                         .addKeyValue("event_type", event.getClass().getSimpleName())
                         .log("Error executing listener for event");
             }
@@ -339,9 +347,9 @@ public class VirtualThreadEventBus implements EventBus {
                 } else {
                     droppedCount.incrementAndGet();
                 }
-            } catch (Throwable t) {
+            } catch (Exception ex) {
                 log.atError()
-                        .setCause(t)
+                        .setCause(ex)
                         .addKeyValue("event_type", event.getClass().getSimpleName())
                         .log("Error delivering event to stream");
             }
@@ -472,9 +480,11 @@ public class VirtualThreadEventBus implements EventBus {
                     }
                     try {
                         return take();
+                    } catch (IllegalStateException e) {
+                        throw new NoSuchElementException("EventStream is closed", e);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        throw new NoSuchElementException("Interrupted waiting for next event");
+                        throw new NoSuchElementException("Interrupted waiting for next event", e);
                     }
                 }
             };
