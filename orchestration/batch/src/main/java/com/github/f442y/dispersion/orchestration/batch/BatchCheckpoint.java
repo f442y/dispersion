@@ -19,7 +19,7 @@ import java.util.UUID;
  * @param <ITEM_CONTEXT>  The item-level context type
  * @param <STATE_KEY>     The state key enum type
  */
-public record BatchOrchestrationCheckpoint<
+public record BatchCheckpoint<
         BATCH_CONTEXT extends StateMachineContext,
         ITEM_CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey>(
@@ -37,7 +37,7 @@ public record BatchOrchestrationCheckpoint<
         @NonNull Instant timestamp
 ) {
 
-    public BatchOrchestrationCheckpoint {
+    public BatchCheckpoint {
         Objects.requireNonNull(batchId, "batchId must not be null");
         Objects.requireNonNull(batchName, "batchName must not be null");
         Objects.requireNonNull(batchKey, "batchKey must not be null");

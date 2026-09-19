@@ -24,7 +24,7 @@ import java.util.function.Function;
  * @param <INPUT>     The input type
  * @param <OUTPUT>    The output type
  */
-public class OrchestrationStateMachineConfiguration<
+public class OrchestrationConfiguration<
         CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
         INPUT,
@@ -35,7 +35,7 @@ public class OrchestrationStateMachineConfiguration<
     private final CheckpointStore<CONTEXT, STATE_KEY> checkpointStore;
     private final WorkloadDispatcher workloadDispatcher;
 
-    public OrchestrationStateMachineConfiguration(
+    public OrchestrationConfiguration(
             @NonNull String machineName,
             @NonNull StateMap<CONTEXT, STATE_KEY> stateMap,
             int maxTransitions,
@@ -52,7 +52,7 @@ public class OrchestrationStateMachineConfiguration<
                 exceptionTrigger, finishTrigger, checkpointListener, correlationKeyExtractor, checkpointStore, null, null);
     }
 
-    public OrchestrationStateMachineConfiguration(
+    public OrchestrationConfiguration(
             @NonNull String machineName,
             @NonNull StateMap<CONTEXT, STATE_KEY> stateMap,
             int maxTransitions,
@@ -70,7 +70,7 @@ public class OrchestrationStateMachineConfiguration<
                 exceptionTrigger, finishTrigger, checkpointListener, correlationKeyExtractor, checkpointStore, eventListener, null);
     }
 
-    public OrchestrationStateMachineConfiguration(
+    public OrchestrationConfiguration(
             @NonNull String machineName,
             @NonNull StateMap<CONTEXT, STATE_KEY> stateMap,
             int maxTransitions,

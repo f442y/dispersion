@@ -1,4 +1,4 @@
-# Dispersion Testing Framework (`dispersion-testing`)
+# Dispersion Testing Framework (`dispersion-testkit`)
 
 The **Dispersion Testing Framework** provides a unified, zero-dependency testing facade—`DispersionTestKit`—that aggregates all test doubles, in-memory brokers, and recording stores across all Dispersion subsystems. It eliminates the need for heavyweight bytecode-manipulating mock frameworks (such as Mockito or ByteBuddy) by providing first-class, thread-safe test doubles.
 
@@ -6,11 +6,11 @@ The **Dispersion Testing Framework** provides a unified, zero-dependency testing
 
 ## 1. Architecture & Aggregated Test Doubles
 
-`dispersion-testing` is an umbrella test dependency that depends exclusively on the `*-api` contracts and `*-test` companion modules:
+`dispersion-testkit` is an umbrella test dependency that depends exclusively on the `*-api` contracts and `*-test` companion modules:
 
 ```mermaid
 graph TD
-    subgraph TestingFacade["dispersion-testing"]
+    subgraph TestingFacade["dispersion-testkit"]
         DTK["DispersionTestKit (Unified Factory)"]
     end
 
@@ -18,7 +18,7 @@ graph TD
         ET["dispersion-event-test<br/><code>RecordingEventBus</code><br/><code>CapturingEventListener</code>"]
         FT["dispersion-fsm-test<br/><code>TestStateContext</code><br/><code>TestStateKey</code>"]
         OT["dispersion-orchestration-test<br/><code>FakeSignalBroker</code><br/><code>RecordingCheckpointStore</code>"]
-        CT["dispersion-control-test<br/><code>FakeInspectableMachine</code>"]
+        CT["dispersion-control-plane-test<br/><code>FakeInspectableMachine</code>"]
         RT["dispersion-routing-test<br/><code>FakeWorkloadEndpoint</code><br/><code>RecordingWorkloadRouter</code><br/><code>SimulatedNetworkTransport</code>"]
     end
 
@@ -62,7 +62,7 @@ import com.github.f442y.dispersion.orchestration.test.RecordingCheckpointStore;
 import com.github.f442y.dispersion.routing.test.FakeWorkloadEndpoint;
 import com.github.f442y.dispersion.routing.test.RecordingWorkloadRouter;
 import com.github.f442y.dispersion.routing.test.SimulatedNetworkTransport;
-import com.github.f442y.dispersion.testing.DispersionTestKit;
+import com.github.f442y.dispersion.testkit.DispersionTestKit;
 
 // 1. Telemetry and Event Testing
 RecordingEventBus eventBus = DispersionTestKit.recordingEventBus();
@@ -101,7 +101,7 @@ import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineExecutor;
 import com.github.f442y.dispersion.fsm.test.TestStateContext;
 import com.github.f442y.dispersion.fsm.test.TestStateKey;
-import com.github.f442y.dispersion.testing.DispersionTestKit;
+import com.github.f442y.dispersion.testkit.DispersionTestKit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -152,12 +152,12 @@ package com.example.testing;
 
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import com.github.f442y.dispersion.orchestration.test.RecordingCheckpointStore;
 import com.github.f442y.dispersion.fsm.test.TestStateContext;
 import com.github.f442y.dispersion.fsm.test.TestStateKey;
-import com.github.f442y.dispersion.testing.DispersionTestKit;
+import com.github.f442y.dispersion.testkit.DispersionTestKit;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -179,8 +179,8 @@ public class SagaSuspensionTestRecipe {
     public void testCheckpointLifecycle() throws Exception {
         RecordingCheckpointStore<TestStateContext, TestStateKey> store = DispersionTestKit.recordingCheckpointStore();
 
-        try (OrchestrationStateMachineExecutor<TestStateContext, TestStateKey, String, String> executor =
-                 OrchestrationStateMachineBuilder.<TestStateContext, TestStateKey, String, String>create("SuspensionWorkflow", TestStateKey.class)
+        try (OrchestrationExecutor<TestStateContext, TestStateKey, String, String> executor =
+                 OrchestrationBuilder.<TestStateContext, TestStateKey, String, String>create("SuspensionWorkflow", TestStateKey.class)
                      .context(TestStateContext::new)
                      .initialState(TestStateKey.STATE_A)
                      .endStates(TestStateKey.STATE_C)
@@ -228,7 +228,7 @@ public class SagaSuspensionTestRecipe {
 
 ## 4. Maven Dependency Setup
 
-Add `dispersion-testing` with test scope to your project:
+Add `dispersion-testkit` with test scope to your project:
 
 ```xml
 <dependencyManagement>
@@ -247,7 +247,7 @@ Add `dispersion-testing` with test scope to your project:
     <!-- Umbrella Testing Dependency -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-testing</artifactId>
+        <artifactId>dispersion-testkit</artifactId>
         <scope>test</scope>
     </dependency>
 </dependencies>
@@ -261,6 +261,6 @@ Add `dispersion-testing` with test scope to your project:
 * ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Unit testing atomic machines with `TestStateContext` and `TestStateKey`.
 * 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Testing sagas with `FakeSignalBroker` and `RecordingCheckpointStore`.
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Capturing execution events with `RecordingEventBus` and `CapturingEventListener`.
-* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Testing registry and signal delivery with `FakeInspectableMachine`.
+* 🔭 [**Control Subsystem (`control/`)**](../control-plane/README.md) — Testing registry and signal delivery with `FakeInspectableMachine`.
 * 📐 [**Architecture & Hexagonal Design**](../docs/architecture-and-design.md) — Symmetrical triplet decoupling and test double invariants.
 

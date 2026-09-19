@@ -18,22 +18,22 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Inbound adapter routing {@link SignalMessage} instances from message brokers to state machines.
  */
-public class SignalReceiver implements SignalConsumer {
+public class BrokerSignalReceiver implements SignalConsumer {
 
-    private static final Logger log = LoggerFactory.getLogger(SignalReceiver.class);
+    private static final Logger log = LoggerFactory.getLogger(BrokerSignalReceiver.class);
 
     private final SignalDispatcher dispatcher;
 
-    public SignalReceiver(@NonNull SignalDispatcher dispatcher) {
+    public BrokerSignalReceiver(@NonNull SignalDispatcher dispatcher) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher must not be null");
     }
 
-    public static SignalReceiver forDispatcher(@NonNull SignalDispatcher dispatcher) {
-        return new SignalReceiver(dispatcher);
+    public static BrokerSignalReceiver forDispatcher(@NonNull SignalDispatcher dispatcher) {
+        return new BrokerSignalReceiver(dispatcher);
     }
 
-    public static SignalReceiver forExecutor(@NonNull SignalDispatcher dispatcher) {
-        return new SignalReceiver(dispatcher);
+    public static BrokerSignalReceiver forExecutor(@NonNull SignalDispatcher dispatcher) {
+        return new BrokerSignalReceiver(dispatcher);
     }
 
     @Override

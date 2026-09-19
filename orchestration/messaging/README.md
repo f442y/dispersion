@@ -8,7 +8,7 @@ The **Dispersion Orchestration Messaging Module** provides a broker-agnostic mes
 
 * **Broker Abstraction**: Publish-subscribe interface decoupling orchestration signals from physical brokers (Kafka, RabbitMQ, SQS).
 * **In-Memory Reference Implementation**: `InMemorySignalBroker` delivers virtual-thread backed pub/sub messaging with subscriber fault isolation, destination routing, and dynamic registration.
-* **Signal Ingestion Receiver**: `SignalReceiver` deserializes inbound `BrokerMessage` envelopes and dispatches signals into registered `OrchestrationStateMachineExecutor` instances.
+* **Signal Ingestion Receiver**: `BrokerSignalReceiver` deserializes inbound `BrokerMessage` envelopes and dispatches signals into registered `OrchestrationExecutor` instances.
 
 ---
 
@@ -17,7 +17,7 @@ The **Dispersion Orchestration Messaging Module** provides a broker-agnostic mes
 ```java
 import com.github.f442y.dispersion.orchestration.messaging.broker.BrokerMessage;
 import com.github.f442y.dispersion.orchestration.messaging.broker.InMemorySignalBroker;
-import com.github.f442y.dispersion.orchestration.messaging.broker.SignalReceiver;
+import com.github.f442y.dispersion.orchestration.messaging.broker.BrokerSignalReceiver;
 
 try (InMemorySignalBroker broker = new InMemorySignalBroker()) {
     // 1. Subscribe to external topic

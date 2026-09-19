@@ -68,9 +68,9 @@ graph TD
     end
 
     subgraph Control["5. Control Subsystem (Observability)"]
-        C_API["dispersion-control-api<br/>(InspectableMachine SPI)"]
-        C_CORE["dispersion-control-core<br/>(Registry & Signal Router)"]
-        C_TEST["dispersion-control-test<br/>(Fake Inspectable Machine)"]
+        C_API["dispersion-control-plane-api<br/>(InspectableMachine SPI)"]
+        C_CORE["dispersion-control-plane-core<br/>(Registry & Signal Router)"]
+        C_TEST["dispersion-control-plane-test<br/>(Fake Inspectable Machine)"]
         C_API --> E_API
         C_API --> R_API
         C_CORE --> C_API
@@ -78,7 +78,7 @@ graph TD
     end
 
     subgraph Testing["6. Testing Facade"]
-        TESTING["dispersion-testing<br/>(DispersionTestKit)"]
+        TESTING["dispersion-testkit<br/>(DispersionTestKit)"]
         TESTING --> E_TEST & F_TEST & R_TEST & O_TEST & C_TEST
         TESTING --> E_API & F_API & R_API & O_API & C_API
     end
@@ -95,7 +95,7 @@ graph TD
 4. **`*-test` Modules Are Zero-Dependency Doubles:**
    Contain deterministic fakes and recorders. A test companion module **never depends on `*-core`**, ensuring test doubles cannot accidentally rely on engine internals.
 5. **Control Plane Inversion via `InspectableMachine`:**
-   `dispersion-control-core` has **zero compile-time dependencies** on `fsm-core` or `orchestration-core`. Executors implement the `InspectableMachine` SPI and adapt themselves via `.asInspectableMachine()`, allowing the control plane to observe any engine generically.
+   `dispersion-control-plane-core` has **zero compile-time dependencies** on `fsm-core` or `orchestration-core`. Executors implement the `InspectableMachine` SPI and adapt themselves via `.asInspectableMachine()`, allowing the control plane to observe any engine generically.
 
 ---
 
@@ -204,10 +204,10 @@ Dispersion is built strictly for the Java Platform Module System (JPMS). Every m
 | `dispersion-orchestration-batch` | `com.github.f442y.dispersion.orchestration.batch` | `com.github.f442y.dispersion.orchestration.batch` |
 | `dispersion-orchestration-messaging` | `com.github.f442y.dispersion.orchestration.messaging` | `com.github.f442y.dispersion.orchestration.messaging` |
 | `dispersion-orchestration-test` | `com.github.f442y.dispersion.orchestration.test` | `com.github.f442y.dispersion.orchestration.test` |
-| `dispersion-control-api` | `com.github.f442y.dispersion.control.api` | `com.github.f442y.dispersion.control` |
-| `dispersion-control-core` | `com.github.f442y.dispersion.control.core` | `com.github.f442y.dispersion.control.core` |
-| `dispersion-control-test` | `com.github.f442y.dispersion.control.test` | `com.github.f442y.dispersion.control.test` |
-| `dispersion-testing` | `com.github.f442y.dispersion.testing` | `com.github.f442y.dispersion.testing` |
+| `dispersion-control-plane-api` | `com.github.f442y.dispersion.control.api` | `com.github.f442y.dispersion.control` |
+| `dispersion-control-plane-core` | `com.github.f442y.dispersion.control.core` | `com.github.f442y.dispersion.control.core` |
+| `dispersion-control-plane-test` | `com.github.f442y.dispersion.control.test` | `com.github.f442y.dispersion.control.test` |
+| `dispersion-testkit` | `com.github.f442y.dispersion.testkit` | `com.github.f442y.dispersion.testkit` |
 | `dispersion-examples` | `com.github.f442y.dispersion.examples` | `com.github.f442y.dispersion.examples` |
 
 ---

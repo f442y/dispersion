@@ -4,7 +4,7 @@ import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationConfiguration;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -54,8 +54,8 @@ public class NestedAndParallelOrchestrationTests {
     public void testParallelForkJoinExecution() throws Exception {
         CountDownLatch startLatch = new CountDownLatch(3);
 
-        try (OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, List<String>> executor =
-                OrchestrationStateMachineBuilder.<RootContext, RootOrchState, Void, List<String>>create("ParallelOrchestrator", RootOrchState.class)
+        try (OrchestrationExecutor<RootContext, RootOrchState, Void, List<String>> executor =
+                OrchestrationBuilder.<RootContext, RootOrchState, Void, List<String>>create("ParallelOrchestrator", RootOrchState.class)
                         .context(RootContext::new)
                         .initialState(RootOrchState.INIT)
                         .state(RootOrchState.INIT)
@@ -107,8 +107,8 @@ public class NestedAndParallelOrchestrationTests {
      */
     @Test
     public void testParallelBranchFailureRollsBackSiblingBranches() {
-        try (OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, Void> executor =
-                OrchestrationStateMachineBuilder.<RootContext, RootOrchState, Void, Void>create("FailingParallelOrchestrator", RootOrchState.class)
+        try (OrchestrationExecutor<RootContext, RootOrchState, Void, Void> executor =
+                OrchestrationBuilder.<RootContext, RootOrchState, Void, Void>create("FailingParallelOrchestrator", RootOrchState.class)
                         .context(RootContext::new)
                         .initialState(RootOrchState.INIT)
                         .state(RootOrchState.INIT)
@@ -170,8 +170,8 @@ public class NestedAndParallelOrchestrationTests {
                         .build();
 
         // Level 2: Sub-Orchestration Machine embedding Micro Machine
-        OrchestrationStateMachineConfiguration<SubOrchContext, SubOrchState, String, String> subOrchMachine =
-                OrchestrationStateMachineBuilder.<SubOrchContext, SubOrchState, String, String>create("SubOrchestrator", SubOrchState.class)
+        OrchestrationConfiguration<SubOrchContext, SubOrchState, String, String> subOrchMachine =
+                OrchestrationBuilder.<SubOrchContext, SubOrchState, String, String>create("SubOrchestrator", SubOrchState.class)
                         .context(SubOrchContext::new)
                         .initialState(SubOrchState.SUB_INIT)
                         .state(SubOrchState.SUB_INIT)
@@ -190,8 +190,8 @@ public class NestedAndParallelOrchestrationTests {
                         .build();
 
         // Level 1: Root Orchestration Machine embedding Sub-Orchestration Machine
-        try (OrchestrationStateMachineExecutor<RootContext, RootOrchState, Void, String> rootExecutor =
-                OrchestrationStateMachineBuilder.<RootContext, RootOrchState, Void, String>create("RootOrchestrator", RootOrchState.class)
+        try (OrchestrationExecutor<RootContext, RootOrchState, Void, String> rootExecutor =
+                OrchestrationBuilder.<RootContext, RootOrchState, Void, String>create("RootOrchestrator", RootOrchState.class)
                         .context(RootContext::new)
                         .initialState(RootOrchState.INIT)
                         .state(RootOrchState.INIT)
@@ -239,8 +239,8 @@ public class NestedAndParallelOrchestrationTests {
      */
     @Test
     public void testParallelBranchIsolationAndReduction() throws Exception {
-        try (OrchestrationStateMachineExecutor<UnsynchronizedContext, RootOrchState, Void, Integer> executor =
-                OrchestrationStateMachineBuilder.<UnsynchronizedContext, RootOrchState, Void, Integer>create("IsolatedParallelOrchestrator", RootOrchState.class)
+        try (OrchestrationExecutor<UnsynchronizedContext, RootOrchState, Void, Integer> executor =
+                OrchestrationBuilder.<UnsynchronizedContext, RootOrchState, Void, Integer>create("IsolatedParallelOrchestrator", RootOrchState.class)
                         .context(UnsynchronizedContext::new)
                         .initialState(RootOrchState.INIT)
                         .state(RootOrchState.INIT)

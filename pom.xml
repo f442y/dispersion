@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -53,13 +53,13 @@
         <module>orchestration/batch</module>
         <module>orchestration/messaging</module>
         <module>orchestration/test</module>
-        <module>control/api</module>
-        <module>control/core</module>
-        <module>control/test</module>
+        <module>control-plane/api</module>
+        <module>control-plane/core</module>
+        <module>control-plane/test</module>
         <module>routing/api</module>
         <module>routing/core</module>
         <module>routing/test</module>
-        <module>testing</module>
+        <module>testkit</module>
         <module>examples</module>
     </modules>
 
@@ -144,12 +144,12 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-control-api</artifactId>
+                <artifactId>dispersion-control-plane-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-control-core</artifactId>
+                <artifactId>dispersion-control-plane-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -169,7 +169,7 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-control-test</artifactId>
+                <artifactId>dispersion-control-plane-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -189,7 +189,7 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-testing</artifactId>
+                <artifactId>dispersion-testkit</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

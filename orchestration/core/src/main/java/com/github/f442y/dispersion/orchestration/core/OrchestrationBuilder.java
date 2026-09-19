@@ -16,7 +16,7 @@ import com.github.f442y.dispersion.orchestration.CompensationAction;
 import com.github.f442y.dispersion.orchestration.ContextRecoverer;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationState;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationConfiguration;
 import com.github.f442y.dispersion.orchestration.ParallelBranch;
 import com.github.f442y.dispersion.orchestration.RetryPolicy;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
@@ -55,7 +55,7 @@ import java.util.function.Function;
  * @param <INPUT>     The input type
  * @param <OUTPUT>    The output type
  */
-public class OrchestrationStateMachineBuilder<
+public class OrchestrationBuilder<
         CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
         INPUT,
@@ -80,7 +80,7 @@ public class OrchestrationStateMachineBuilder<
     private WorkloadRouter workloadRouter;
     private WorkloadDispatcher workloadDispatcher;
 
-    private OrchestrationStateMachineBuilder(@NonNull String machineName, @NonNull Class<STATE_KEY> stateKeyClass) {
+    private OrchestrationBuilder(@NonNull String machineName, @NonNull Class<STATE_KEY> stateKeyClass) {
         this.machineName = Objects.requireNonNull(machineName, "machineName must not be null");
         this.stateKeyClass = Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
         this.states = new EnumMap<>(stateKeyClass);
@@ -88,44 +88,44 @@ public class OrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> workloadRouter(@NonNull WorkloadRouter router) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> workloadRouter(@NonNull WorkloadRouter router) {
         this.workloadRouter = Objects.requireNonNull(router, "router must not be null");
         this.workloadDispatcher = new WorkloadRouterDispatcher(router);
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> workloadDispatcher(@NonNull WorkloadDispatcher dispatcher) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> workloadDispatcher(@NonNull WorkloadDispatcher dispatcher) {
         this.workloadDispatcher = Objects.requireNonNull(dispatcher, "dispatcher must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> name(@NonNull String name) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> name(@NonNull String name) {
         this.machineName = Objects.requireNonNull(name, "name must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> eventListener(@NonNull ExecutionEventListener eventListener) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> eventListener(@NonNull ExecutionEventListener eventListener) {
         this.eventListener = Objects.requireNonNull(eventListener, "eventListener must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> context(@NonNull StateMachineContextFactory<CONTEXT> factory) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> context(@NonNull StateMachineContextFactory<CONTEXT> factory) {
         this.contextFactory = Objects.requireNonNull(factory, "factory must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> initialState(@NonNull STATE_KEY initialState) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> initialState(@NonNull STATE_KEY initialState) {
         this.initialState = Objects.requireNonNull(initialState, "initialState must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endState(@NonNull STATE_KEY endState) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endState(@NonNull STATE_KEY endState) {
         Objects.requireNonNull(endState, "endState must not be null");
         this.endStates.add(endState);
         return this;
@@ -133,7 +133,7 @@ public class OrchestrationStateMachineBuilder<
 
     @NonNull
     @SafeVarargs
-    public final OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endStates(@NonNull STATE_KEY... endStates) {
+    public final OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endStates(@NonNull STATE_KEY... endStates) {
         for (STATE_KEY s : endStates) {
             endState(s);
         }
@@ -141,44 +141,44 @@ public class OrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endStates(@NonNull Set<STATE_KEY> endStates) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> endStates(@NonNull Set<STATE_KEY> endStates) {
         Objects.requireNonNull(endStates, "endStates must not be null");
         this.endStates.addAll(endStates);
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> maxTransitions(int maxTransitions) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> maxTransitions(int maxTransitions) {
         this.maxTransitions = maxTransitions;
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> input(@NonNull InputFunction<CONTEXT, INPUT> inputFunction) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> input(@NonNull InputFunction<CONTEXT, INPUT> inputFunction) {
         this.inputFunction = Objects.requireNonNull(inputFunction, "inputFunction must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> output(@NonNull OutputFunction<CONTEXT, OUTPUT> outputFunction) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> output(@NonNull OutputFunction<CONTEXT, OUTPUT> outputFunction) {
         this.outputFunction = Objects.requireNonNull(outputFunction, "outputFunction must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onException(@NonNull BiConsumer<CONTEXT, Throwable> exceptionTrigger) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onException(@NonNull BiConsumer<CONTEXT, Throwable> exceptionTrigger) {
         this.exceptionTrigger = Objects.requireNonNull(exceptionTrigger, "exceptionTrigger must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onFinish(@NonNull Consumer<CONTEXT> finishTrigger) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onFinish(@NonNull Consumer<CONTEXT> finishTrigger) {
         this.finishTrigger = Objects.requireNonNull(finishTrigger, "finishTrigger must not be null");
         return this;
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> addState(@NonNull STATE_KEY stateKey, @NonNull State<CONTEXT, STATE_KEY> state) {
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> addState(@NonNull STATE_KEY stateKey, @NonNull State<CONTEXT, STATE_KEY> state) {
         Objects.requireNonNull(stateKey, "stateKey must not be null");
         Objects.requireNonNull(state, "state must not be null");
         this.states.put(stateKey, state);
@@ -191,15 +191,15 @@ public class OrchestrationStateMachineBuilder<
             STATE_KEY extends Enum<STATE_KEY> & StateKey,
             INPUT,
             OUTPUT>
-    OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> create(
+    OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> create(
             @NonNull String machineName,
             @NonNull Class<STATE_KEY> stateKeyClass
     ) {
-        return new OrchestrationStateMachineBuilder<>(machineName, stateKeyClass);
+        return new OrchestrationBuilder<>(machineName, stateKeyClass);
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onCheckpoint(
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> onCheckpoint(
             @NonNull Consumer<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> listener
     ) {
         this.checkpointListener = Objects.requireNonNull(listener, "listener must not be null");
@@ -207,7 +207,7 @@ public class OrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> correlationKey(
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> correlationKey(
             @NonNull Function<CONTEXT, String> extractor
     ) {
         this.correlationKeyExtractor = Objects.requireNonNull(extractor, "extractor must not be null");
@@ -215,7 +215,7 @@ public class OrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> checkpointStore(
+    public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> checkpointStore(
             @NonNull CheckpointStore<CONTEXT, STATE_KEY> store
     ) {
         this.checkpointStore = Objects.requireNonNull(store, "store must not be null");
@@ -361,7 +361,7 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull STATE_KEY nextState
         ) {
             Objects.requireNonNull(nextState, "nextState must not be null");
@@ -369,7 +369,7 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
             Objects.requireNonNull(transition, "transition must not be null");
@@ -377,14 +377,14 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
                 @NonNull Set<STATE_KEY> permittedTargets,
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
             return transition(permittedTargets, transition);
         }
 
-        private OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        private OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 Set<STATE_KEY> permittedTargets,
                 Transition<CONTEXT, STATE_KEY> transition
         ) {
@@ -411,10 +411,10 @@ public class OrchestrationStateMachineBuilder<
                     publishPayloadExtractor
             );
             states.put(stateKey, node);
-            return OrchestrationStateMachineBuilder.this;
+            return OrchestrationBuilder.this;
         }
 
-        private OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionWithInvocation(
+        private OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionWithInvocation(
                 Set<STATE_KEY> permittedTargets,
                 Transition<CONTEXT, STATE_KEY> transition,
                 WorkloadInvocation<CONTEXT, ?, ?> invocation
@@ -438,7 +438,7 @@ public class OrchestrationStateMachineBuilder<
                     publishPayloadExtractor
             );
             states.put(stateKey, node);
-            return OrchestrationStateMachineBuilder.this;
+            return OrchestrationBuilder.this;
         }
     }
 
@@ -534,21 +534,21 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull STATE_KEY nextState
         ) {
             return transitionsTo(Set.of(nextState), Transition.to(nextState));
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
             return transitionsTo(Collections.emptySet(), transition);
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
                 @NonNull Set<STATE_KEY> permittedTargets,
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
@@ -612,21 +612,21 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull STATE_KEY nextState
         ) {
             return stepBuilder.transition(nextState);
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
             return stepBuilder.transition(transition);
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
                 @NonNull Set<STATE_KEY> permittedTargets,
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
@@ -697,7 +697,7 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull STATE_KEY nextState
         ) {
             stepBuilder.parallelBranches = branches;
@@ -707,7 +707,7 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transition(
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
             stepBuilder.parallelBranches = branches;
@@ -717,7 +717,7 @@ public class OrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public OrchestrationStateMachineBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
+        public OrchestrationBuilder<CONTEXT, STATE_KEY, INPUT, OUTPUT> transitionsTo(
                 @NonNull Set<STATE_KEY> permittedTargets,
                 @NonNull Transition<CONTEXT, STATE_KEY> transition
         ) {
@@ -729,7 +729,7 @@ public class OrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> build() {
+    public OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> build() {
         if (initialState == null) {
             throw new IllegalStateException("Initial state must be configured");
         }
@@ -747,7 +747,7 @@ public class OrchestrationStateMachineBuilder<
         WorkloadDispatcher dispatcher = workloadDispatcher != null ? workloadDispatcher :
                 (workloadRouter != null ? new WorkloadRouterDispatcher(workloadRouter) : null);
 
-        return new OrchestrationStateMachineConfiguration<>(
+        return new OrchestrationConfiguration<>(
                 machineName,
                 stateMap,
                 maxTransitions,
@@ -765,7 +765,7 @@ public class OrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public OrchestrationStateMachineExecutor<CONTEXT, STATE_KEY, INPUT, OUTPUT> buildExecutor() {
-        return new OrchestrationStateMachineExecutor<>(build());
+    public OrchestrationExecutor<CONTEXT, STATE_KEY, INPUT, OUTPUT> buildExecutor() {
+        return new OrchestrationExecutor<>(build());
     }
 }

@@ -77,7 +77,7 @@ public class BatchOrchestrationTests {
     @Test
     public void testIndependentStreamingAndItemizedSignalProgression() throws Exception {
         BatchOrchestrationExecutor<BatchContext, DocumentContext, DocumentState, String> executor =
-                BatchOrchestrationStateMachineBuilder.<BatchContext, DocumentContext, DocumentState, String>create("DocumentBatchJob", DocumentState.class)
+                BatchOrchestrationBuilder.<BatchContext, DocumentContext, DocumentState, String>create("DocumentBatchJob", DocumentState.class)
                 .batchContext(BatchContext::new)
                 .batchKey(ctx -> ctx.batchId)
                 .itemKey(ctx -> ctx.documentId)
@@ -227,7 +227,7 @@ public class BatchOrchestrationTests {
     }
 
     private BatchOrchestrationExecutor<BatchContext, DocumentContext, DocumentState, String> createSingularWorkflow() {
-        return BatchOrchestrationStateMachineBuilder.<BatchContext, DocumentContext, DocumentState, String>create("SingularDocWorkflow", DocumentState.class)
+        return BatchOrchestrationBuilder.<BatchContext, DocumentContext, DocumentState, String>create("SingularDocWorkflow", DocumentState.class)
                 .batchContext(BatchContext::new)
                 .batchKey(ctx -> ctx.batchId)
                 .itemKey(ctx -> ctx.documentId)

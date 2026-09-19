@@ -10,7 +10,7 @@ The **Dispersion Orchestration Batch Module** provides a turn-based synchronized
 * **Synchronized Barriers**: Items advance through steps in lockstep based on configurable `BarrierPolicy` rules:
   * **`ALL_ITEMS`**: Every item in the batch must arrive at the barrier before the batch advances to the next step.
   * **`QUORUM`**: The batch advances as soon as a defined quorum threshold ratio (e.g., 80% or 0.8) arrives at the barrier.
-* **Granular Checkpointing**: `BatchOrchestrationCheckpoint` records the progress and state of every individual item, allowing interrupted batches to resume without reprocessing completed items.
+* **Granular Checkpointing**: `BatchCheckpoint` records the progress and state of every individual item, allowing interrupted batches to resume without reprocessing completed items.
 * **Extensible Telemetry**: Emits `BatchBarrierReachedEvent` and `BatchBarrierUnlockedEvent` directly to the `ExecutionEvent` bus.
 
 ---
@@ -22,7 +22,7 @@ import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
 import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationExecutor;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStateMachineBuilder;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationBuilder;
 
 public enum BatchStep implements StateKey {
     INGEST, PROCESS, SETTLE, COMPLETED
@@ -34,7 +34,7 @@ public static final class ItemContext implements StateMachineContext {
 }
 
 try (BatchOrchestrationExecutor<ItemContext, BatchStep, String, Boolean> executor =
-         BatchOrchestrationStateMachineBuilder.<ItemContext, BatchStep, String, Boolean>create("BatchSettlement", BatchStep.class)
+         BatchOrchestrationBuilder.<ItemContext, BatchStep, String, Boolean>create("BatchSettlement", BatchStep.class)
              .context(ItemContext::new)
              .initialState(BatchStep.INGEST)
              .endStates(BatchStep.COMPLETED)

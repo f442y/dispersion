@@ -15,15 +15,15 @@ import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.batch.BatchCheckpoint;
 import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationExecutor;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.testing.DispersionTestKit;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationBuilder;
+import com.github.f442y.dispersion.testkit.DispersionTestKit;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -145,12 +145,12 @@ public class ControlPlaneIntegrationExampleTests {
     }
 
     @Test
-    @DisplayName("Should register real OrchestrationStateMachineExecutor, inspect checkpoint, and deliver signal")
+    @DisplayName("Should register real OrchestrationExecutor, inspect checkpoint, and deliver signal")
     void testOrchestrationStateMachineIntegration() throws Exception {
         InMemoryCheckpointStore<ApprovalContext, ApprovalState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<ApprovalContext, ApprovalState, ApprovalContext, String> executor =
-                OrchestrationStateMachineBuilder.<ApprovalContext, ApprovalState, ApprovalContext, String>create("DocumentApproval", ApprovalState.class)
+        OrchestrationExecutor<ApprovalContext, ApprovalState, ApprovalContext, String> executor =
+                OrchestrationBuilder.<ApprovalContext, ApprovalState, ApprovalContext, String>create("DocumentApproval", ApprovalState.class)
                         .context(ApprovalContext::new)
                         .initialState(ApprovalState.START)
                         .endStates(ApprovalState.APPROVED)
@@ -241,7 +241,7 @@ public class ControlPlaneIntegrationExampleTests {
     @DisplayName("Should register real BatchOrchestrationExecutor, inspect batch checkpoint, and signal barrier")
     void testBatchOrchestrationIntegration() throws Exception {
         BatchOrchestrationExecutor<BatchCtx, ItemCtx, BatchStep, String> batchExecutor =
-                BatchOrchestrationStateMachineBuilder.<BatchCtx, ItemCtx, BatchStep, String>create("AlphaBatchPipeline", BatchStep.class)
+                BatchOrchestrationBuilder.<BatchCtx, ItemCtx, BatchStep, String>create("AlphaBatchPipeline", BatchStep.class)
                         .batchContext(BatchCtx::new)
                         .batchKey(ctx -> ctx.batchId)
                         .itemKey(ctx -> ctx.itemId)
@@ -274,8 +274,8 @@ public class ControlPlaneIntegrationExampleTests {
         assertThat(result.currentBatchStateKey()).isEqualTo(BatchStep.AWAIT_TRIGGER);
 
         // 2. Inspect checkpoint through Control Plane
-        Optional<BatchOrchestrationCheckpoint> cpOpt =
-                controlPlane.inspectCheckpoint("AlphaBatchPipeline", "BATCH-ALPHA", BatchOrchestrationCheckpoint.class);
+        Optional<BatchCheckpoint> cpOpt =
+                controlPlane.inspectCheckpoint("AlphaBatchPipeline", "BATCH-ALPHA", BatchCheckpoint.class);
         assertThat(cpOpt).isPresent();
         assertThat(cpOpt.get().batchName()).isEqualTo("AlphaBatchPipeline");
         assertThat(cpOpt.get().currentBatchStateKey()).isEqualTo(BatchStep.AWAIT_TRIGGER);

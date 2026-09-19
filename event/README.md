@@ -396,6 +396,6 @@ public class EventTestingExampleTests {
 * 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level landing page, quickstarts, and architecture map.
 * ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Microsecond atomic machines emitting telemetry events.
 * 🔄 [**Tier 2 Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Long-lived sagas, checkpoints, and automated rollbacks.
-* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Observability control plane consuming `ExecutionEvent` streams.
-* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Unified test doubles with `DispersionTestKit`.
+* 🔭 [**Control Subsystem (`control/`)**](../control-plane/README.md) — Observability control plane consuming `ExecutionEvent` streams.
+* 🧪 [**Testing Framework (`testing/`)**](../testkit/README.md) — Unified test doubles with `DispersionTestKit`.
 * 🔭 [**Observability Deep Dive**](../docs/observability-and-control-plane.md) — High-throughput event delivery and React UI integration patterns.

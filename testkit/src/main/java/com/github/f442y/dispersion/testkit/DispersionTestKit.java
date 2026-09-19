@@ -1,4 +1,4 @@
-package com.github.f442y.dispersion.testing;
+package com.github.f442y.dispersion.testkit;
 
 import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.test.FakeInspectableMachine;

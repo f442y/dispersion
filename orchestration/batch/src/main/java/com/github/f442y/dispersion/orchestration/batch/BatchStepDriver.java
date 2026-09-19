@@ -9,7 +9,7 @@ import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
 import com.github.f442y.dispersion.orchestration.batch.BatchFailurePolicy;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.batch.BatchCheckpoint;
 import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import org.jspecify.annotations.NonNull;
@@ -35,11 +35,11 @@ import java.util.function.Function;
  * Execution driver for turn-based batch orchestrations with concurrent item execution,
  * barrier synchronization, and item-level signal rehydration on Java 25 Virtual Threads.
  */
-public final class BatchOrchestrationStepDriver {
+public final class BatchStepDriver {
 
-    private static final Logger log = LoggerFactory.getLogger(BatchOrchestrationStepDriver.class);
+    private static final Logger log = LoggerFactory.getLogger(BatchStepDriver.class);
 
-    private BatchOrchestrationStepDriver() {}
+    private BatchStepDriver() {}
 
     public static final class ItemStateDefinition<
             ITEM_CONTEXT extends StateMachineContext,
@@ -125,7 +125,7 @@ public final class BatchOrchestrationStepDriver {
             OUTPUT>
     BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> resumeBatchTurn(
             @NonNull BatchConfiguration<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> config,
-            @NonNull BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> checkpoint,
+            @NonNull BatchCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> checkpoint,
             @Nullable String targetItemKey,
             @Nullable Object itemSignal,
             @Nullable Object batchSignal,

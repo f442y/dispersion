@@ -79,8 +79,8 @@ public class CommandPatternOrchestrationTests {
     public void testTypedSignalCommandAndSagaCommand() throws Exception {
         InMemoryCheckpointStore<EcomContext, EcomState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<EcomContext, EcomState, EcomContext, String> executor =
-                OrchestrationStateMachineBuilder.<EcomContext, EcomState, EcomContext, String>create("EcomCommandOrchestrator", EcomState.class)
+        OrchestrationExecutor<EcomContext, EcomState, EcomContext, String> executor =
+                OrchestrationBuilder.<EcomContext, EcomState, EcomContext, String>create("EcomCommandOrchestrator", EcomState.class)
                 .context(EcomContext::new)
                 .initialState(EcomState.VALIDATE)
                 .correlationKey(ctx -> ctx.orderId)
@@ -157,8 +157,8 @@ public class CommandPatternOrchestrationTests {
     public void testIdempotentCommandEnvelopeDeduplication() throws Exception {
         InMemoryCheckpointStore<EcomContext, EcomState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<EcomContext, EcomState, EcomContext, String> executor =
-                OrchestrationStateMachineBuilder.<EcomContext, EcomState, EcomContext, String>create("IdempotentCommandOrchestrator", EcomState.class)
+        OrchestrationExecutor<EcomContext, EcomState, EcomContext, String> executor =
+                OrchestrationBuilder.<EcomContext, EcomState, EcomContext, String>create("IdempotentCommandOrchestrator", EcomState.class)
                 .context(EcomContext::new)
                 .initialState(EcomState.VALIDATE)
                 .correlationKey(ctx -> ctx.orderId)

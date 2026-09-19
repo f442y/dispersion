@@ -16,8 +16,8 @@
      - `fsm/api` (`dispersion-fsm-api`), `fsm/core` (`dispersion-fsm-core`), `fsm/test` (`dispersion-fsm-test`): Atomic FSM contracts, builders, virtual thread runner, and token-bucket admission control.
      - `routing/api` (`dispersion-routing-api`), `routing/core` (`dispersion-routing-core`), `routing/test` (`dispersion-routing-test`): Location-agnostic workload routing, Canary traffic control, and developer sandboxes.
      - `orchestration/api` (`dispersion-orchestration-api`), `orchestration/core` (`dispersion-orchestration-core`), `orchestration/batch` (`dispersion-orchestration-batch`), `orchestration/messaging` (`dispersion-orchestration-messaging`), `orchestration/test` (`dispersion-orchestration-test`): Macro sagas, automated LIFO rollbacks, turn-based batch barriers, broker-agnostic messaging, and test doubles.
-     - `control/api` (`dispersion-control-api`), `control/core` (`dispersion-control-core`), `control/test` (`dispersion-control-test`): Control plane query SPI, registry, and topology discovery.
-     - `testing` (`dispersion-testing`): Unified static testing facade.
+     - `control/api` (`dispersion-control-plane-api`), `control/core` (`dispersion-control-plane-core`), `control/test` (`dispersion-control-plane-test`): Control plane query SPI, registry, and topology discovery.
+     - `testing` (`dispersion-testkit`): Unified static testing facade.
      - `bom` (`dispersion-bom`): Centralized dependency management.
      - `examples` (`dispersion-examples`): High-throughput virtual-thread pipeline bursts (500 threads) and multi-step distributed Saga rollbacks.
 
@@ -41,7 +41,7 @@
    - Synchronized stage progression via `ALL_ITEMS` and `QUORUM` barrier policies.
    - Granular item checkpoints for safe workflow resumption.
 
-5. **Observability & Control Plane Subsystem (`dispersion-control-api` & `dispersion-control-core`)**
+5. **Observability & Control Plane Subsystem (`dispersion-control-plane-api` & `dispersion-control-plane-core`)**
    - Clean, extensible telemetry event hierarchy in [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java).
    - Thread-safe functional listener contract [`ExecutionEventListener`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEventListener.java).
    - High-throughput, bounded, lock-free ring buffer dispatcher running on dedicated virtual threads.

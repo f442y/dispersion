@@ -8,8 +8,8 @@ import com.github.f442y.dispersion.orchestration.CompensationAction;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStepDriver.BatchConfiguration;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStepDriver.ItemStateDefinition;
+import com.github.f442y.dispersion.orchestration.batch.BatchStepDriver.BatchConfiguration;
+import com.github.f442y.dispersion.orchestration.batch.BatchStepDriver.ItemStateDefinition;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Arrays;
@@ -25,7 +25,7 @@ import java.util.function.Supplier;
  * @param <STATE_KEY>     The state key enum type
  * @param <OUTPUT>        The output type
  */
-public class BatchOrchestrationStateMachineBuilder<
+public class BatchOrchestrationBuilder<
         BATCH_CONTEXT extends StateMachineContext,
         ITEM_CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
@@ -34,7 +34,7 @@ public class BatchOrchestrationStateMachineBuilder<
     private final BatchConfiguration<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> configuration = new BatchConfiguration<>();
     private Supplier<BATCH_CONTEXT> batchContextSupplier;
 
-    private BatchOrchestrationStateMachineBuilder(@NonNull String batchName, @NonNull Class<STATE_KEY> stateKeyClass) {
+    private BatchOrchestrationBuilder(@NonNull String batchName, @NonNull Class<STATE_KEY> stateKeyClass) {
         this.configuration.batchName = Objects.requireNonNull(batchName, "batchName must not be null");
         Objects.requireNonNull(stateKeyClass, "stateKeyClass must not be null");
     }
@@ -44,15 +44,15 @@ public class BatchOrchestrationStateMachineBuilder<
             ITEM_CONTEXT extends StateMachineContext,
             STATE_KEY extends Enum<STATE_KEY> & StateKey,
             OUTPUT>
-    BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> create(
+    BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> create(
             @NonNull String batchName,
             @NonNull Class<STATE_KEY> stateKeyClass
     ) {
-        return new BatchOrchestrationStateMachineBuilder<>(batchName, stateKeyClass);
+        return new BatchOrchestrationBuilder<>(batchName, stateKeyClass);
     }
 
     @NonNull
-    public BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> batchContext(
+    public BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> batchContext(
             @NonNull Supplier<BATCH_CONTEXT> batchContextSupplier
     ) {
         this.batchContextSupplier = Objects.requireNonNull(batchContextSupplier, "batchContextSupplier must not be null");
@@ -60,7 +60,7 @@ public class BatchOrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> batchKey(
+    public BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> batchKey(
             @NonNull Function<BATCH_CONTEXT, String> batchKeyExtractor
     ) {
         this.configuration.batchKeyExtractor = Objects.requireNonNull(batchKeyExtractor, "batchKeyExtractor must not be null");
@@ -68,7 +68,7 @@ public class BatchOrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> itemKey(
+    public BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> itemKey(
             @NonNull Function<ITEM_CONTEXT, String> itemKeyExtractor
     ) {
         this.configuration.itemKeyExtractor = Objects.requireNonNull(itemKeyExtractor, "itemKeyExtractor must not be null");
@@ -76,7 +76,7 @@ public class BatchOrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> initialState(
+    public BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> initialState(
             @NonNull STATE_KEY initialStateKey
     ) {
         this.configuration.initialStateKey = Objects.requireNonNull(initialStateKey, "initialStateKey must not be null");
@@ -85,7 +85,7 @@ public class BatchOrchestrationStateMachineBuilder<
 
     @NonNull
     @SafeVarargs
-    public final BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> endStates(
+    public final BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> endStates(
             @NonNull STATE_KEY... endStates
     ) {
         this.configuration.endStates.addAll(Arrays.asList(endStates));
@@ -93,7 +93,7 @@ public class BatchOrchestrationStateMachineBuilder<
     }
 
     @NonNull
-    public BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> output(
+    public BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> output(
             @NonNull Function<BATCH_CONTEXT, OUTPUT> outputFunction
     ) {
         this.configuration.outputFunction = Objects.requireNonNull(outputFunction, "outputFunction must not be null");
@@ -157,21 +157,21 @@ public class BatchOrchestrationStateMachineBuilder<
         }
 
         @NonNull
-        public BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> transition(
+        public BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> transition(
                 @NonNull STATE_KEY nextState
         ) {
             this.def.transition = Transition.to(nextState);
             configuration.stateDefinitions.put(stateKey, def);
-            return BatchOrchestrationStateMachineBuilder.this;
+            return BatchOrchestrationBuilder.this;
         }
 
         @NonNull
-        public BatchOrchestrationStateMachineBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> transition(
+        public BatchOrchestrationBuilder<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> transition(
                 @NonNull Transition<ITEM_CONTEXT, STATE_KEY> transition
         ) {
             this.def.transition = Objects.requireNonNull(transition, "transition must not be null");
             configuration.stateDefinitions.put(stateKey, def);
-            return BatchOrchestrationStateMachineBuilder.this;
+            return BatchOrchestrationBuilder.this;
         }
     }
 

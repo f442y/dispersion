@@ -50,8 +50,8 @@ public class SignalAndRehydrationOrchestrationTests {
     public void testSuspendAndResumeWithSignalByMachineId() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
-                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderOrchestrator", OrderState.class)
+        OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderOrchestrator", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .checkpointStore(store)
@@ -145,8 +145,8 @@ public class SignalAndRehydrationOrchestrationTests {
     public void testSignalDeliveryByCorrelationKey() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
-                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("CorrelatedOrderOrchestrator", OrderState.class)
+        OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationBuilder.<OrderContext, OrderState, OrderContext, String>create("CorrelatedOrderOrchestrator", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .correlationKey(ctx -> ctx.orderId)
@@ -197,8 +197,8 @@ public class SignalAndRehydrationOrchestrationTests {
     public void testSagaCompensationRollbackAcrossMultipleTurns() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
-                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("SagaRollbackOrchestrator", OrderState.class)
+        OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationBuilder.<OrderContext, OrderState, OrderContext, String>create("SagaRollbackOrchestrator", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .checkpointStore(store)
@@ -279,8 +279,8 @@ public class SignalAndRehydrationOrchestrationTests {
     public void testConcurrentSignalsByMachineIdAndCorrelationKeySerializeCorrectly() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
-                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("ConcurrentSignalOrchestrator", OrderState.class)
+        OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationBuilder.<OrderContext, OrderState, OrderContext, String>create("ConcurrentSignalOrchestrator", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .checkpointStore(store)
@@ -335,8 +335,8 @@ public class SignalAndRehydrationOrchestrationTests {
     public void testDispatchSyncOnSuspendingWorkflowThrowsIllegalStateException() {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderContext, String> executor =
-                OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderOrchestratorGuard", OrderState.class)
+        OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
+                OrchestrationBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderOrchestratorGuard", OrderState.class)
                 .context(OrderContext::new)
                 .initialState(OrderState.VALIDATE)
                 .checkpointStore(store)

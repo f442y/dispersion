@@ -11,7 +11,7 @@ Dispersion enforces hexagonal multi-module boundaries with zero inter-engine cou
   * `<domain>-api`: Pure contract (interfaces, sealed records/events, exceptions, builders). Zero runtime or 3rd-party dependencies.
   * `<domain>-core`: Primary runtime engine implementing `<domain>-api`.
   * `<domain>-test`: Deterministic in-memory test doubles (fakes, spies). **Never couples to `*-core`**.
-  * `dispersion-testing`: Aggregates all `*-test` companion modules into a unified testkit.
+  * `dispersion-testkit`: Aggregates all `*-test` companion modules into a unified testkit.
 * **Feature Submodules (Decomposition):**
   * Complex domains may partition execution into focused submodules (e.g. `orchestration-batch`, `orchestration-messaging`, `orchestration-command`).
   * Submodules depend on `<domain>-api` and must form a strict DAG (no circular dependencies). Core engines integrate with submodules via SPIs.

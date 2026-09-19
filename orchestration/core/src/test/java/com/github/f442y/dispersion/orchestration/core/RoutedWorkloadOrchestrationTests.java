@@ -115,8 +115,8 @@ public class RoutedWorkloadOrchestrationTests {
             router.registerEndpoint("inventory-service", localEndpoint);
 
             // Build Orchestration using fluent .invoke(...)
-            try (OrchestrationStateMachineExecutor<OrderContext, OrderState, String, OrderContext> executor =
-                    OrchestrationStateMachineBuilder.<OrderContext, OrderState, String, OrderContext>create("MonolithOrchestrator", OrderState.class)
+            try (OrchestrationExecutor<OrderContext, OrderState, String, OrderContext> executor =
+                    OrchestrationBuilder.<OrderContext, OrderState, String, OrderContext>create("MonolithOrchestrator", OrderState.class)
                             .context(OrderContext::new)
                             .initialState(OrderState.INIT)
                             .workloadRouter(router)
@@ -193,8 +193,8 @@ public class RoutedWorkloadOrchestrationTests {
             router.registerEndpoint("shipping-service", remoteEndpoint);
 
             // Build Orchestration calling distributed worker
-            try (OrchestrationStateMachineExecutor<OrderContext, OrderState, String, OrderContext> executor =
-                    OrchestrationStateMachineBuilder.<OrderContext, OrderState, String, OrderContext>create("DistributedOrchestrator", OrderState.class)
+            try (OrchestrationExecutor<OrderContext, OrderState, String, OrderContext> executor =
+                    OrchestrationBuilder.<OrderContext, OrderState, String, OrderContext>create("DistributedOrchestrator", OrderState.class)
                             .context(OrderContext::new)
                             .initialState(OrderState.INIT)
                             .workloadRouter(router)
@@ -244,8 +244,8 @@ public class RoutedWorkloadOrchestrationTests {
             router.registerEndpoint("scoring-service", faizanSandbox);
 
             // Step 1: Default orchestration without developer tag hits production worker
-            try (OrchestrationStateMachineExecutor<OrderContext, OrderState, String, String> prodOrch =
-                    OrchestrationStateMachineBuilder.<OrderContext, OrderState, String, String>create("ProdOrchestrator", OrderState.class)
+            try (OrchestrationExecutor<OrderContext, OrderState, String, String> prodOrch =
+                    OrchestrationBuilder.<OrderContext, OrderState, String, String>create("ProdOrchestrator", OrderState.class)
                             .context(OrderContext::new)
                             .initialState(OrderState.INIT)
                             .workloadRouter(router)
@@ -264,8 +264,8 @@ public class RoutedWorkloadOrchestrationTests {
             }
 
             // Step 2: Developer sandbox orchestration strictly routes to Faizan's worker
-            try (OrchestrationStateMachineExecutor<OrderContext, OrderState, String, String> devOrch =
-                    OrchestrationStateMachineBuilder.<OrderContext, OrderState, String, String>create("DevOrchestrator", OrderState.class)
+            try (OrchestrationExecutor<OrderContext, OrderState, String, String> devOrch =
+                    OrchestrationBuilder.<OrderContext, OrderState, String, String>create("DevOrchestrator", OrderState.class)
                             .context(OrderContext::new)
                             .initialState(OrderState.INIT)
                             .workloadRouter(router)
@@ -306,8 +306,8 @@ public class RoutedWorkloadOrchestrationTests {
             router.registerEndpoint("pricing-service", v1);
             router.registerEndpoint("pricing-service", v2);
 
-            try (OrchestrationStateMachineExecutor<OrderContext, OrderState, Void, String> orch =
-                    OrchestrationStateMachineBuilder.<OrderContext, OrderState, Void, String>create("CanaryOrchestrator", OrderState.class)
+            try (OrchestrationExecutor<OrderContext, OrderState, Void, String> orch =
+                    OrchestrationBuilder.<OrderContext, OrderState, Void, String>create("CanaryOrchestrator", OrderState.class)
                             .context(OrderContext::new)
                             .initialState(OrderState.INIT)
                             .workloadRouter(router)
@@ -395,8 +395,8 @@ public class RoutedWorkloadOrchestrationTests {
             router.registerEndpoint("inventory-service", remoteEndpoint);
 
             // Build Orchestration with Step 1 (Local), Step 2 (Routed), Step 3 (Failing)
-            try (OrchestrationStateMachineExecutor<OrderContext, OrderState, String, Void> executor =
-                    OrchestrationStateMachineBuilder.<OrderContext, OrderState, String, Void>create("SagaOrchestrator", OrderState.class)
+            try (OrchestrationExecutor<OrderContext, OrderState, String, Void> executor =
+                    OrchestrationBuilder.<OrderContext, OrderState, String, Void>create("SagaOrchestrator", OrderState.class)
                             .context(OrderContext::new)
                             .initialState(OrderState.INIT)
                             .workloadRouter(router)

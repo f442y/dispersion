@@ -4,8 +4,8 @@ import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -72,8 +72,8 @@ public class OrderProcessingSagaExampleTests {
                         .build();
 
         // 2. Parent Orchestration Machine
-        try (OrchestrationStateMachineExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
-                OrchestrationStateMachineBuilder.<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String>create("CheckoutSaga", OrderWorkflowState.class)
+        try (OrchestrationExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
+                OrchestrationBuilder.<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String>create("CheckoutSaga", OrderWorkflowState.class)
                         .context(OrderWorkflowContext::new)
                         .initialState(OrderWorkflowState.VALIDATE_ORDER)
                         .input((ctx, req) -> {
@@ -166,8 +166,8 @@ public class OrderProcessingSagaExampleTests {
         List<String> compensationAudit = new ArrayList<>();
 
         // 2. Parent Orchestration Machine
-        try (OrchestrationStateMachineExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
-                OrchestrationStateMachineBuilder.<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String>create("FailingCheckoutSaga", OrderWorkflowState.class)
+        try (OrchestrationExecutor<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String> executor =
+                OrchestrationBuilder.<OrderWorkflowContext, OrderWorkflowState, OrderRequest, String>create("FailingCheckoutSaga", OrderWorkflowState.class)
                         .context(OrderWorkflowContext::new)
                         .initialState(OrderWorkflowState.VALIDATE_ORDER)
                         .input((ctx, req) -> {

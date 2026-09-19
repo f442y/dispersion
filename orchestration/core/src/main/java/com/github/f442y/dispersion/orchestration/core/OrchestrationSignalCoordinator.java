@@ -4,7 +4,7 @@ import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.CheckpointStore;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationConfiguration;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
@@ -29,7 +29,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @param <INPUT>     The input type
  * @param <OUTPUT>    The output type
  */
-public class OrchestrationSignalWatcher<
+public class OrchestrationSignalCoordinator<
         CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
         INPUT,
@@ -38,12 +38,12 @@ public class OrchestrationSignalWatcher<
     private static final int STRIPE_COUNT = 512;
     private static final int STRIPE_MASK = STRIPE_COUNT - 1;
 
-    private final OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration;
+    private final OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration;
     private final ExecutorService virtualThreadExecutor;
     private final ReentrantLock[] locks;
 
-    public OrchestrationSignalWatcher(
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration,
+    public OrchestrationSignalCoordinator(
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration,
             @NonNull ExecutorService virtualThreadExecutor
     ) {
         this.configuration = Objects.requireNonNull(configuration, "configuration must not be null");
@@ -90,7 +90,7 @@ public class OrchestrationSignalWatcher<
         return executeUnderLock(lockFor(machineId), () -> {
             CheckpointStore<CONTEXT, STATE_KEY> store = configuration.getCheckpointStore();
             if (store == null) {
-                throw new IllegalStateException("CheckpointStore must be configured to process signals via OrchestrationSignalWatcher");
+                throw new IllegalStateException("CheckpointStore must be configured to process signals via OrchestrationSignalCoordinator");
             }
 
             Optional<OrchestrationCheckpoint<CONTEXT, STATE_KEY>> cpOpt = store.findById(machineId);
@@ -133,7 +133,7 @@ public class OrchestrationSignalWatcher<
         CheckpointStore<CONTEXT, STATE_KEY> store = configuration.getCheckpointStore();
         if (store == null) {
             CompletableFuture<OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT>> failed = new CompletableFuture<>();
-            failed.completeExceptionally(new IllegalStateException("CheckpointStore must be configured to process signals via OrchestrationSignalWatcher"));
+            failed.completeExceptionally(new IllegalStateException("CheckpointStore must be configured to process signals via OrchestrationSignalCoordinator"));
             return failed;
         }
 

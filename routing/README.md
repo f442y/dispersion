@@ -163,7 +163,7 @@ router.registerEndpoint(remoteEndpoint);
 
 ### Example 3: Integration with Orchestration Sagas
 
-In `orchestration/core`, configure the router on the `OrchestrationStateMachineBuilder` to invoke services and define routed compensations:
+In `orchestration/core`, configure the router on the `OrchestrationBuilder` to invoke services and define routed compensations:
 
 ```java
 builder.workloadRouter(router);

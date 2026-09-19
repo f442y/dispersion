@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -11,15 +11,15 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>dispersion-control-core</artifactId>
+    <artifactId>dispersion-control-plane-core</artifactId>
     <packaging>jar</packaging>
-    <name>Dispersion :: Control Core</name>
+    <name>Dispersion :: Control Plane Core</name>
     <description>Universal Control Plane engine for workflow observation, telemetry aggregation, and signal dispatch</description>
 
     <dependencies>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-control-api</artifactId>
+            <artifactId>dispersion-control-plane-api</artifactId>
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
@@ -33,7 +33,7 @@
         <!-- Test Dependencies -->
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-control-test</artifactId>
+            <artifactId>dispersion-control-plane-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

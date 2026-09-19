@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -8,24 +8,36 @@
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-parent</artifactId>
         <version>${revision}</version>
-        <relativePath>../../pom.xml</relativePath>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>dispersion-control-test</artifactId>
+    <artifactId>dispersion-testkit</artifactId>
     <packaging>jar</packaging>
 
-    <name>Dispersion :: Control Test</name>
-    <description>In-memory test doubles and mock inspectable machine fixtures for control plane testing</description>
+    <name>Dispersion :: TestKit</name>
+    <description>Unified test starter aggregating all Dispersion test doubles, fakes, and harnesses</description>
     <url>https://github.com/f442y/dispersion</url>
 
     <dependencies>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-control-api</artifactId>
+            <artifactId>dispersion-event-test</artifactId>
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-event-api</artifactId>
+            <artifactId>dispersion-fsm-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-orchestration-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-control-plane-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-routing-test</artifactId>
         </dependency>
         <dependency>
             <groupId>org.jspecify</groupId>

@@ -10,7 +10,7 @@ import com.github.f442y.dispersion.fsm.executor.StateMachineExecutor;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.StateMap;
 import com.github.f442y.dispersion.orchestration.CheckpointStore;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationConfiguration;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
@@ -38,18 +38,18 @@ import java.util.stream.Collectors;
  * @param <INPUT>     The input type
  * @param <OUTPUT>    The output type
  */
-public class OrchestrationStateMachineExecutor<
+public class OrchestrationExecutor<
         CONTEXT extends StateMachineContext,
         STATE_KEY extends Enum<STATE_KEY> & StateKey,
         INPUT,
         OUTPUT> implements StateMachineExecutor<CONTEXT, INPUT, OUTPUT>, SignalDispatcher {
 
-    private final OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration;
+    private final OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration;
     private final ExecutorService virtualThreadExecutor;
-    private final OrchestrationSignalWatcher<CONTEXT, STATE_KEY, INPUT, OUTPUT> signalWatcher;
+    private final OrchestrationSignalCoordinator<CONTEXT, STATE_KEY, INPUT, OUTPUT> signalWatcher;
 
-    public OrchestrationStateMachineExecutor(
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration
+    public OrchestrationExecutor(
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration
     ) {
         this(
                 configuration,
@@ -59,13 +59,13 @@ public class OrchestrationStateMachineExecutor<
         );
     }
 
-    public OrchestrationStateMachineExecutor(
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration,
+    public OrchestrationExecutor(
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> configuration,
             @NonNull ExecutorService virtualThreadExecutor
     ) {
         this.configuration = Objects.requireNonNull(configuration, "configuration must not be null");
         this.virtualThreadExecutor = Objects.requireNonNull(virtualThreadExecutor, "virtualThreadExecutor must not be null");
-        this.signalWatcher = new OrchestrationSignalWatcher<>(configuration, virtualThreadExecutor);
+        this.signalWatcher = new OrchestrationSignalCoordinator<>(configuration, virtualThreadExecutor);
     }
 
     @Override
@@ -206,7 +206,7 @@ public class OrchestrationStateMachineExecutor<
     }
 
     @NonNull
-    public OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> getConfiguration() {
+    public OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> getConfiguration() {
         return configuration;
     }
 

@@ -16,7 +16,7 @@ graph TD
         SIG_UI["Manual Signal Dispatcher"]
     end
 
-    subgraph ControlPlane["dispersion-control-core (DefaultControlPlane)"]
+    subgraph ControlPlane["dispersion-control-plane-core (DefaultControlPlane)"]
         DCP["DefaultControlPlane"]
         APOOL["Active Pool (O(1) Hash Map)"]
         TPOOL["Terminal Pool (Bounded Circular Buffer)"]
@@ -26,7 +26,7 @@ graph TD
         DCP --- ROUTER
     end
 
-    subgraph SPI["dispersion-control-api (Contracts)"]
+    subgraph SPI["dispersion-control-plane-api (Contracts)"]
         IM["InspectableMachine (SPI)"]
         MD["MachineDescriptor"]
         ES["ExecutionSummary"]
@@ -34,7 +34,7 @@ graph TD
 
     subgraph Engines["Execution Engines"]
         ASME["AtomicStateMachineExecutor"]
-        OSME["OrchestrationStateMachineExecutor"]
+        OSME["OrchestrationExecutor"]
         BOSE["BatchOrchestrationExecutor"]
     end
 
@@ -47,7 +47,7 @@ graph TD
 
 ### Key Architectural Invariants
 1. **Zero Core-to-Core Coupling:**
-   `dispersion-control-core` has **zero compile-time dependencies** on `fsm-core` or `orchestration-core`. It interacts exclusively through the `InspectableMachine` SPI and the `ExecutionEventListener` stream.
+   `dispersion-control-plane-core` has **zero compile-time dependencies** on `fsm-core` or `orchestration-core`. It interacts exclusively through the `InspectableMachine` SPI and the `ExecutionEventListener` stream.
 2. **Zero Hot-Path Penalties:**
    When telemetry is not subscribed, event dispatching evaluates to a single branch predictor check—**0** allocations, **0** system clock queries, and **0** thread context switches.
 3. **Strict Fault Isolation:**

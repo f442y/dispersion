@@ -11,8 +11,8 @@ import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEven
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -126,8 +126,8 @@ class EventLifecycleOrchestrationTests {
         List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
         InMemoryCheckpointStore<SimpleContext, OrchFlowState> store = new InMemoryCheckpointStore<>();
 
-        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
-                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("OrderOrchestrator", OrchFlowState.class)
+        try (OrchestrationExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
+                OrchestrationBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("OrderOrchestrator", OrchFlowState.class)
                         .context(SimpleContext::new)
                         .initialState(OrchFlowState.INIT)
                         .endStates(OrchFlowState.DONE)
@@ -208,8 +208,8 @@ class EventLifecycleOrchestrationTests {
         List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
         AtomicInteger compensatedCount = new AtomicInteger(0);
 
-        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, Void, String> executor =
-                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, Void, String>create("SagaFaultMachine", OrchFlowState.class)
+        try (OrchestrationExecutor<SimpleContext, OrchFlowState, Void, String> executor =
+                OrchestrationBuilder.<SimpleContext, OrchFlowState, Void, String>create("SagaFaultMachine", OrchFlowState.class)
                         .context(SimpleContext::new)
                         .initialState(OrchFlowState.INIT)
                         .endStates(OrchFlowState.DONE)
@@ -295,8 +295,8 @@ class EventLifecycleOrchestrationTests {
     void testUncompensatedFailureEmitsTurnFailedEvent() {
         List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
 
-        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, Void, String> executor =
-                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, Void, String>create("UncompensatedFaultMachine", OrchFlowState.class)
+        try (OrchestrationExecutor<SimpleContext, OrchFlowState, Void, String> executor =
+                OrchestrationBuilder.<SimpleContext, OrchFlowState, Void, String>create("UncompensatedFaultMachine", OrchFlowState.class)
                         .context(SimpleContext::new)
                         .initialState(OrchFlowState.INIT)
                         .endStates(OrchFlowState.DONE)
@@ -356,8 +356,8 @@ class EventLifecycleOrchestrationTests {
         List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
         List<String> compensated = new ArrayList<>();
 
-        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
-                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("SagaCompensationMachine", OrchFlowState.class)
+        try (OrchestrationExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
+                OrchestrationBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("SagaCompensationMachine", OrchFlowState.class)
                         .context(SimpleContext::new)
                         .initialState(OrchFlowState.INIT)
                         .endStates(OrchFlowState.DONE)
@@ -401,8 +401,8 @@ class EventLifecycleOrchestrationTests {
     void testParallelForkJoinEvents() throws Exception {
         List<ExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
 
-        try (OrchestrationStateMachineExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
-                OrchestrationStateMachineBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("ParallelMachine", OrchFlowState.class)
+        try (OrchestrationExecutor<SimpleContext, OrchFlowState, SimpleContext, String> executor =
+                OrchestrationBuilder.<SimpleContext, OrchFlowState, SimpleContext, String>create("ParallelMachine", OrchFlowState.class)
                         .context(SimpleContext::new)
                         .initialState(OrchFlowState.INIT)
                         .endStates(OrchFlowState.DONE)

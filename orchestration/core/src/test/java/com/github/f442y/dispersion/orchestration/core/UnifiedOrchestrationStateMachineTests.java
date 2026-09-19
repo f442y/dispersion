@@ -90,8 +90,8 @@ public class UnifiedOrchestrationStateMachineTests {
         List<OrchestrationCheckpoint<OrderOrchestrationContext, OrderOrchState>> checkpoints = new ArrayList<>();
 
         // Macro Orchestration State Machine
-        try (OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, OrderOrchestrationContext, String> orchestrationMachine =
-                OrchestrationStateMachineBuilder.<OrderOrchestrationContext, OrderOrchState, OrderOrchestrationContext, String>create("OrderOrchestrator", OrderOrchState.class)
+        try (OrchestrationExecutor<OrderOrchestrationContext, OrderOrchState, OrderOrchestrationContext, String> orchestrationMachine =
+                OrchestrationBuilder.<OrderOrchestrationContext, OrderOrchState, OrderOrchestrationContext, String>create("OrderOrchestrator", OrderOrchState.class)
                         .context(OrderOrchestrationContext::new)
                         .initialState(OrderOrchState.VALIDATE_ORDER)
                         .onCheckpoint(checkpoints::add)
@@ -208,8 +208,8 @@ public class UnifiedOrchestrationStateMachineTests {
                         .output(ctx -> ctx.payload)
                         .build();
 
-        try (OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, String, String> orchestrationMachine =
-                OrchestrationStateMachineBuilder.<OrderOrchestrationContext, OrderOrchState, String, String>create("RecoveryOrchestrator", OrderOrchState.class)
+        try (OrchestrationExecutor<OrderOrchestrationContext, OrderOrchState, String, String> orchestrationMachine =
+                OrchestrationBuilder.<OrderOrchestrationContext, OrderOrchState, String, String>create("RecoveryOrchestrator", OrderOrchState.class)
                         .context(OrderOrchestrationContext::new)
                         .initialState(OrderOrchState.RESERVE_INVENTORY)
                         .input((ctx, id) -> { ctx.orderId = id; return ctx; })
@@ -248,8 +248,8 @@ public class UnifiedOrchestrationStateMachineTests {
         List<String> compensationLog = new ArrayList<>();
         List<OrchestrationCheckpoint<OrderOrchestrationContext, OrderOrchState>> checkpoints = new ArrayList<>();
 
-        try (OrchestrationStateMachineExecutor<OrderOrchestrationContext, OrderOrchState, Void, Void> orchestrationMachine =
-                OrchestrationStateMachineBuilder.<OrderOrchestrationContext, OrderOrchState, Void, Void>create("SagaOrchestrator", OrderOrchState.class)
+        try (OrchestrationExecutor<OrderOrchestrationContext, OrderOrchState, Void, Void> orchestrationMachine =
+                OrchestrationBuilder.<OrderOrchestrationContext, OrderOrchState, Void, Void>create("SagaOrchestrator", OrderOrchState.class)
                         .context(OrderOrchestrationContext::new)
                         .initialState(OrderOrchState.VALIDATE_ORDER)
                         .onCheckpoint(checkpoints::add)

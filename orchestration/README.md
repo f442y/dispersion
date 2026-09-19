@@ -21,17 +21,17 @@ graph TD
     end
 
     subgraph Core["dispersion-orchestration-core (Saga Engine)"]
-        OSMB["OrchestrationStateMachineBuilder"]
-        OSME["OrchestrationStateMachineExecutor"]
+        OSMB["OrchestrationBuilder"]
+        OSME["OrchestrationExecutor"]
         OSD["OrchestrationStepDriver (LIFO Sagas)"]
         WRD["WorkloadRouterDispatcher (Adapter)"]
         IMCS["InMemoryCheckpointStore"]
     end
 
     subgraph Batch["dispersion-orchestration-batch (Batch Engine)"]
-        BOSMB["BatchOrchestrationStateMachineBuilder"]
+        BOSMB["BatchOrchestrationBuilder"]
         BOSE["BatchOrchestrationExecutor"]
-        BOSD["BatchOrchestrationStepDriver"]
+        BOSD["BatchStepDriver"]
         BP["BarrierPolicy (ALL_ITEMS / QUORUM)"]
         BBR["BatchBarrierReachedEvent"]
         BBU["BatchBarrierUnlockedEvent"]
@@ -39,7 +39,7 @@ graph TD
 
     subgraph Messaging["dispersion-orchestration-messaging (Brokers)"]
         IMSB["InMemorySignalBroker"]
-        SR["SignalReceiver"]
+        SR["BrokerSignalReceiver"]
         BM["BrokerMessage"]
     end
 
@@ -117,8 +117,8 @@ import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
 import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -175,8 +175,8 @@ public final class OrderSagaWorkflow {
                 .build();
 
         // 2. Build Tier 2 Orchestration State Machine
-        try (OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderRequest, String> executor =
-                 OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderRequest, String>create("OrderSaga", OrderState.class)
+        try (OrchestrationExecutor<OrderContext, OrderState, OrderRequest, String> executor =
+                 OrchestrationBuilder.<OrderContext, OrderState, OrderRequest, String>create("OrderSaga", OrderState.class)
                      .context(OrderContext::new)
                      .initialState(OrderState.VALIDATE)
                      .endStates(OrderState.CONFIRMED, OrderState.FAILED)
@@ -261,8 +261,8 @@ import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -291,8 +291,8 @@ public final class ApprovalWorkflowExample {
     public void run() throws Exception {
         InMemoryCheckpointStore<DocContext, DocState> checkpointStore = new InMemoryCheckpointStore<>();
 
-        try (OrchestrationStateMachineExecutor<DocContext, DocState, String, String> executor =
-                 OrchestrationStateMachineBuilder.<DocContext, DocState, String, String>create("DocumentApproval", DocState.class)
+        try (OrchestrationExecutor<DocContext, DocState, String, String> executor =
+                 OrchestrationBuilder.<DocContext, DocState, String, String>create("DocumentApproval", DocState.class)
                      .context(DocContext::new)
                      .initialState(DocState.DRAFT)
                      .endStates(DocState.APPROVED)
@@ -427,7 +427,7 @@ public class OrchestrationTestingExampleTests {
 * 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level landing page, quickstarts, and architecture map.
 * ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Build sub-microsecond atomic machines to embed as child saga steps.
 * 🚦 [**Routing Subsystem (`routing/`)**](../routing/README.md) — Location-agnostic workload routing, Canary traffic splits, and Developer Sandboxes.
-* 🔭 [**Control Subsystem (`control/`)**](../control/README.md) — Inspect suspended checkpoints and route external signals via `DefaultControlPlane`.
+* 🔭 [**Control Subsystem (`control/`)**](../control-plane/README.md) — Inspect suspended checkpoints and route external signals via `DefaultControlPlane`.
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Telemetry events for saga turns, compensations, and batch barriers.
-* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Reusable fakes and stores with `DispersionTestKit`.
+* 🧪 [**Testing Framework (`testing/`)**](../testkit/README.md) — Reusable fakes and stores with `DispersionTestKit`.
 * 🔄 [**Distributed Sagas & Batching Deep Dive**](../docs/saga-orchestration-and-batching.md) — Saga theory, LIFO rollbacks, and barrier policies.

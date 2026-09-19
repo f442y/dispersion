@@ -15,7 +15,7 @@ import com.github.f442y.dispersion.orchestration.CompensationRecord;
 import com.github.f442y.dispersion.orchestration.ContextRecoverer;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import com.github.f442y.dispersion.orchestration.OrchestrationState;
-import com.github.f442y.dispersion.orchestration.OrchestrationStateMachineConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationConfiguration;
 import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.RetryPolicy;
@@ -72,7 +72,7 @@ public final class OrchestrationStepDriver {
             OUTPUT>
     OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT> executeTurn(
             @NonNull UUID machineId,
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
             @Nullable CONTEXT initialContext,
             @Nullable INPUT input,
             @NonNull ExecutorService virtualThreadExecutor
@@ -116,7 +116,7 @@ public final class OrchestrationStepDriver {
             INPUT,
             OUTPUT>
     OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT> resumeTurn(
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
             @NonNull OrchestrationCheckpoint<CONTEXT, STATE_KEY> checkpoint,
             @Nullable Object signalPayload,
             @NonNull ExecutorService virtualThreadExecutor
@@ -177,7 +177,7 @@ public final class OrchestrationStepDriver {
             OUTPUT>
     OrchestrationTurnResult<CONTEXT, STATE_KEY, OUTPUT> runTurn(
             @NonNull UUID machineId,
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
             @Nullable STATE_KEY startingState,
             @NonNull CONTEXT initialContext,
             @NonNull List<STATE_KEY> completedStates,
@@ -637,7 +637,7 @@ public final class OrchestrationStepDriver {
             STATE_KEY extends Enum<STATE_KEY> & StateKey>
     CONTEXT executeWorkloadInvocationWithRetry(
             @NonNull UUID parentMachineId,
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, ?, ?> config,
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, ?, ?> config,
             @NonNull OrchestrationState<CONTEXT, STATE_KEY> orchState,
             @NonNull STATE_KEY currentStateKey,
             @Nullable ExecutionEventListener eventListener,
@@ -687,7 +687,7 @@ public final class OrchestrationStepDriver {
                 Object result;
                 if (invocation.hasLocalStateMachine()) {
                     StateMachineConfiguration childConfig = invocation.localStateMachine();
-                    if (childConfig instanceof OrchestrationStateMachineConfiguration orchChildConfig) {
+                    if (childConfig instanceof OrchestrationConfiguration orchChildConfig) {
                         UUID childMachineId = UUID.randomUUID();
                         if (eventListener != null) {
                             safeNotify(eventListener, new ExecutionEvent.ChildMachineSpawnedEvent(
@@ -722,7 +722,7 @@ public final class OrchestrationStepDriver {
                 } else {
                     WorkloadDispatcher dispatcher = (config != null) ? config.workloadDispatcher() : null;
                     if (dispatcher == null) {
-                        throw new IllegalStateException("WorkloadDispatcher must be configured on OrchestrationStateMachineConfiguration to invoke service: " + invocation.serviceName());
+                        throw new IllegalStateException("WorkloadDispatcher must be configured on OrchestrationConfiguration to invoke service: " + invocation.serviceName());
                     }
 
                     Map<String, String> metadata = Map.of("parentMachineId", parentMachineId.toString());
@@ -822,9 +822,9 @@ public final class OrchestrationStepDriver {
                     childInput = null;
                 }
 
-                // If child is an OrchestrationStateMachineConfiguration, run via OrchestrationStepDriver
+                // If child is an OrchestrationConfiguration, run via OrchestrationStepDriver
                 Object childResult;
-                if (childConfig instanceof OrchestrationStateMachineConfiguration orchChildConfig) {
+                if (childConfig instanceof OrchestrationConfiguration orchChildConfig) {
                     UUID childMachineId = UUID.randomUUID();
                     OrchestrationTurnResult<?, ?, ?> turn = executeChildOrchestrationTurn(childMachineId, orchChildConfig, childInput);
                     if (turn.isFailed() || turn.isCompensated()) {
@@ -870,7 +870,7 @@ public final class OrchestrationStepDriver {
             CHILD_OUTPUT>
     OrchestrationTurnResult<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_OUTPUT> executeChildOrchestrationTurn(
             @NonNull UUID childMachineId,
-            @NonNull OrchestrationStateMachineConfiguration<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT> childConfig,
+            @NonNull OrchestrationConfiguration<CHILD_CONTEXT, CHILD_STATE_KEY, CHILD_INPUT, CHILD_OUTPUT> childConfig,
             @Nullable Object childInput
     ) throws Exception {
         try (ExecutorService childExecutor = Executors.newThreadPerTaskExecutor(
@@ -1012,7 +1012,7 @@ public final class OrchestrationStepDriver {
             INPUT,
             OUTPUT>
     void persistCheckpoint(
-            @NonNull OrchestrationStateMachineConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
+            @NonNull OrchestrationConfiguration<CONTEXT, STATE_KEY, INPUT, OUTPUT> config,
             @NonNull OrchestrationCheckpoint<CONTEXT, STATE_KEY> checkpoint
     ) {
         if (config.getCheckpointStore() != null) {

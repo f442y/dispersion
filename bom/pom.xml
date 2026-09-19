@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -62,12 +62,12 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-control-api</artifactId>
+                <artifactId>dispersion-control-plane-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-control-core</artifactId>
+                <artifactId>dispersion-control-plane-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -87,7 +87,7 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-control-test</artifactId>
+                <artifactId>dispersion-control-plane-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -107,7 +107,7 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-testing</artifactId>
+                <artifactId>dispersion-testkit</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

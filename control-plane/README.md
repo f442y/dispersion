@@ -6,11 +6,11 @@ The **Dispersion Control Subsystem** provides a centralized, hexagonal **Observa
 
 ## 1. Module Structure & Hexagonal SPI Inversion
 
-The control subsystem is strictly decoupled from the execution runtimes. `dispersion-control-core` **has zero dependencies on `fsm-core` or `orchestration-core`**, interacting purely through the `InspectableMachine` SPI and `ExecutionEventListener` telemetry stream:
+The control plane subsystem is strictly decoupled from the execution runtimes. `dispersion-control-plane-core` **has zero dependencies on `fsm-core` or `orchestration-core`**, interacting purely through the `InspectableMachine` SPI and `ExecutionEventListener` telemetry stream:
 
 ```mermaid
 graph TD
-    subgraph API["dispersion-control-api (Contract)"]
+    subgraph API["dispersion-control-plane-api (Contract)"]
         CP["ControlPlane (Interface)"]
         IM["InspectableMachine (SPI)"]
         MD["MachineDescriptor"]
@@ -18,7 +18,7 @@ graph TD
         SDR["SignalDeliveryResult"]
     end
 
-    subgraph Core["dispersion-control-core (Registry & Router)"]
+    subgraph Core["dispersion-control-plane-core (Registry & Router)"]
         DCP["DefaultControlPlane"]
         DCP --> CP
         DCP ..> IM
@@ -26,14 +26,14 @@ graph TD
 
     subgraph Engines["Execution Engines (Adapters)"]
         ASME["AtomicStateMachineExecutor"]
-        OSME["OrchestrationStateMachineExecutor"]
+        OSME["OrchestrationExecutor"]
         BOSE["BatchOrchestrationExecutor"]
         ASME -.->|"asInspectableMachine()"| IM
         OSME -.->|"asInspectableMachine()"| IM
         BOSE -.->|"asInspectableMachine()"| IM
     end
 
-    subgraph Test["dispersion-control-test (Test Doubles)"]
+    subgraph Test["dispersion-control-plane-test (Test Doubles)"]
         FIM["FakeInspectableMachine"]
         FIM --> IM
     end
@@ -46,9 +46,9 @@ graph TD
 
 | Module | JPMS Module Name | Description |
 | :--- | :--- | :--- |
-| **`dispersion-control-api`** | `com.github.f442y.dispersion.control.api` | Contracts for the Control Plane, `InspectableMachine` SPI, descriptors, execution summaries, timelines, and signal delivery results. |
-| **`dispersion-control-core`** | `com.github.f442y.dispersion.control.core` | `DefaultControlPlane` in-memory engine featuring an $O(1)$ dual-pool memory topology, telemetry event aggregation, dynamic Mermaid diagram generation, and signal routing. |
-| **`dispersion-control-test`** | `com.github.f442y.dispersion.control.test` | `FakeInspectableMachine` test double for testing control plane endpoints, UI dashboards, and administrative workflows in isolation. |
+| **`dispersion-control-plane-api`** | `com.github.f442y.dispersion.control.api` | Contracts for the Control Plane, `InspectableMachine` SPI, descriptors, execution summaries, timelines, and signal delivery results. |
+| **`dispersion-control-plane-core`** | `com.github.f442y.dispersion.control.core` | `DefaultControlPlane` in-memory engine featuring an $O(1)$ dual-pool memory topology, telemetry event aggregation, dynamic Mermaid diagram generation, and signal routing. |
+| **`dispersion-control-plane-test`** | `com.github.f442y.dispersion.control.test` | `FakeInspectableMachine` test double for testing control plane endpoints, UI dashboards, and administrative workflows in isolation. |
 
 ---
 
@@ -91,8 +91,8 @@ import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,8 +129,8 @@ public final class ControlPlaneExample {
             InMemoryCheckpointStore<ReviewContext, ReviewState> store = new InMemoryCheckpointStore<>();
 
             // 2. Build Orchestration Machine and wire Control Plane EventListener
-            try (OrchestrationStateMachineExecutor<ReviewContext, ReviewState, String, String> executor =
-                     OrchestrationStateMachineBuilder.<ReviewContext, ReviewState, String, String>create("ArticleReviewMachine", ReviewState.class)
+            try (OrchestrationExecutor<ReviewContext, ReviewState, String, String> executor =
+                     OrchestrationBuilder.<ReviewContext, ReviewState, String, String>create("ArticleReviewMachine", ReviewState.class)
                          .context(ReviewContext::new)
                          .initialState(ReviewState.DRAFT)
                          .endStates(ReviewState.PUBLISHED)
@@ -196,7 +196,7 @@ public final class ControlPlaneExample {
 
 ---
 
-## 4. Testing Control Plane Integrations (`dispersion-control-test`)
+## 4. Testing Control Plane Integrations (`dispersion-control-plane-test`)
 
 Use `FakeInspectableMachine` to test dashboards, REST controllers, or CLI admin tools without running heavy execution engines:
 
@@ -251,19 +251,19 @@ public class ControlPlaneTestingExampleTests {
     <!-- Public API Contract -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-control-api</artifactId>
+        <artifactId>dispersion-control-plane-api</artifactId>
     </dependency>
 
     <!-- Runtime Control Plane Registry -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-control-core</artifactId>
+        <artifactId>dispersion-control-plane-core</artifactId>
     </dependency>
 
     <!-- Testing Double (Scope: Test) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-control-test</artifactId>
+        <artifactId>dispersion-control-plane-test</artifactId>
         <scope>test</scope>
     </dependency>
 </dependencies>
@@ -278,6 +278,6 @@ public class ControlPlaneTestingExampleTests {
 * 🚦 [**Routing Subsystem (`routing/`)**](../routing/README.md) — Inspectable workload router, Canary traffic splits, and Developer Sandboxes.
 * 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Adapting saga orchestrators and batch engines via `executor.asInspectableMachine()`.
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Connecting event buses and telemetry listeners to `DefaultControlPlane`.
-* 🧪 [**Testing Framework (`testing/`)**](../testing/README.md) — Unit testing control plane workflows with `FakeInspectableMachine`.
+* 🧪 [**Testing Framework (`testing/`)**](../testkit/README.md) — Unit testing control plane workflows with `FakeInspectableMachine`.
 * 🔭 [**Observability & UI Deep Dive**](../docs/observability-and-control-plane.md) — React + TanStack Router integration blueprints.
 

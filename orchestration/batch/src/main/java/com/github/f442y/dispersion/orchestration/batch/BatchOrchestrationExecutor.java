@@ -6,12 +6,12 @@ import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationCheckpoint;
+import com.github.f442y.dispersion.orchestration.batch.BatchCheckpoint;
 import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.ItemSignalCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationStepDriver.BatchConfiguration;
+import com.github.f442y.dispersion.orchestration.batch.BatchStepDriver.BatchConfiguration;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -49,7 +49,7 @@ public class BatchOrchestrationExecutor<
     private final BatchConfiguration<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> configuration;
     private final Supplier<BATCH_CONTEXT> batchContextSupplier;
     private final ExecutorService executorService;
-    private final Map<String, BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> activeCheckpoints = new ConcurrentHashMap<>();
+    private final Map<String, BatchCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> activeCheckpoints = new ConcurrentHashMap<>();
 
     public BatchOrchestrationExecutor(
             @NonNull BatchConfiguration<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> configuration,
@@ -125,7 +125,7 @@ public class BatchOrchestrationExecutor<
     ) {
         UUID batchId = UUID.randomUUID();
         BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
-                BatchOrchestrationStepDriver.executeBatchTurn(
+                BatchStepDriver.executeBatchTurn(
                         batchId,
                         configuration,
                         initialBatchContext,
@@ -170,7 +170,7 @@ public class BatchOrchestrationExecutor<
         Objects.requireNonNull(itemKey, "itemKey must not be null");
         Objects.requireNonNull(signalName, "signalName must not be null");
 
-        BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> cp = activeCheckpoints.get(batchKey);
+        BatchCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> cp = activeCheckpoints.get(batchKey);
         if (cp == null) {
             CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> failed = new CompletableFuture<>();
             failed.completeExceptionally(new NoSuchElementException("No active batch checkpoint found for batchKey: " + batchKey));
@@ -182,7 +182,7 @@ public class BatchOrchestrationExecutor<
             executorService.submit(() -> {
                 try {
                     BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
-                            BatchOrchestrationStepDriver.resumeBatchTurn(configuration, cp, itemKey, signalPayload, null, executorService);
+                            BatchStepDriver.resumeBatchTurn(configuration, cp, itemKey, signalPayload, null, executorService);
                     saveCheckpointFromResult(result);
                     future.complete(result);
                 } catch (Throwable t) {
@@ -204,7 +204,7 @@ public class BatchOrchestrationExecutor<
         Objects.requireNonNull(batchKey, "batchKey must not be null");
         Objects.requireNonNull(signalName, "signalName must not be null");
 
-        BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> cp = activeCheckpoints.get(batchKey);
+        BatchCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> cp = activeCheckpoints.get(batchKey);
         if (cp == null) {
             CompletableFuture<BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT>> failed = new CompletableFuture<>();
             failed.completeExceptionally(new NoSuchElementException("No active batch checkpoint found for batchKey: " + batchKey));
@@ -216,7 +216,7 @@ public class BatchOrchestrationExecutor<
             executorService.submit(() -> {
                 try {
                     BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result =
-                            BatchOrchestrationStepDriver.resumeBatchTurn(configuration, cp, null, null, signalPayload, executorService);
+                            BatchStepDriver.resumeBatchTurn(configuration, cp, null, null, signalPayload, executorService);
                     saveCheckpointFromResult(result);
                     future.complete(result);
                 } catch (Throwable t) {
@@ -265,7 +265,7 @@ public class BatchOrchestrationExecutor<
     }
 
     private void saveCheckpointFromResult(BatchTurnResult<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY, OUTPUT> result) {
-        BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> cp = new BatchOrchestrationCheckpoint<>(
+        BatchCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY> cp = new BatchCheckpoint<>(
                 result.batchId(),
                 configuration.batchName,
                 result.batchKey(),
@@ -288,13 +288,13 @@ public class BatchOrchestrationExecutor<
     }
 
     @NonNull
-    public Optional<BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> getCheckpoint(@NonNull String batchKey) {
+    public Optional<BatchCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> getCheckpoint(@NonNull String batchKey) {
         Objects.requireNonNull(batchKey, "batchKey must not be null");
         return Optional.ofNullable(activeCheckpoints.get(batchKey));
     }
 
     @NonNull
-    public Map<String, BatchOrchestrationCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> getActiveCheckpoints() {
+    public Map<String, BatchCheckpoint<BATCH_CONTEXT, ITEM_CONTEXT, STATE_KEY>> getActiveCheckpoints() {
         return Collections.unmodifiableMap(activeCheckpoints);
     }
 
@@ -319,9 +319,9 @@ public class BatchOrchestrationExecutor<
 
         StringBuilder sb = new StringBuilder("stateDiagram-v2\n");
         sb.append("    [*] --> ").append(initialState).append("\n");
-        for (Map.Entry<STATE_KEY, BatchOrchestrationStepDriver.ItemStateDefinition<ITEM_CONTEXT, STATE_KEY>> entry : configuration.stateDefinitions.entrySet()) {
+        for (Map.Entry<STATE_KEY, BatchStepDriver.ItemStateDefinition<ITEM_CONTEXT, STATE_KEY>> entry : configuration.stateDefinitions.entrySet()) {
             STATE_KEY source = entry.getKey();
-            BatchOrchestrationStepDriver.ItemStateDefinition<ITEM_CONTEXT, STATE_KEY> def = entry.getValue();
+            BatchStepDriver.ItemStateDefinition<ITEM_CONTEXT, STATE_KEY> def = entry.getValue();
             if (def.isBarrier) {
                 sb.append("    note right of ").append(source.name()).append(" : Barrier (").append(def.barrierPolicy).append(")\n");
             }

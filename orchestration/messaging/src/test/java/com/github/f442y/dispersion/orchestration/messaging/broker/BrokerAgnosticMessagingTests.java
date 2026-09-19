@@ -8,8 +8,8 @@ import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.core.InMemoryCheckpointStore;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import com.github.f442y.dispersion.orchestration.messaging.SignalConsumer;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import org.jspecify.annotations.NonNull;
@@ -90,8 +90,8 @@ public class BrokerAgnosticMessagingTests {
             return CompletableFuture.completedFuture(null);
         });
 
-        OrchestrationStateMachineExecutor<ShippingContext, ShippingState, ShippingContext, String> executor =
-                OrchestrationStateMachineBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("ShippingWorkflow", ShippingState.class)
+        OrchestrationExecutor<ShippingContext, ShippingState, ShippingContext, String> executor =
+                OrchestrationBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("ShippingWorkflow", ShippingState.class)
                 .context(ShippingContext::new)
                 .initialState(ShippingState.INITIALIZE)
                 .correlationKey(ctx -> ctx.shipmentId)
@@ -143,7 +143,7 @@ public class BrokerAgnosticMessagingTests {
                 .buildExecutor();
 
         // Connect the broker subscriber to the state machine via SignalReceiver
-        SignalReceiver receiver = SignalReceiver.forExecutor(executor);
+        BrokerSignalReceiver receiver = BrokerSignalReceiver.forExecutor(executor);
         broker.subscribe("warehouse-events", receiver);
         broker.subscribe("carrier-events", receiver);
 
@@ -207,8 +207,8 @@ public class BrokerAgnosticMessagingTests {
     public void testKafkaOrSqsAdapterSimulation() throws Exception {
         InMemoryCheckpointStore<ShippingContext, ShippingState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<ShippingContext, ShippingState, ShippingContext, String> executor =
-                OrchestrationStateMachineBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("KafkaWorkflow", ShippingState.class)
+        OrchestrationExecutor<ShippingContext, ShippingState, ShippingContext, String> executor =
+                OrchestrationBuilder.<ShippingContext, ShippingState, ShippingContext, String>create("KafkaWorkflow", ShippingState.class)
                 .context(ShippingContext::new)
                 .initialState(ShippingState.AWAIT_PICKED_SIGNAL)
                 .correlationKey(ctx -> ctx.shipmentId)
@@ -236,7 +236,7 @@ public class BrokerAgnosticMessagingTests {
         OrchestrationTurnResult<ShippingContext, ShippingState, String> turn1 = executor.dispatchTurnSync(null, input);
         assertTrue(turn1.isSuspended());
 
-        SignalReceiver receiver = SignalReceiver.forExecutor(executor);
+        BrokerSignalReceiver receiver = BrokerSignalReceiver.forExecutor(executor);
 
         // Simulate a Kafka consumer record: partition header, trace parent, kafka offset
         SignalMessage kafkaMessage = new SignalMessage(

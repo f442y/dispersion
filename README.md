@@ -66,7 +66,7 @@
     <td width="50%" valign="top">
       <h3>🔭 Hexagonal Control Plane</h3>
       <p>Centralized <code>InspectableMachine</code> SPI featuring an <b>$O(1)$ dual-pool memory topology</b>, live telemetry streaming, and dynamic Mermaid diagram generation.</p>
-      <p>👉 <i>Explore the <a href="control/README.md"><b>Control Subsystem</b></a> & <a href="event/README.md"><b>Telemetry Pipeline</b></a></i></p>
+      <p>👉 <i>Explore the <a href="control-plane/README.md"><b>Control Subsystem</b></a> & <a href="event/README.md"><b>Telemetry Pipeline</b></a></i></p>
     </td>
   </tr>
   <tr>
@@ -78,7 +78,7 @@
     <td width="50%" valign="top">
       <h3>🧪 Zero-Mock Testkit</h3>
       <p>Deterministic in-memory test doubles across all subsystems. Verify saga recovery, network routing, and checkpoints without mocks or containers.</p>
-      <p>👉 <i>Explore the <a href="testing/README.md"><b>Testing Subsystem</b></a></i></p>
+      <p>👉 <i>Explore the <a href="testkit/README.md"><b>TestKit Subsystem</b></a></i></p>
     </td>
   </tr>
 </table>
@@ -155,8 +155,8 @@ graph TD
 | **Failure Recovery** | Fast-fail terminal diverting | [**Automated LIFO Saga rollbacks**](orchestration/README.md#2-automated-lifo-saga-rollbacks) | Item-level error isolation |
 | **Concurrency** | Sequential graph traversal | [**Parallel fork-join (`.parallel()`)**](orchestration/README.md#4-parallel-fork-join-concurrency) | Concurrent item processing |
 | **Telemetry & Events** | Core `ExecutionEvent` records | Core `ExecutionEvent` records | `BatchBarrierReachedEvent`, `BatchBarrierUnlockedEvent` |
-| **Persistence** | None (zero overhead) | Pluggable [`CheckpointStore`](orchestration/README.md#1-turn-based-execution--signal-suspension) | [`BatchOrchestrationCheckpoint`](orchestration/README.md#5-turn-based-batch-processing-dispersion-orchestration-batch) |
-| **Testing Doubles** | [`TestStateContext`, `TestStateKey`](fsm/README.md#4-testing-atomic-state-machines-dispersion-fsm-test) | [`FakeSignalBroker`, `RecordingCheckpointStore`](orchestration/README.md#6-testing-orchestrations-dispersion-orchestration-test) | [`DispersionTestKit`](testing/README.md) |
+| **Persistence** | None (zero overhead) | Pluggable [`CheckpointStore`](orchestration/README.md#1-turn-based-execution--signal-suspension) | [`BatchCheckpoint`](orchestration/README.md#5-turn-based-batch-processing-dispersion-orchestration-batch) |
+| **Testing Doubles** | [`TestStateContext`, `TestStateKey`](fsm/README.md#4-testing-atomic-state-machines-dispersion-fsm-test) | [`FakeSignalBroker`, `RecordingCheckpointStore`](orchestration/README.md#6-testing-orchestrations-dispersion-orchestration-test) | [`DispersionTestKit`](testkit/README.md) |
 | **Best Used For** | Rules, protocol parsing, trading engines | Multi-service sagas, checkout, approvals | Bulk ingest, payroll, daily reconciliations |
 
 ---
@@ -172,7 +172,7 @@ How Dispersion compares to legacy orchestration and state machine engines:
 | **Hot-Path Allocations** | Hundreds of objects per transition | Medium (Map entries, wrappers) | [**0 heap allocations on transition hot paths**](docs/virtual-threads-and-performance.md#3-zero-allocation-hot-paths--jvm-c2-optimization) |
 | **Thread Synchronization** | Synchronized locks & DB mutexes | Concurrent maps & atomic references | [**100% Lock-Free Thread Confinement**](docs/architecture-and-design.md#3-concurrency-guarantees--thread-confinement) |
 | **Saga Compensation** | Manual compensation choreography | Ad-hoc error handlers | [**Automated LIFO Saga Rollback Unwind**](orchestration/README.md#2-automated-lifo-saga-rollbacks) |
-| **Control Plane Coupling** | Heavy monolithic web application | Missing or ad-hoc | [**Decoupled `InspectableMachine` SPI**](control/README.md#1-decoupled-inspectablemachine-spi) |
+| **Control Plane Coupling** | Heavy monolithic web application | Missing or ad-hoc | [**Decoupled `InspectableMachine` SPI**](control-plane/README.md#1-decoupled-inspectablemachine-spi) |
 
 ---
 
@@ -237,7 +237,7 @@ try (AtomicStateMachineExecutor<PricingContext, PricingState, PricingRequest, Pr
 > 📖 **Related Documentation:**
 > * Full Subsystem Guide: [**`fsm/README.md`**](fsm/README.md)
 > * Performance & Zero-Pinning: [**`docs/virtual-threads-and-performance.md`**](docs/virtual-threads-and-performance.md)
-> * Zero-Mock Unit Testing: [**`testing/README.md#recipe-1-verifying-telemetry-events-in-an-atomic-machine`**](testing/README.md#recipe-1-verifying-telemetry-events-in-an-atomic-machine)
+> * Zero-Mock Unit Testing: [**`testkit/README.md#recipe-1-verifying-telemetry-events-in-an-atomic-machine`**](testkit/README.md#recipe-1-verifying-telemetry-events-in-an-atomic-machine)
 
 ---
 
@@ -246,11 +246,11 @@ Coordinate multi-service sagas with automatic rollback unwinding if any step fai
 
 ```java
 import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineBuilder;
-import com.github.f442y.dispersion.orchestration.core.OrchestrationStateMachineExecutor;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 
-try (OrchestrationStateMachineExecutor<OrderContext, OrderState, OrderRequest, String> executor =
-         OrchestrationStateMachineBuilder.<OrderContext, OrderState, OrderRequest, String>create("OrderSaga", OrderState.class)
+try (OrchestrationExecutor<OrderContext, OrderState, OrderRequest, String> executor =
+         OrchestrationBuilder.<OrderContext, OrderState, OrderRequest, String>create("OrderSaga", OrderState.class)
              .context(OrderContext::new)
              .initialState(OrderState.RESERVE_INVENTORY)
              .endStates(OrderState.CONFIRMED, OrderState.FAILED)
@@ -309,8 +309,8 @@ OrchestrationTurnResult<OrderContext, OrderState, String> turn2 =
 > [!TIP]
 > 📖 **Related Documentation:**
 > * Suspension & Checkpoint Stores: [**`orchestration/README.md#1-turn-based-execution--signal-suspension`**](orchestration/README.md#1-turn-based-execution--signal-suspension)
-> * Routing Signals through Control Plane: [**`control/README.md#3-end-to-end-control-plane-example`**](control/README.md#3-end-to-end-control-plane-example)
-> * Testing Checkpoints: [**`testing/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga`**](testing/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga)
+> * Routing Signals through Control Plane: [**`control-plane/README.md#3-end-to-end-control-plane-example`**](control-plane/README.md#3-end-to-end-control-plane-example)
+> * Testing Checkpoints: [**`testkit/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga`**](testkit/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga)
 
 ---
 
@@ -340,7 +340,7 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane()) {
 
 > [!TIP]
 > 📖 **Related Documentation:**
-> * Full Control Plane Guide: [**`control/README.md`**](control/README.md)
+> * Full Control Plane Guide: [**`control-plane/README.md`**](control-plane/README.md)
 > * Telemetry & Extensible Events: [**`event/README.md`**](event/README.md)
 > * UI Integration Patterns (React + TanStack Router): [**`docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router`**](docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router)
 
@@ -357,8 +357,8 @@ graph LR
         F["<b>fsm/</b><br/>Tier 1 Atomic Engine"]
         R["<b>routing/</b><br/>Workload Router SPI & Core"]
         O["<b>orchestration/</b><br/>Tier 2 Saga, Batch & Messaging"]
-        C["<b>control/</b><br/>Control Plane & SPI"]
-        T["<b>testing/</b><br/>DispersionTestKit"]
+        C["<b>control-plane/</b><br/>Control Plane & SPI"]
+        T["<b>testkit/</b><br/>DispersionTestKit"]
     end
 
     F --> E
@@ -374,8 +374,8 @@ graph LR
 | **`fsm/`** | `dispersion-fsm-api`<br/>`dispersion-fsm-core`<br/>`dispersion-fsm-test` | Sub-microsecond atomic FSM engine, pre-compiled `StateMap` ordinal arrays, and adaptive admission control. | [**`fsm/README.md`**](fsm/README.md) |
 | **`routing/`** | `dispersion-routing-api`<br/>`dispersion-routing-core`<br/>`dispersion-routing-test` | Location-agnostic workload router, Canary traffic splits, Developer Sandboxes, backpressure admission, and worker hosting. | [**`routing/README.md`**](routing/README.md) |
 | **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, routed compensations, signal rehydration, parallel branches, batch barriers, and broker-agnostic messaging. | [**`orchestration/README.md`**](orchestration/README.md) |
-| **`control/`** | `dispersion-control-api`<br/>`dispersion-control-core`<br/>`dispersion-control-test` | Decoupled `InspectableMachine` and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control/README.md`**](control/README.md) |
-| **`testing/`** | `dispersion-testing` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testing/README.md`**](testing/README.md) |
+| **`control/`** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Decoupled `InspectableMachine` and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control-plane/README.md`**](control-plane/README.md) |
+| **`testing/`** | `dispersion-testkit` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testkit/README.md`**](testkit/README.md) |
 
 ---
 
@@ -445,13 +445,13 @@ Add the modules required by your application:
     <!-- Observability & Control Plane (Optional) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-control-core</artifactId>
+        <artifactId>dispersion-control-plane-core</artifactId>
     </dependency>
 
     <!-- Testing Facade (Test Scope) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-testing</artifactId>
+        <artifactId>dispersion-testkit</artifactId>
         <scope>test</scope>
     </dependency>
 </dependencies>

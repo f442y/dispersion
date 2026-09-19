@@ -228,5 +228,5 @@ BarrierPolicy quorumPolicy = BarrierPolicy.quorum(0.80);
 ### Batch Engine Capabilities
 * **Item-Level Virtual Threads:** Each item in the batch is processed concurrently on its own virtual thread.
 * **Item-Level Signal Routing:** External signals can target individual items within a batch or the batch as a whole.
-* **Granular Checkpointing:** The `BatchOrchestrationCheckpoint` records the progress of every individual item, allowing interrupted batches to resume without reprocessing completed items.
+* **Granular Checkpointing:** The `BatchCheckpoint` records the progress of every individual item, allowing interrupted batches to resume without reprocessing completed items.
 * **Batch Telemetry:** Emits `BatchBarrierReachedEvent` and `BatchBarrierUnlockedEvent` directly to the `ExecutionEvent` bus.

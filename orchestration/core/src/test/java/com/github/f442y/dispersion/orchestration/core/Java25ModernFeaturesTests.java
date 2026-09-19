@@ -225,8 +225,8 @@ public class Java25ModernFeaturesTests {
     public void testConcurrentDuplicateCommandDelivery() throws Exception {
         InMemoryCheckpointStore<ModernContext, ModernState> store = new InMemoryCheckpointStore<>();
 
-        OrchestrationStateMachineExecutor<ModernContext, ModernState, String, String> executor =
-                OrchestrationStateMachineBuilder.<ModernContext, ModernState, String, String>create("ConcurrentIdemp", ModernState.class)
+        OrchestrationExecutor<ModernContext, ModernState, String, String> executor =
+                OrchestrationBuilder.<ModernContext, ModernState, String, String>create("ConcurrentIdemp", ModernState.class)
                 .context(ModernContext::new)
                 .initialState(ModernState.INIT)
                 .correlationKey(ctx -> ctx.data)
@@ -303,8 +303,8 @@ public class Java25ModernFeaturesTests {
     @Test
     @DisplayName("Should execute compensate() actions during Saga unwinding in LIFO order")
     public void testSagaCompensationUnwinding() {
-        OrchestrationStateMachineExecutor<ModernContext, ModernState, Void, String> executor =
-                OrchestrationStateMachineBuilder.<ModernContext, ModernState, Void, String>create("SagaTest", ModernState.class)
+        OrchestrationExecutor<ModernContext, ModernState, Void, String> executor =
+                OrchestrationBuilder.<ModernContext, ModernState, Void, String>create("SagaTest", ModernState.class)
                 .context(ModernContext::new)
                 .initialState(ModernState.INIT)
                 .state(ModernState.INIT)
