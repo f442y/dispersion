@@ -2,6 +2,15 @@ package com.github.f442y.dispersion.fsm.core;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.event.guard.CircuitBreakerTrippedEvent;
+import com.github.f442y.dispersion.event.guard.StateVisitLimitExceededEvent;
+import com.github.f442y.dispersion.event.state.ActionExecutedEvent;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.state.StateExitedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnFailedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import com.github.f442y.dispersion.fsm.config.InputFunction;
 import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
@@ -162,7 +171,7 @@ public abstract class AbstractStateMachineCallable<
         STATE_KEY currentStateKey = stateMap.getInitialState();
 
         if (eventListener != null) {
-            safeNotify(eventListener, new ExecutionEvent.TurnStartedEvent(
+            safeNotify(eventListener, new TurnStartedEvent(
                     effectiveId,
                     configuration.getMachineName(),
                     null,
@@ -177,7 +186,7 @@ public abstract class AbstractStateMachineCallable<
                 // 1. Global circuit breaker check
                 if (maxTransitions > 0 && totalTransitions >= maxTransitions) {
                     if (eventListener != null) {
-                        safeNotify(eventListener, new ExecutionEvent.CircuitBreakerTrippedEvent(
+                        safeNotify(eventListener, new CircuitBreakerTrippedEvent(
                                 effectiveId,
                                 configuration.getMachineName(),
                                 maxTransitions,
@@ -207,7 +216,7 @@ public abstract class AbstractStateMachineCallable<
                         if (currentCount > maxVisits) {
                             STATE_KEY fallback = currentState.maxVisitsFallback();
                             if (eventListener != null) {
-                                safeNotify(eventListener, new ExecutionEvent.StateVisitLimitExceededEvent(
+                                safeNotify(eventListener, new StateVisitLimitExceededEvent(
                                         effectiveId,
                                         configuration.getMachineName(),
                                         currentStateKey.name(),
@@ -233,7 +242,7 @@ public abstract class AbstractStateMachineCallable<
                 }
 
                 if (eventListener != null) {
-                    safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
+                    safeNotify(eventListener, new StateEnteredEvent(
                             effectiveId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
@@ -255,14 +264,14 @@ public abstract class AbstractStateMachineCallable<
                 if (eventListener != null) {
                     Duration stateDuration = Duration.ofNanos(System.nanoTime() - stateStartNanos);
                     Instant now = Instant.now();
-                    safeNotify(eventListener, new ExecutionEvent.ActionExecutedEvent(
+                    safeNotify(eventListener, new ActionExecutedEvent(
                             effectiveId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
                             stateDuration,
                             now
                     ));
-                    safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
+                    safeNotify(eventListener, new StateExitedEvent(
                             effectiveId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
@@ -280,7 +289,7 @@ public abstract class AbstractStateMachineCallable<
                 }
 
                 if (eventListener != null && nextStateKey != null) {
-                    safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
+                    safeNotify(eventListener, new TransitionEvaluatedEvent(
                             effectiveId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
@@ -311,7 +320,7 @@ public abstract class AbstractStateMachineCallable<
             }
 
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnCompletedEvent(
+                safeNotify(eventListener, new TurnCompletedEvent(
                         effectiveId,
                         configuration.getMachineName(),
                         (currentStateKey != null) ? currentStateKey.name() : null,
@@ -331,7 +340,7 @@ public abstract class AbstractStateMachineCallable<
 
         } catch (Throwable t) {
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnFailedEvent(
+                safeNotify(eventListener, new TurnFailedEvent(
                         effectiveId,
                         configuration.getMachineName(),
                         (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",

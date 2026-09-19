@@ -57,7 +57,7 @@ graph TD
 
 ## 2. Telemetry Hierarchy (`ExecutionEvent`)
 
-Dispersion emits immutable telemetry records at every execution milestone. The foundational `ExecutionEvent` interface defines core lifecycle events nested directly within `ExecutionEvent.*`, while domain-specific events implement `ExecutionEvent` directly from their respective modules:
+Dispersion emits immutable telemetry records at every execution milestone. The foundational `ExecutionEvent` interface defines core lifecycle events nested directly within modular subpackages (`event.turn`, `event.state`, `event.signal`, `event.compensation`, `event.retry`, `event.child`, `event.parallel`, `event.guard`, `event.control`), while domain-specific events implement `ExecutionEvent` directly from their respective modules:
 
 | Event Record | Module | Emitted When | Payload Highlights |
 | :--- | :--- | :--- | :--- |
@@ -82,6 +82,17 @@ Dispersion emits immutable telemetry records at every execution milestone. The f
 package com.example.observability;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.signal.SignalAwaitedEvent;
+import com.github.f442y.dispersion.event.signal.SignalDeliveredEvent;
+import com.github.f442y.dispersion.event.state.ActionExecutedEvent;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.state.StateExitedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompensatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnFailedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
+import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
 import com.github.f442y.dispersion.orchestration.batch.BatchBarrierReachedEvent;
 import com.github.f442y.dispersion.orchestration.batch.BatchBarrierUnlockedEvent;
 import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent;
@@ -94,63 +105,63 @@ public final class TelemetryDispatcher {
 
     public void onEvent(ExecutionEvent event) {
         switch (event) {
-            case ExecutionEvent.TurnStartedEvent started ->
+            case TurnStartedEvent started ->
                 log.atInfo()
                    .addKeyValue("machine", started.machineName())
                    .addKeyValue("machine_id", started.machineId())
                    .log("Execution started");
 
-            case ExecutionEvent.StateEnteredEvent entered ->
+            case StateEnteredEvent entered ->
                 log.atDebug()
                    .addKeyValue("machine", entered.machineName())
                    .addKeyValue("state", entered.stateName())
                    .log("Entering state");
 
-            case ExecutionEvent.ActionExecutedEvent action ->
+            case ActionExecutedEvent action ->
                 log.atDebug()
                    .addKeyValue("state", action.stateName())
                    .addKeyValue("duration_ms", action.duration().toMillis())
                    .log("Action completed");
 
-            case ExecutionEvent.TransitionEvaluatedEvent trans ->
+            case TransitionEvaluatedEvent trans ->
                 log.atDebug()
                    .addKeyValue("source", trans.sourceState())
                    .addKeyValue("target", trans.targetState())
                    .log("Transition evaluated");
 
-            case ExecutionEvent.StateExitedEvent exited ->
+            case StateExitedEvent exited ->
                 log.atDebug()
                    .addKeyValue("state", exited.stateName())
                    .addKeyValue("duration_ms", exited.duration().toMillis())
                    .log("State exited");
 
-            case ExecutionEvent.SignalAwaitedEvent awaited ->
+            case SignalAwaitedEvent awaited ->
                 log.atInfo()
                    .addKeyValue("state", awaited.stateName())
                    .addKeyValue("expected_signal", awaited.expectedSignal())
                    .log("Workflow suspended waiting for external signal");
 
-            case ExecutionEvent.SignalDeliveredEvent delivered ->
+            case SignalDeliveredEvent delivered ->
                 log.atInfo()
                    .addKeyValue("signal", delivered.signalName())
                    .log("Signal delivered to workflow");
 
-            case ExecutionEvent.TurnSuspendedEvent suspended ->
+            case TurnSuspendedEvent suspended ->
                 log.atInfo()
                    .addKeyValue("state", suspended.stateName())
                    .log("Turn suspended and state checkpointed");
 
-            case ExecutionEvent.TurnCompensatedEvent compensated ->
+            case TurnCompensatedEvent compensated ->
                 log.atWarn()
                    .addKeyValue("failed_state", compensated.failedStateName())
                    .log("Failure triggered LIFO Saga rollback");
 
-            case ExecutionEvent.TurnCompletedEvent completed ->
+            case TurnCompletedEvent completed ->
                 log.atInfo()
                    .addKeyValue("duration_ms", completed.duration().toMillis())
                    .log("Execution finished successfully");
 
-            case ExecutionEvent.TurnFailedEvent failed ->
+            case TurnFailedEvent failed ->
                 log.atError()
                    .addKeyValue("failed_state", failed.failedStateName())
                    .setCause(failed.cause())

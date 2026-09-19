@@ -6,12 +6,10 @@ import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.StateKey;
-import com.github.f442y.dispersion.orchestration.batch.BatchCheckpoint;
-import com.github.f442y.dispersion.orchestration.batch.BatchTurnResult;
+import com.github.f442y.dispersion.orchestration.batch.BatchStepDriver.BatchConfiguration;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.ItemSignalCommand;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
-import com.github.f442y.dispersion.orchestration.batch.BatchStepDriver.BatchConfiguration;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 

@@ -6,10 +6,9 @@ import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.fsm.state.Transition;
 import com.github.f442y.dispersion.orchestration.CompensationAction;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
-import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
-import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.batch.BatchStepDriver.BatchConfiguration;
 import com.github.f442y.dispersion.orchestration.batch.BatchStepDriver.ItemStateDefinition;
+import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Arrays;

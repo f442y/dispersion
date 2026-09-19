@@ -10,6 +10,21 @@ import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.event.control.ExecutionCancelledEvent;
+import com.github.f442y.dispersion.event.control.ExecutionPausedEvent;
+import com.github.f442y.dispersion.event.control.ExecutionResumedEvent;
+import com.github.f442y.dispersion.event.guard.CircuitBreakerTrippedEvent;
+import com.github.f442y.dispersion.event.signal.SignalAwaitedEvent;
+import com.github.f442y.dispersion.event.signal.SignalDeliveredEvent;
+import com.github.f442y.dispersion.event.signal.SignalTimedOutEvent;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.state.StateExitedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompensatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnFailedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
+import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
 import com.github.f442y.dispersion.routing.InspectableRouter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -461,7 +476,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             @NonNull ExecutionEvent event
     ) {
         return switch (event) {
-            case ExecutionEvent.TurnStartedEvent e -> {
+            case TurnStartedEvent e -> {
                 if (current == null) {
                     yield new ExecutionSummary(
                             execId,
@@ -492,7 +507,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.StateEnteredEvent e -> {
+            case StateEnteredEvent e -> {
                 if (current == null) {
                     yield new ExecutionSummary(
                             execId,
@@ -523,7 +538,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.TransitionEvaluatedEvent _ -> {
+            case TransitionEvaluatedEvent _ -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,
@@ -541,7 +556,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                 }
                 yield null;
             }
-            case ExecutionEvent.SignalAwaitedEvent e -> {
+            case SignalAwaitedEvent e -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,
@@ -572,7 +587,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.TurnSuspendedEvent e -> {
+            case TurnSuspendedEvent e -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,
@@ -603,7 +618,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.TurnCompletedEvent e -> {
+            case TurnCompletedEvent e -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,
@@ -634,7 +649,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.TurnCompensatedEvent e -> {
+            case TurnCompensatedEvent e -> {
                 String error = e.cause() != null ? e.cause().getMessage() : "Turn compensated";
                 if (current != null) {
                     yield new ExecutionSummary(
@@ -666,7 +681,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.TurnFailedEvent e -> {
+            case TurnFailedEvent e -> {
                 String error = e.cause().getMessage() != null ? e.cause().getMessage() : e.cause().getClass().getSimpleName();
                 if (current != null) {
                     yield new ExecutionSummary(
@@ -698,7 +713,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.SignalDeliveredEvent e -> {
+            case SignalDeliveredEvent e -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,
@@ -717,7 +732,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     yield null;
                 }
             }
-            case ExecutionEvent.ExecutionCancelledEvent e -> {
+            case ExecutionCancelledEvent e -> {
                 String error = "Execution cancelled by " + e.operatorId() + ": " + e.reason();
                 if (current != null) {
                     yield new ExecutionSummary(
@@ -749,7 +764,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.ExecutionPausedEvent e -> {
+            case ExecutionPausedEvent e -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,
@@ -780,7 +795,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.ExecutionResumedEvent e -> {
+            case ExecutionResumedEvent e -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,
@@ -799,7 +814,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     yield null;
                 }
             }
-            case ExecutionEvent.SignalTimedOutEvent e -> {
+            case SignalTimedOutEvent e -> {
                 String error = "Signal [" + e.expectedSignal() + "] timed out after " + e.timeout().toMillis() + "ms";
                 if (current != null) {
                     yield new ExecutionSummary(
@@ -831,7 +846,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     );
                 }
             }
-            case ExecutionEvent.CircuitBreakerTrippedEvent e -> {
+            case CircuitBreakerTrippedEvent e -> {
                 String error = "Circuit breaker tripped: max transitions (" + e.maxTransitions() + ") exceeded";
                 if (current != null) {
                     yield new ExecutionSummary(
@@ -851,7 +866,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                     yield null;
                 }
             }
-            case ExecutionEvent.StateExitedEvent _ -> {
+            case StateExitedEvent _ -> {
                 if (current != null) {
                     yield new ExecutionSummary(
                             execId,

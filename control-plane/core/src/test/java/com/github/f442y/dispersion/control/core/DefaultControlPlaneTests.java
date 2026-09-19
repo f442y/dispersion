@@ -9,6 +9,13 @@ import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.control.test.FakeInspectableMachine;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.control.ExecutionCancelledEvent;
+import com.github.f442y.dispersion.event.control.ExecutionPausedEvent;
+import com.github.f442y.dispersion.event.control.ExecutionResumedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
+import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
@@ -95,10 +102,10 @@ class DefaultControlPlaneTests {
         Instant now = Instant.now();
 
         // Simulate execution telemetry emitted into Control Plane
-        controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(execId, "OrderFulfillmentFSM", "ORD-10", now));
-        controlPlane.onEvent(new ExecutionEvent.TransitionEvaluatedEvent(execId, "OrderFulfillmentFSM", "IDLE", "PROCESSING", now));
-        controlPlane.onEvent(new ExecutionEvent.TransitionEvaluatedEvent(execId, "OrderFulfillmentFSM", "PROCESSING", "FINISHED", now));
-        controlPlane.onEvent(new ExecutionEvent.TurnCompletedEvent(execId, "OrderFulfillmentFSM", "FINISHED", "ORD-10", Duration.ofMillis(10), now));
+        controlPlane.onEvent(new TurnStartedEvent(execId, "OrderFulfillmentFSM", "ORD-10", now));
+        controlPlane.onEvent(new TransitionEvaluatedEvent(execId, "OrderFulfillmentFSM", "IDLE", "PROCESSING", now));
+        controlPlane.onEvent(new TransitionEvaluatedEvent(execId, "OrderFulfillmentFSM", "PROCESSING", "FINISHED", now));
+        controlPlane.onEvent(new TurnCompletedEvent(execId, "OrderFulfillmentFSM", "FINISHED", "ORD-10", Duration.ofMillis(10), now));
 
         List<ExecutionSummary> executions = controlPlane.listExecutions("OrderFulfillmentFSM", null, 10);
         assertEquals(1, executions.size());
@@ -145,8 +152,8 @@ class DefaultControlPlaneTests {
         // 1. Telemetry indicates workflow suspended at WAIT_APPROVAL
         UUID execId = UUID.randomUUID();
         Instant now = Instant.now();
-        controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(execId, "OrderApprovalWorkflow", "ORD-4200", now));
-        controlPlane.onEvent(new ExecutionEvent.TurnSuspendedEvent(
+        controlPlane.onEvent(new TurnStartedEvent(execId, "OrderApprovalWorkflow", "ORD-4200", now));
+        controlPlane.onEvent(new TurnSuspendedEvent(
                 execId, "OrderApprovalWorkflow", "WAIT_APPROVAL", "ApprovalSignal", "ORD-4200", Duration.ofMillis(10), now
         ));
 
@@ -182,7 +189,7 @@ class DefaultControlPlaneTests {
         orchMachine.assertSignalReceived("ApprovalSignal", "ORD-4200");
 
         // 4. Telemetry indicates turn completion
-        controlPlane.onEvent(new ExecutionEvent.TurnCompletedEvent(execId, "OrderApprovalWorkflow", "COMPLETED", "ORD-4200", Duration.ofMillis(10), now));
+        controlPlane.onEvent(new TurnCompletedEvent(execId, "OrderApprovalWorkflow", "COMPLETED", "ORD-4200", Duration.ofMillis(10), now));
 
         Optional<ExecutionSummary> completedSummaryOpt = controlPlane.getExecution(suspendedSummary.executionId());
         assertTrue(completedSummaryOpt.isPresent());
@@ -293,8 +300,8 @@ class DefaultControlPlaneTests {
             Instant now = Instant.now();
 
             // 1. Emit active suspended workflow
-            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(activeId, "WorkflowA", "CORR-ACTIVE", now));
-            boundedCp.onEvent(new ExecutionEvent.TurnSuspendedEvent(activeId, "WorkflowA", "WAIT_INPUT", "UserApprovalSig", "CORR-ACTIVE", Duration.ofMillis(10), now));
+            boundedCp.onEvent(new TurnStartedEvent(activeId, "WorkflowA", "CORR-ACTIVE", now));
+            boundedCp.onEvent(new TurnSuspendedEvent(activeId, "WorkflowA", "WAIT_INPUT", "UserApprovalSig", "CORR-ACTIVE", Duration.ofMillis(10), now));
 
             // Verify active workflow is tracked as SUSPENDED
             Optional<ExecutionSummary> activeSummary = boundedCp.getExecution(activeId.toString());
@@ -302,20 +309,20 @@ class DefaultControlPlaneTests {
             assertEquals(ExecutionStatus.SUSPENDED, activeSummary.get().status());
 
             // 2. Emit terminal execution 1
-            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(term1, "WorkflowA", "CORR-1", now));
-            boundedCp.onEvent(new ExecutionEvent.TurnCompletedEvent(term1, "WorkflowA", "DONE", "CORR-1", Duration.ofMillis(10), now));
+            boundedCp.onEvent(new TurnStartedEvent(term1, "WorkflowA", "CORR-1", now));
+            boundedCp.onEvent(new TurnCompletedEvent(term1, "WorkflowA", "DONE", "CORR-1", Duration.ofMillis(10), now));
 
             // 3. Emit terminal execution 2 (reaches capacity 2)
-            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(term2, "WorkflowA", "CORR-2", now));
-            boundedCp.onEvent(new ExecutionEvent.TurnCompletedEvent(term2, "WorkflowA", "DONE", "CORR-2", Duration.ofMillis(10), now));
+            boundedCp.onEvent(new TurnStartedEvent(term2, "WorkflowA", "CORR-2", now));
+            boundedCp.onEvent(new TurnCompletedEvent(term2, "WorkflowA", "DONE", "CORR-2", Duration.ofMillis(10), now));
 
             // Both term1 and term2 present
             assertTrue(boundedCp.getExecution(term1.toString()).isPresent());
             assertTrue(boundedCp.getExecution(term2.toString()).isPresent());
 
             // 4. Emit terminal execution 3 (exceeds capacity -> term1 evicted via O(1) FIFO)
-            boundedCp.onEvent(new ExecutionEvent.TurnStartedEvent(term3, "WorkflowA", "CORR-3", now));
-            boundedCp.onEvent(new ExecutionEvent.TurnCompletedEvent(term3, "WorkflowA", "DONE", "CORR-3", Duration.ofMillis(10), now));
+            boundedCp.onEvent(new TurnStartedEvent(term3, "WorkflowA", "CORR-3", now));
+            boundedCp.onEvent(new TurnCompletedEvent(term3, "WorkflowA", "DONE", "CORR-3", Duration.ofMillis(10), now));
 
             // term1 must be evicted
             assertFalse(boundedCp.getExecution(term1.toString()).isPresent(), "Oldest terminal execution must be evicted");
@@ -340,13 +347,13 @@ class DefaultControlPlaneTests {
              EventStream machineStream = controlPlane.watchMachine("TargetMachine")) {
 
             // Emit event for target machine and target execution
-            controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(targetExecId, "TargetMachine", "CORR-TARGET", now));
+            controlPlane.onEvent(new TurnStartedEvent(targetExecId, "TargetMachine", "CORR-TARGET", now));
 
             // Emit event for target machine but DIFFERENT execution
-            controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(otherExecId, "TargetMachine", "CORR-OTHER", now));
+            controlPlane.onEvent(new TurnStartedEvent(otherExecId, "TargetMachine", "CORR-OTHER", now));
 
             // Emit event for DIFFERENT machine
-            controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(UUID.randomUUID(), "OtherMachine", "CORR-X", now));
+            controlPlane.onEvent(new TurnStartedEvent(UUID.randomUUID(), "OtherMachine", "CORR-X", now));
 
             // execStream should only receive targetExecId event
             ExecutionEvent execEvent = execStream.poll(Duration.ofSeconds(2));
@@ -437,8 +444,8 @@ class DefaultControlPlaneTests {
             for (int i = 0; i < activeExecutionsToEmit; i++) {
                 UUID activeId = UUID.randomUUID();
                 activeIds.add(activeId);
-                stressCp.onEvent(new ExecutionEvent.TurnStartedEvent(activeId, "StressFlow", "CORR-ACT-" + i, now));
-                stressCp.onEvent(new ExecutionEvent.TurnSuspendedEvent(activeId, "StressFlow", "WAIT_GATE", "SIG", "CORR-ACT-" + i, Duration.ZERO, now));
+                stressCp.onEvent(new TurnStartedEvent(activeId, "StressFlow", "CORR-ACT-" + i, now));
+                stressCp.onEvent(new TurnSuspendedEvent(activeId, "StressFlow", "WAIT_GATE", "SIG", "CORR-ACT-" + i, Duration.ZERO, now));
             }
 
             // 2. Concurrently emit 5,000 terminal executions using Virtual Threads
@@ -447,8 +454,8 @@ class DefaultControlPlaneTests {
                     final int idx = i;
                     executor.submit(() -> {
                         UUID termId = UUID.randomUUID();
-                        stressCp.onEvent(new ExecutionEvent.TurnStartedEvent(termId, "StressFlow", "CORR-TERM-" + idx, now));
-                        stressCp.onEvent(new ExecutionEvent.TurnCompletedEvent(termId, "StressFlow", "DONE", "CORR-TERM-" + idx, Duration.ofMillis(1), now));
+                        stressCp.onEvent(new TurnStartedEvent(termId, "StressFlow", "CORR-TERM-" + idx, now));
+                        stressCp.onEvent(new TurnCompletedEvent(termId, "StressFlow", "DONE", "CORR-TERM-" + idx, Duration.ofMillis(1), now));
                     });
                 }
             }
@@ -475,20 +482,20 @@ class DefaultControlPlaneTests {
         UUID execId = UUID.randomUUID();
         Instant now = Instant.now();
 
-        controlPlane.onEvent(new ExecutionEvent.TurnStartedEvent(execId, "OrderFulfillmentFSM", "ORD-CAN-1", now));
-        controlPlane.onEvent(new ExecutionEvent.ExecutionPausedEvent(execId, "OrderFulfillmentFSM", "VALIDATE", "Operator hold", now.plusMillis(10)));
+        controlPlane.onEvent(new TurnStartedEvent(execId, "OrderFulfillmentFSM", "ORD-CAN-1", now));
+        controlPlane.onEvent(new ExecutionPausedEvent(execId, "OrderFulfillmentFSM", "VALIDATE", "Operator hold", now.plusMillis(10)));
 
         Optional<ExecutionSummary> pausedSummary = controlPlane.getExecution(execId.toString());
         assertTrue(pausedSummary.isPresent());
         assertEquals(ExecutionStatus.PAUSED, pausedSummary.get().status());
         assertEquals("VALIDATE", pausedSummary.get().currentState());
 
-        controlPlane.onEvent(new ExecutionEvent.ExecutionResumedEvent(execId, "OrderFulfillmentFSM", "VALIDATE", now.plusMillis(20)));
+        controlPlane.onEvent(new ExecutionResumedEvent(execId, "OrderFulfillmentFSM", "VALIDATE", now.plusMillis(20)));
         Optional<ExecutionSummary> resumedSummary = controlPlane.getExecution(execId.toString());
         assertTrue(resumedSummary.isPresent());
         assertEquals(ExecutionStatus.RUNNING, resumedSummary.get().status());
 
-        controlPlane.onEvent(new ExecutionEvent.ExecutionCancelledEvent(execId, "OrderFulfillmentFSM", "VALIDATE", "admin-user", "Customer cancelled order", now.plusMillis(30)));
+        controlPlane.onEvent(new ExecutionCancelledEvent(execId, "OrderFulfillmentFSM", "VALIDATE", "admin-user", "Customer cancelled order", now.plusMillis(30)));
         Optional<ExecutionSummary> cancelledSummary = controlPlane.getExecution(execId.toString());
         assertTrue(cancelledSummary.isPresent());
         assertEquals(ExecutionStatus.CANCELLED, cancelledSummary.get().status());

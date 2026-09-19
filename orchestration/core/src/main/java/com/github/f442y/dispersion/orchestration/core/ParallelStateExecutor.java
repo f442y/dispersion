@@ -2,6 +2,9 @@ package com.github.f442y.dispersion.orchestration.core;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.event.parallel.ParallelBranchCompletedEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelForkStartedEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelJoinCompletedEvent;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.orchestration.ParallelBranch;
 import org.jspecify.annotations.NonNull;
@@ -25,7 +28,7 @@ import java.util.function.Function;
 /**
  * Concurrent fork-join executor for parallel branches on Java 25 Virtual Threads with
  * context isolation, fork-join result reduction, fast-failing cancellation, and
- * branch-level Saga compensation rollback.
+ * branch-level Saga compensation rollback.\
  */
 public final class ParallelStateExecutor {
 
@@ -114,7 +117,7 @@ public final class ParallelStateExecutor {
         long forkStartNanos = System.nanoTime();
         if (eventListener != null && machineId != null && machineName != null && stateName != null) {
             List<String> branchNames = branches.stream().map(ParallelBranch::name).toList();
-            safeNotify(eventListener, new ExecutionEvent.ParallelForkStartedEvent(
+            safeNotify(eventListener, new ParallelForkStartedEvent(
                     machineId,
                     machineName,
                     stateName,
@@ -145,7 +148,7 @@ public final class ParallelStateExecutor {
                         completedBranches.add(branch);
 
                         if (eventListener != null && machineId != null && machineName != null && stateName != null) {
-                            safeNotify(eventListener, new ExecutionEvent.ParallelBranchCompletedEvent(
+                            safeNotify(eventListener, new ParallelBranchCompletedEvent(
                                     machineId,
                                     machineName,
                                     stateName,
@@ -218,7 +221,7 @@ public final class ParallelStateExecutor {
         }
 
         if (eventListener != null && machineId != null && machineName != null && stateName != null) {
-            safeNotify(eventListener, new ExecutionEvent.ParallelJoinCompletedEvent(
+            safeNotify(eventListener, new ParallelJoinCompletedEvent(
                     machineId,
                     machineName,
                     stateName,

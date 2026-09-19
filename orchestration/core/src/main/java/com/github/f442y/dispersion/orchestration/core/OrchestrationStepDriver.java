@@ -2,6 +2,24 @@ package com.github.f442y.dispersion.orchestration.core;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.event.child.ChildMachineCompletedEvent;
+import com.github.f442y.dispersion.event.child.ChildMachineSpawnedEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepCompletedEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepFailedEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepStartedEvent;
+import com.github.f442y.dispersion.event.retry.RetryAttemptedEvent;
+import com.github.f442y.dispersion.event.retry.RetryExhaustedEvent;
+import com.github.f442y.dispersion.event.signal.SignalAwaitedEvent;
+import com.github.f442y.dispersion.event.signal.SignalDeliveredEvent;
+import com.github.f442y.dispersion.event.state.ActionExecutedEvent;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.state.StateExitedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompensatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnFailedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
+import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
 import com.github.f442y.dispersion.fsm.config.InputFunction;
 import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
@@ -14,20 +32,20 @@ import com.github.f442y.dispersion.orchestration.CompensationAction;
 import com.github.f442y.dispersion.orchestration.CompensationRecord;
 import com.github.f442y.dispersion.orchestration.ContextRecoverer;
 import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
-import com.github.f442y.dispersion.orchestration.OrchestrationState;
 import com.github.f442y.dispersion.orchestration.OrchestrationConfiguration;
+import com.github.f442y.dispersion.orchestration.OrchestrationState;
 import com.github.f442y.dispersion.orchestration.OrchestrationStatus;
 import com.github.f442y.dispersion.orchestration.OrchestrationTurnResult;
 import com.github.f442y.dispersion.orchestration.RetryPolicy;
 import com.github.f442y.dispersion.orchestration.SignalHandler;
+import com.github.f442y.dispersion.orchestration.WorkloadDispatcher;
 import com.github.f442y.dispersion.orchestration.WorkloadExecutionMode;
 import com.github.f442y.dispersion.orchestration.WorkloadInvocation;
+import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent;
 import com.github.f442y.dispersion.orchestration.command.CommandEnvelope;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
 import com.github.f442y.dispersion.orchestration.messaging.SignalMessage;
 import com.github.f442y.dispersion.orchestration.messaging.SignalPublisher;
-import com.github.f442y.dispersion.orchestration.WorkloadDispatcher;
-import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -197,7 +215,7 @@ public final class OrchestrationStepDriver {
         long turnStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
 
         if (eventListener != null) {
-            safeNotify(eventListener, new ExecutionEvent.TurnStartedEvent(
+            safeNotify(eventListener, new TurnStartedEvent(
                     machineId,
                     config.getMachineName(),
                     correlationKey,
@@ -226,7 +244,7 @@ public final class OrchestrationStepDriver {
                     String expectedSignal = (orchState.expectedSignal() != null) ? orchState.expectedSignal() : "SIGNAL";
                     if (pendingSignal != null) {
                         if (eventListener != null) {
-                            safeNotify(eventListener, new ExecutionEvent.SignalDeliveredEvent(
+                            safeNotify(eventListener, new SignalDeliveredEvent(
                                     machineId,
                                     config.getMachineName(),
                                     currentStateKey.name(),
@@ -244,7 +262,7 @@ public final class OrchestrationStepDriver {
                         // Suspend execution at this state
                         Duration turnDuration = Duration.ofNanos(System.nanoTime() - turnStartNanos);
                         if (eventListener != null) {
-                            safeNotify(eventListener, new ExecutionEvent.SignalAwaitedEvent(
+                            safeNotify(eventListener, new SignalAwaitedEvent(
                                     machineId,
                                     config.getMachineName(),
                                     currentStateKey.name(),
@@ -252,7 +270,7 @@ public final class OrchestrationStepDriver {
                                     correlationKey,
                                     Instant.now()
                             ));
-                            safeNotify(eventListener, new ExecutionEvent.TurnSuspendedEvent(
+                            safeNotify(eventListener, new TurnSuspendedEvent(
                                     machineId,
                                     config.getMachineName(),
                                     currentStateKey.name(),
@@ -291,7 +309,7 @@ public final class OrchestrationStepDriver {
                 }
 
                 if (eventListener != null) {
-                    safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
+                    safeNotify(eventListener, new StateEnteredEvent(
                             machineId,
                             config.getMachineName(),
                             currentStateKey.name(),
@@ -327,14 +345,14 @@ public final class OrchestrationStepDriver {
                 if (eventListener != null) {
                     Duration stateDuration = Duration.ofNanos(System.nanoTime() - stateStartNanos);
                     Instant now = Instant.now();
-                    safeNotify(eventListener, new ExecutionEvent.ActionExecutedEvent(
+                    safeNotify(eventListener, new ActionExecutedEvent(
                             machineId,
                             config.getMachineName(),
                             currentStateKey.name(),
                             stateDuration,
                             now
                     ));
-                    safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
+                    safeNotify(eventListener, new StateExitedEvent(
                             machineId,
                             config.getMachineName(),
                             currentStateKey.name(),
@@ -400,7 +418,7 @@ public final class OrchestrationStepDriver {
                 // 7. Transition
                 STATE_KEY nextStateKey = stateNode.transition().nextState(context);
                 if (eventListener != null && nextStateKey != null) {
-                    safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
+                    safeNotify(eventListener, new TransitionEvaluatedEvent(
                             machineId,
                             config.getMachineName(),
                             currentStateKey.name(),
@@ -413,7 +431,7 @@ public final class OrchestrationStepDriver {
 
             // Execution Completed
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnCompletedEvent(
+                safeNotify(eventListener, new TurnCompletedEvent(
                         machineId,
                         config.getMachineName(),
                         (currentStateKey != null) ? currentStateKey.name() : null,
@@ -466,7 +484,7 @@ public final class OrchestrationStepDriver {
                     boolean isRouted = compRecord instanceof CompensationRecord.RoutedCompensation;
                     long compStartNanos = System.nanoTime();
                     if (eventListener != null) {
-                        safeNotify(eventListener, new ExecutionEvent.CompensationStepStartedEvent(
+                        safeNotify(eventListener, new CompensationStepStartedEvent(
                                 machineId,
                                 config.getMachineName(),
                                 compRecord.stateKey(),
@@ -502,7 +520,7 @@ public final class OrchestrationStepDriver {
                             compStateNames.add(routedComp.stateKey());
                         }
                         if (eventListener != null) {
-                            safeNotify(eventListener, new ExecutionEvent.CompensationStepCompletedEvent(
+                            safeNotify(eventListener, new CompensationStepCompletedEvent(
                                     machineId,
                                     config.getMachineName(),
                                     compRecord.stateKey(),
@@ -517,7 +535,7 @@ public final class OrchestrationStepDriver {
                                 .addKeyValue("state", compRecord.stateKey())
                                 .log("Compensation error in state");
                         if (eventListener != null) {
-                            safeNotify(eventListener, new ExecutionEvent.CompensationStepFailedEvent(
+                            safeNotify(eventListener, new CompensationStepFailedEvent(
                                     machineId,
                                     config.getMachineName(),
                                     compRecord.stateKey(),
@@ -536,7 +554,7 @@ public final class OrchestrationStepDriver {
                         if (compAction != null) {
                             long compStartNanos = System.nanoTime();
                             if (eventListener != null) {
-                                safeNotify(eventListener, new ExecutionEvent.CompensationStepStartedEvent(
+                                safeNotify(eventListener, new CompensationStepStartedEvent(
                                         machineId,
                                         config.getMachineName(),
                                         compStateKey.name(),
@@ -552,7 +570,7 @@ public final class OrchestrationStepDriver {
                                 context = compAction.compensate(context);
                                 compStateNames.add(compStateKey.name());
                                 if (eventListener != null) {
-                                    safeNotify(eventListener, new ExecutionEvent.CompensationStepCompletedEvent(
+                                    safeNotify(eventListener, new CompensationStepCompletedEvent(
                                             machineId,
                                             config.getMachineName(),
                                             compStateKey.name(),
@@ -567,7 +585,7 @@ public final class OrchestrationStepDriver {
                                         .addKeyValue("state", compStateKey.name())
                                         .log("Compensation error in state");
                                 if (eventListener != null) {
-                                    safeNotify(eventListener, new ExecutionEvent.CompensationStepFailedEvent(
+                                    safeNotify(eventListener, new CompensationStepFailedEvent(
                                             machineId,
                                             config.getMachineName(),
                                             compStateKey.name(),
@@ -586,7 +604,7 @@ public final class OrchestrationStepDriver {
 
             if (eventListener != null) {
                 if (hasCompensations) {
-                    safeNotify(eventListener, new ExecutionEvent.TurnCompensatedEvent(
+                    safeNotify(eventListener, new TurnCompensatedEvent(
                             machineId,
                             config.getMachineName(),
                             (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
@@ -597,7 +615,7 @@ public final class OrchestrationStepDriver {
                             Instant.now()
                     ));
                 } else {
-                    safeNotify(eventListener, new ExecutionEvent.TurnFailedEvent(
+                    safeNotify(eventListener, new TurnFailedEvent(
                             machineId,
                             config.getMachineName(),
                             (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",
@@ -661,7 +679,7 @@ public final class OrchestrationStepDriver {
                 if (attempt > 1) {
                     Duration delay = retryPolicy.computeDelay(attempt);
                     if (eventListener != null) {
-                        safeNotify(eventListener, new ExecutionEvent.RetryAttemptedEvent(
+                        safeNotify(eventListener, new RetryAttemptedEvent(
                                 parentMachineId,
                                 config.getMachineName(),
                                 currentStateKey.name(),
@@ -690,7 +708,7 @@ public final class OrchestrationStepDriver {
                     if (childConfig instanceof OrchestrationConfiguration orchChildConfig) {
                         UUID childMachineId = UUID.randomUUID();
                         if (eventListener != null) {
-                            safeNotify(eventListener, new ExecutionEvent.ChildMachineSpawnedEvent(
+                            safeNotify(eventListener, new ChildMachineSpawnedEvent(
                                     parentMachineId,
                                     config.getMachineName(),
                                     childMachineId,
@@ -707,7 +725,7 @@ public final class OrchestrationStepDriver {
                             throw new IllegalStateException("Child orchestration [" + childMachineId + "] unexpectedly suspended at state [" + turn.currentStateKey() + "]");
                         }
                         if (eventListener != null) {
-                            safeNotify(eventListener, new ExecutionEvent.ChildMachineCompletedEvent(
+                            safeNotify(eventListener, new ChildMachineCompletedEvent(
                                     parentMachineId,
                                     config.getMachineName(),
                                     childMachineId,
@@ -765,7 +783,7 @@ public final class OrchestrationStepDriver {
                         .log("Workload invocation attempt failed");
                 if (attempt >= maxAttempts) {
                     if (eventListener != null) {
-                        safeNotify(eventListener, new ExecutionEvent.RetryExhaustedEvent(
+                        safeNotify(eventListener, new RetryExhaustedEvent(
                                 parentMachineId,
                                 config.getMachineName(),
                                 currentStateKey.name(),
@@ -910,7 +928,7 @@ public final class OrchestrationStepDriver {
         long turnStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
 
         if (eventListener != null) {
-            safeNotify(eventListener, new ExecutionEvent.TurnStartedEvent(
+            safeNotify(eventListener, new TurnStartedEvent(
                     childExecId,
                     childConfig.getMachineName(),
                     null,
@@ -934,7 +952,7 @@ public final class OrchestrationStepDriver {
                 State<CHILD_CONTEXT, CHILD_STATE_KEY> state = stateMap.getStateFast(ordinal);
 
                 if (eventListener != null) {
-                    safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
+                    safeNotify(eventListener, new StateEnteredEvent(
                             childExecId,
                             childConfig.getMachineName(),
                             currentStateKey.name(),
@@ -946,7 +964,7 @@ public final class OrchestrationStepDriver {
                 context = state.action().execute(context);
 
                 if (eventListener != null) {
-                    safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
+                    safeNotify(eventListener, new StateExitedEvent(
                             childExecId,
                             childConfig.getMachineName(),
                             currentStateKey.name(),
@@ -958,7 +976,7 @@ public final class OrchestrationStepDriver {
                 CHILD_STATE_KEY nextStateKey = state.transition().nextState(context);
 
                 if (eventListener != null && nextStateKey != null) {
-                    safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
+                    safeNotify(eventListener, new TransitionEvaluatedEvent(
                             childExecId,
                             childConfig.getMachineName(),
                             currentStateKey.name(),
@@ -972,7 +990,7 @@ public final class OrchestrationStepDriver {
             }
 
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnCompletedEvent(
+                safeNotify(eventListener, new TurnCompletedEvent(
                         childExecId,
                         childConfig.getMachineName(),
                         (currentStateKey != null) ? currentStateKey.name() : null,
@@ -991,7 +1009,7 @@ public final class OrchestrationStepDriver {
             return (outputFn != null) ? outputFn.apply(context) : null;
         } catch (Throwable t) {
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnFailedEvent(
+                safeNotify(eventListener, new TurnFailedEvent(
                         childExecId,
                         childConfig.getMachineName(),
                         (currentStateKey != null) ? currentStateKey.name() : "UNKNOWN",

@@ -2,6 +2,11 @@ package com.github.f442y.dispersion.routing.core.endpoint;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.state.StateExitedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import com.github.f442y.dispersion.fsm.config.InputFunction;
 import com.github.f442y.dispersion.fsm.config.OutputFunction;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
@@ -192,7 +197,7 @@ public final class LocalFsmEndpoint<
         long turnStartNanos = (eventListener != null) ? System.nanoTime() : 0L;
 
         if (eventListener != null) {
-            safeNotify(eventListener, new ExecutionEvent.TurnStartedEvent(
+            safeNotify(eventListener, new TurnStartedEvent(
                     childExecId,
                     configuration.getMachineName(),
                     metadata.correlationId(),
@@ -216,7 +221,7 @@ public final class LocalFsmEndpoint<
                 State<CHILD_CONTEXT, CHILD_STATE_KEY> state = stateMap.getStateFast(ordinal);
 
                 if (eventListener != null) {
-                    safeNotify(eventListener, new ExecutionEvent.StateEnteredEvent(
+                    safeNotify(eventListener, new StateEnteredEvent(
                             childExecId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
@@ -228,7 +233,7 @@ public final class LocalFsmEndpoint<
                 context = state.action().execute(context);
 
                 if (eventListener != null) {
-                    safeNotify(eventListener, new ExecutionEvent.StateExitedEvent(
+                    safeNotify(eventListener, new StateExitedEvent(
                             childExecId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
@@ -243,7 +248,7 @@ public final class LocalFsmEndpoint<
                 }
 
                 if (eventListener != null) {
-                    safeNotify(eventListener, new ExecutionEvent.TransitionEvaluatedEvent(
+                    safeNotify(eventListener, new TransitionEvaluatedEvent(
                             childExecId,
                             configuration.getMachineName(),
                             currentStateKey.name(),
@@ -260,7 +265,7 @@ public final class LocalFsmEndpoint<
             WORKLOAD_OUTPUT result = (outputFn != null) ? outputFn.apply(context) : null;
 
             if (eventListener != null) {
-                safeNotify(eventListener, new ExecutionEvent.TurnCompletedEvent(
+                safeNotify(eventListener, new TurnCompletedEvent(
                         childExecId,
                         configuration.getMachineName(),
                         (currentStateKey != null) ? currentStateKey.name() : "COMPLETED",

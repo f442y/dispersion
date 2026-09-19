@@ -102,7 +102,7 @@ Forward state transitions register compensation closures via `.compensate(...)`.
 2. The forward execution stops immediately.
 3. The engine unwinds the registered compensation closures in **Last-In, First-Out (LIFO)** order.
 4. If an atomic micro-machine was embedded in a step, its configured compensation is also invoked.
-5. An `ExecutionEvent.TurnCompensatedEvent` is emitted to the telemetry bus.
+5. A `TurnCompensatedEvent` (from package `com.github.f442y.dispersion.event.turn`) is emitted to the telemetry bus.
 
 ```java
 .state(OrderState.RESERVE_INVENTORY)

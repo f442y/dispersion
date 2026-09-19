@@ -95,6 +95,8 @@ Ensure that executing a state machine triggers the expected state transitions an
 package com.example.testing;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import com.github.f442y.dispersion.event.test.CapturingEventListener;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.core.atomic.AtomicStateMachineBuilder;
@@ -137,8 +139,8 @@ public class AtomicMachineTestRecipe {
 
             List<ExecutionEvent> events = listener.capturedEvents();
             assertThat(events).isNotEmpty();
-            assertThat(events).anyMatch(e -> e instanceof ExecutionEvent.TurnStartedEvent);
-            assertThat(events).anyMatch(e -> e instanceof ExecutionEvent.TurnCompletedEvent);
+            assertThat(events).anyMatch(e -> e instanceof TurnStartedEvent);
+            assertThat(events).anyMatch(e -> e instanceof TurnCompletedEvent);
         }
     }
 }

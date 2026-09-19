@@ -4,6 +4,9 @@ import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.Subscription;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -33,7 +36,7 @@ class VirtualThreadEventBusTests {
         CountDownLatch typedLatch = new CountDownLatch(1);
 
         List<ExecutionEvent> generalEvents = Collections.synchronizedList(new ArrayList<>());
-        List<ExecutionEvent.TurnStartedEvent> startEvents = Collections.synchronizedList(new ArrayList<>());
+        List<TurnStartedEvent> startEvents = Collections.synchronizedList(new ArrayList<>());
 
         try (EventBus bus = VirtualThreadEventBus.builder().bufferCapacity(100).build()) {
             // General subscription
@@ -43,15 +46,15 @@ class VirtualThreadEventBusTests {
             });
 
             // Strongly-typed subscription: only TurnStartedEvent!
-            bus.subscribe(ExecutionEvent.TurnStartedEvent.class, event -> {
+            bus.subscribe(TurnStartedEvent.class, event -> {
                 startEvents.add(event);
                 typedLatch.countDown();
             });
 
             UUID machineId = UUID.randomUUID();
-            bus.onEvent(new ExecutionEvent.TurnStartedEvent(machineId, "OrderFlow", "KEY-1", Instant.now()));
-            bus.onEvent(new ExecutionEvent.StateEnteredEvent(machineId, "OrderFlow", "VALIDATE", Instant.now()));
-            bus.onEvent(new ExecutionEvent.TurnCompletedEvent(machineId, "OrderFlow", "COMPLETED", "KEY-1", Duration.ofMillis(12), Instant.now()));
+            bus.onEvent(new TurnStartedEvent(machineId, "OrderFlow", "KEY-1", Instant.now()));
+            bus.onEvent(new StateEnteredEvent(machineId, "OrderFlow", "VALIDATE", Instant.now()));
+            bus.onEvent(new TurnCompletedEvent(machineId, "OrderFlow", "COMPLETED", "KEY-1", Duration.ofMillis(12), Instant.now()));
 
             assertTrue(generalLatch.await(3, TimeUnit.SECONDS), "General subscriber should receive all 3 events");
             assertTrue(typedLatch.await(3, TimeUnit.SECONDS), "Typed subscriber should receive only TurnStartedEvent");
@@ -87,8 +90,8 @@ class VirtualThreadEventBusTests {
             });
 
             UUID mId = UUID.randomUUID();
-            bus.onEvent(new ExecutionEvent.TurnStartedEvent(mId, "StreamFlow", "CORR-1", Instant.now()));
-            bus.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "StreamFlow", "STEP_1", Instant.now()));
+            bus.onEvent(new TurnStartedEvent(mId, "StreamFlow", "CORR-1", Instant.now()));
+            bus.onEvent(new StateEnteredEvent(mId, "StreamFlow", "STEP_1", Instant.now()));
 
             assertTrue(streamConsumedLatch.await(3, TimeUnit.SECONDS), "Stream should receive 2 events");
             assertEquals(2, streamedEvents.size());
@@ -109,23 +112,23 @@ class VirtualThreadEventBusTests {
 
             UUID mId = UUID.randomUUID();
             for (int i = 1; i <= 10; i++) {
-                bus.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "HistoryFlow", "STATE_" + i, Instant.now()));
+                bus.onEvent(new StateEnteredEvent(mId, "HistoryFlow", "STATE_" + i, Instant.now()));
             }
 
             List<ExecutionEvent> history = bus.history(10);
             assertEquals(5, history.size(), "History should be bounded by historyCapacity");
 
             // Verify oldest was evicted and newest are present (STATE_6 through STATE_10)
-            ExecutionEvent.StateEnteredEvent firstInHistory = (ExecutionEvent.StateEnteredEvent) history.get(0);
-            ExecutionEvent.StateEnteredEvent lastInHistory = (ExecutionEvent.StateEnteredEvent) history.get(4);
+            StateEnteredEvent firstInHistory = (StateEnteredEvent) history.get(0);
+            StateEnteredEvent lastInHistory = (StateEnteredEvent) history.get(4);
             assertEquals("STATE_6", firstInHistory.stateName());
             assertEquals("STATE_10", lastInHistory.stateName());
 
             // Limit sub-query
             List<ExecutionEvent> lastTwo = bus.history(2);
             assertEquals(2, lastTwo.size());
-            assertEquals("STATE_9", ((ExecutionEvent.StateEnteredEvent) lastTwo.get(0)).stateName());
-            assertEquals("STATE_10", ((ExecutionEvent.StateEnteredEvent) lastTwo.get(1)).stateName());
+            assertEquals("STATE_9", ((StateEnteredEvent) lastTwo.get(0)).stateName());
+            assertEquals("STATE_10", ((StateEnteredEvent) lastTwo.get(1)).stateName());
         }
     }
 
@@ -138,12 +141,12 @@ class VirtualThreadEventBusTests {
             Subscription sub = bus.subscribe(_ -> eventCount.incrementAndGet());
 
             UUID mId = UUID.randomUUID();
-            bus.onEvent(new ExecutionEvent.TurnStartedEvent(mId, "Test", null, Instant.now()));
+            bus.onEvent(new TurnStartedEvent(mId, "Test", null, Instant.now()));
             assertEquals(1, eventCount.get());
 
             sub.unsubscribe();
 
-            bus.onEvent(new ExecutionEvent.TurnStartedEvent(mId, "Test", null, Instant.now()));
+            bus.onEvent(new TurnStartedEvent(mId, "Test", null, Instant.now()));
             assertEquals(1, eventCount.get(), "Listener should not receive events after unsubscribe");
         }
     }
@@ -156,7 +159,7 @@ class VirtualThreadEventBusTests {
         try (EventBus bus = VirtualThreadEventBus.direct()) {
             bus.subscribe(_ -> received.set(true));
 
-            bus.onEvent(new ExecutionEvent.TurnStartedEvent(UUID.randomUUID(), "DirectTest", null, Instant.now()));
+            bus.onEvent(new TurnStartedEvent(UUID.randomUUID(), "DirectTest", null, Instant.now()));
             assertTrue(received.get(), "Direct mode should invoke listener synchronously");
         }
     }
@@ -186,7 +189,7 @@ class VirtualThreadEventBusTests {
                     final int threadId = t;
                     executor.submit(() -> {
                         for (int e = 0; e < eventsPerThread; e++) {
-                            bus.onEvent(new ExecutionEvent.TurnStartedEvent(
+                            bus.onEvent(new TurnStartedEvent(
                                     UUID.randomUUID(),
                                     "StressMachine",
                                     "CORR-" + threadId + "-" + e,
@@ -203,4 +206,3 @@ class VirtualThreadEventBusTests {
         }
     }
 }
-

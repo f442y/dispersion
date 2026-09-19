@@ -1,6 +1,23 @@
 package com.github.f442y.dispersion.orchestration.core.event;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepCompletedEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepStartedEvent;
+import com.github.f442y.dispersion.event.guard.StateVisitLimitExceededEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelBranchCompletedEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelForkStartedEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelJoinCompletedEvent;
+import com.github.f442y.dispersion.event.signal.SignalAwaitedEvent;
+import com.github.f442y.dispersion.event.signal.SignalDeliveredEvent;
+import com.github.f442y.dispersion.event.state.ActionExecutedEvent;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.state.StateExitedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompensatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnFailedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
+import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
 import com.github.f442y.dispersion.fsm.config.StateMachineConfiguration;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.core.AbstractStateMachineCallable;
@@ -103,16 +120,16 @@ class EventLifecycleOrchestrationTests {
 
         // Assert event sequence
         assertFalse(events.isEmpty());
-        assertInstanceOf(ExecutionEvent.TurnStartedEvent.class, events.get(0));
+        assertInstanceOf(TurnStartedEvent.class, events.get(0));
 
-        ExecutionEvent.TurnStartedEvent start = (ExecutionEvent.TurnStartedEvent) events.get(0);
+        TurnStartedEvent start = (TurnStartedEvent) events.get(0);
         assertEquals("SimpleAtomicMachine", start.machineName());
         assertEquals(execId, start.machineId());
 
-        boolean hasStateEntered = events.stream().anyMatch(e -> e instanceof ExecutionEvent.StateEnteredEvent see && see.stateName().equals("START"));
-        boolean hasStateExited = events.stream().anyMatch(e -> e instanceof ExecutionEvent.StateExitedEvent see && see.stateName().equals("START"));
-        boolean hasTransition = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TransitionEvaluatedEvent tee && tee.sourceState().equals("START") && tee.targetState().equals("PROCESS"));
-        boolean hasTurnCompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompletedEvent tce && tce.finalStateName().equals("COMPLETED"));
+        boolean hasStateEntered = events.stream().anyMatch(e -> e instanceof StateEnteredEvent see && see.stateName().equals("START"));
+        boolean hasStateExited = events.stream().anyMatch(e -> e instanceof StateExitedEvent see && see.stateName().equals("START"));
+        boolean hasTransition = events.stream().anyMatch(e -> e instanceof TransitionEvaluatedEvent tee && tee.sourceState().equals("START") && tee.targetState().equals("PROCESS"));
+        boolean hasTurnCompleted = events.stream().anyMatch(e -> e instanceof TurnCompletedEvent tce && tce.finalStateName().equals("COMPLETED"));
 
         assertTrue(hasStateEntered, "Must emit StateEnteredEvent");
         assertTrue(hasStateExited, "Must emit StateExitedEvent");
@@ -170,8 +187,8 @@ class EventLifecycleOrchestrationTests {
             assertTrue(turn1.isSuspended());
             assertEquals(OrchFlowState.WAIT_SIGNAL, turn1.currentStateKey());
 
-            assertTrue(events.stream().anyMatch(e -> e instanceof ExecutionEvent.SignalAwaitedEvent sae && sae.expectedSignal().equals("PaymentSignal")));
-            assertTrue(events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnSuspendedEvent tse && tse.stateName().equals("WAIT_SIGNAL")));
+            assertTrue(events.stream().anyMatch(e -> e instanceof SignalAwaitedEvent sae && sae.expectedSignal().equals("PaymentSignal")));
+            assertTrue(events.stream().anyMatch(e -> e instanceof TurnSuspendedEvent tse && tse.stateName().equals("WAIT_SIGNAL")));
 
             // 2. Resume Turn with CommandEnvelope
             UUID commandId = UUID.randomUUID();
@@ -188,8 +205,8 @@ class EventLifecycleOrchestrationTests {
             assertTrue(turn2.isCompleted());
             assertEquals("PAID:PAY-XYZ->FULFILLED", turn2.output());
 
-            assertTrue(events.stream().anyMatch(e -> e instanceof ExecutionEvent.SignalDeliveredEvent sde && sde.signalName().equals("PaymentSignal")));
-            assertTrue(events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompletedEvent tce && tce.finalStateName().equals("DONE")));
+            assertTrue(events.stream().anyMatch(e -> e instanceof SignalDeliveredEvent sde && sde.signalName().equals("PaymentSignal")));
+            assertTrue(events.stream().anyMatch(e -> e instanceof TurnCompletedEvent tce && tce.finalStateName().equals("DONE")));
 
             // 3. Resume Turn with DUPLICATE CommandEnvelope -> Should trigger CommandDeduplicatedEvent
             events.clear();
@@ -236,9 +253,9 @@ class EventLifecycleOrchestrationTests {
             assertEquals(1, compensatedCount.get());
 
             // Verify TurnCompensatedEvent
-            ExecutionEvent.TurnCompensatedEvent compEvent = events.stream()
-                    .filter(e -> e instanceof ExecutionEvent.TurnCompensatedEvent)
-                    .map(e -> (ExecutionEvent.TurnCompensatedEvent) e)
+            TurnCompensatedEvent compEvent = events.stream()
+                    .filter(e -> e instanceof TurnCompensatedEvent)
+                    .map(e -> (TurnCompensatedEvent) e)
                     .findFirst()
                     .orElse(null);
 
@@ -258,31 +275,31 @@ class EventLifecycleOrchestrationTests {
         Duration dur = Duration.ofMillis(5);
 
         List<ExecutionEvent> testEvents = List.of(
-                new ExecutionEvent.TurnStartedEvent(id, "TestM", "CORR", now),
-                new ExecutionEvent.TurnSuspendedEvent(id, "TestM", "WAIT", "Sig1", "CORR", dur, now),
-                new ExecutionEvent.TurnCompletedEvent(id, "TestM", "DONE", "CORR", dur, now),
-                new ExecutionEvent.TurnCompensatedEvent(id, "TestM", "FAIL", List.of("WAIT"), new RuntimeException(), "CORR", dur, now),
-                new ExecutionEvent.TurnFailedEvent(id, "TestM", "FAIL", new RuntimeException(), "CORR", dur, now),
-                new ExecutionEvent.StateEnteredEvent(id, "TestM", "STATE_A", now),
-                new ExecutionEvent.StateExitedEvent(id, "TestM", "STATE_A", dur, now),
-                new ExecutionEvent.TransitionEvaluatedEvent(id, "TestM", "STATE_A", "STATE_B", now),
-                new ExecutionEvent.SignalAwaitedEvent(id, "TestM", "WAIT", "Sig1", "CORR", now),
-                new ExecutionEvent.SignalDeliveredEvent(id, "TestM", "WAIT", "Sig1", "CORR", now),
+                new TurnStartedEvent(id, "TestM", "CORR", now),
+                new TurnSuspendedEvent(id, "TestM", "WAIT", "Sig1", "CORR", dur, now),
+                new TurnCompletedEvent(id, "TestM", "DONE", "CORR", dur, now),
+                new TurnCompensatedEvent(id, "TestM", "FAIL", List.of("WAIT"), new RuntimeException(), "CORR", dur, now),
+                new TurnFailedEvent(id, "TestM", "FAIL", new RuntimeException(), "CORR", dur, now),
+                new StateEnteredEvent(id, "TestM", "STATE_A", now),
+                new StateExitedEvent(id, "TestM", "STATE_A", dur, now),
+                new TransitionEvaluatedEvent(id, "TestM", "STATE_A", "STATE_B", now),
+                new SignalAwaitedEvent(id, "TestM", "WAIT", "Sig1", "CORR", now),
+                new SignalDeliveredEvent(id, "TestM", "WAIT", "Sig1", "CORR", now),
                 new CommandDeduplicatedEvent(id, "TestM", id, "CORR", now)
         );
 
         for (ExecutionEvent event : testEvents) {
             String description = switch (event) {
-                case ExecutionEvent.TurnStartedEvent tse -> "STARTED: " + tse.machineName();
-                case ExecutionEvent.TurnSuspendedEvent tse -> "SUSPENDED: " + tse.stateName();
-                case ExecutionEvent.TurnCompletedEvent tce -> "COMPLETED: " + tce.finalStateName();
-                case ExecutionEvent.TurnCompensatedEvent tce -> "COMPENSATED: " + tce.failedStateName();
-                case ExecutionEvent.TurnFailedEvent tfe -> "FAILED: " + tfe.failedStateName();
-                case ExecutionEvent.StateEnteredEvent see -> "ENTERED: " + see.stateName();
-                case ExecutionEvent.StateExitedEvent see -> "EXITED: " + see.stateName();
-                case ExecutionEvent.TransitionEvaluatedEvent tee -> "TRANSITION: " + tee.sourceState() + "->" + tee.targetState();
-                case ExecutionEvent.SignalAwaitedEvent sae -> "AWAITING: " + sae.expectedSignal();
-                case ExecutionEvent.SignalDeliveredEvent sde -> "DELIVERED: " + sde.signalName();
+                case TurnStartedEvent tse -> "STARTED: " + tse.machineName();
+                case TurnSuspendedEvent tse -> "SUSPENDED: " + tse.stateName();
+                case TurnCompletedEvent tce -> "COMPLETED: " + tce.finalStateName();
+                case TurnCompensatedEvent tce -> "COMPENSATED: " + tce.failedStateName();
+                case TurnFailedEvent tfe -> "FAILED: " + tfe.failedStateName();
+                case StateEnteredEvent see -> "ENTERED: " + see.stateName();
+                case StateExitedEvent see -> "EXITED: " + see.stateName();
+                case TransitionEvaluatedEvent tee -> "TRANSITION: " + tee.sourceState() + "->" + tee.targetState();
+                case SignalAwaitedEvent sae -> "AWAITING: " + sae.expectedSignal();
+                case SignalDeliveredEvent sde -> "DELIVERED: " + sde.signalName();
                 case CommandDeduplicatedEvent cde -> "DEDUP: " + cde.commandId();
                 default -> "UNKNOWN: " + event.getClass().getSimpleName();
             };
@@ -311,10 +328,10 @@ class EventLifecycleOrchestrationTests {
             assertThrows(Exception.class, () -> executor.dispatchSync(null));
 
             // Must emit TurnFailedEvent and NOT TurnCompensatedEvent
-            boolean hasTurnFailed = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnFailedEvent tfe
+            boolean hasTurnFailed = events.stream().anyMatch(e -> e instanceof TurnFailedEvent tfe
                     && tfe.failedStateName().equals("INIT")
                     && tfe.cause().getMessage().contains("Immediate failure without compensation"));
-            boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompensatedEvent);
+            boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof TurnCompensatedEvent);
 
             assertTrue(hasTurnFailed, "TurnFailedEvent must be emitted for uncompensated failure");
             assertFalse(hasTurnCompensated, "TurnCompensatedEvent must NOT be emitted when no compensation executed");
@@ -341,10 +358,10 @@ class EventLifecycleOrchestrationTests {
 
         assertThrows(Exception.class, () -> AbstractStateMachineCallable.executeDirect(UUID.randomUUID(), machine, null, 1));
 
-        boolean hasTurnFailed = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnFailedEvent tfe
+        boolean hasTurnFailed = events.stream().anyMatch(e -> e instanceof TurnFailedEvent tfe
                 && tfe.failedStateName().equals("START")
                 && tfe.cause().getMessage().contains("Action failed in atomic machine"));
-        boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompensatedEvent);
+        boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof TurnCompensatedEvent);
 
         assertTrue(hasTurnFailed, "Atomic machine failure must emit TurnFailedEvent");
         assertFalse(hasTurnCompensated, "Atomic machine failure must NOT emit TurnCompensatedEvent");
@@ -382,11 +399,11 @@ class EventLifecycleOrchestrationTests {
 
             assertThrows(Exception.class, () -> executor.dispatchSync(null));
 
-            boolean hasCompStarted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.CompensationStepStartedEvent cs
+            boolean hasCompStarted = events.stream().anyMatch(e -> e instanceof CompensationStepStartedEvent cs
                     && cs.stateName().equals("INIT") && !cs.isRouted());
-            boolean hasCompCompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.CompensationStepCompletedEvent cc
+            boolean hasCompCompleted = events.stream().anyMatch(e -> e instanceof CompensationStepCompletedEvent cc
                     && cc.stateName().equals("INIT") && cc.duration() != null);
-            boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof ExecutionEvent.TurnCompensatedEvent tc
+            boolean hasTurnCompensated = events.stream().anyMatch(e -> e instanceof TurnCompensatedEvent tc
                     && tc.compensatedStates().contains("INIT"));
 
             assertTrue(hasCompStarted, "Must emit CompensationStepStartedEvent for INIT state");
@@ -422,13 +439,13 @@ class EventLifecycleOrchestrationTests {
 
             executor.dispatchSync(null);
 
-            boolean hasForkStarted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelForkStartedEvent pf
+            boolean hasForkStarted = events.stream().anyMatch(e -> e instanceof ParallelForkStartedEvent pf
                     && pf.branchNames().containsAll(List.of("BranchA", "BranchB")));
-            boolean hasBranchACompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelBranchCompletedEvent pb
+            boolean hasBranchACompleted = events.stream().anyMatch(e -> e instanceof ParallelBranchCompletedEvent pb
                     && pb.branchName().equals("BranchA"));
-            boolean hasBranchBCompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelBranchCompletedEvent pb
+            boolean hasBranchBCompleted = events.stream().anyMatch(e -> e instanceof ParallelBranchCompletedEvent pb
                     && pb.branchName().equals("BranchB"));
-            boolean hasJoinCompleted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ParallelJoinCompletedEvent pj
+            boolean hasJoinCompleted = events.stream().anyMatch(e -> e instanceof ParallelJoinCompletedEvent pj
                     && pj.totalBranches() == 2);
 
             assertTrue(hasForkStarted, "Must emit ParallelForkStartedEvent");
@@ -460,9 +477,9 @@ class EventLifecycleOrchestrationTests {
 
         AbstractStateMachineCallable.executeDirect(UUID.randomUUID(), machine, null, 0);
 
-        boolean hasActionExecuted = events.stream().anyMatch(e -> e instanceof ExecutionEvent.ActionExecutedEvent ae
+        boolean hasActionExecuted = events.stream().anyMatch(e -> e instanceof ActionExecutedEvent ae
                 && ae.stateName().equals("START"));
-        boolean hasLoopLimitExceeded = events.stream().anyMatch(e -> e instanceof ExecutionEvent.StateVisitLimitExceededEvent sle
+        boolean hasLoopLimitExceeded = events.stream().anyMatch(e -> e instanceof StateVisitLimitExceededEvent sle
                 && sle.stateName().equals("START") && "COMPLETED".equals(sle.fallbackState()));
 
         assertTrue(hasActionExecuted, "Must emit ActionExecutedEvent");

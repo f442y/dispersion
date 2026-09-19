@@ -3,6 +3,9 @@ package com.github.f442y.dispersion.event.dispatcher;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.OverflowPolicy;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -40,16 +43,16 @@ class AsyncExecutionEventDispatcherTests {
             });
 
             UUID machineId = UUID.randomUUID();
-            dispatcher.onEvent(new ExecutionEvent.TurnStartedEvent(machineId, "OrderFlow", "KEY-1", Instant.now()));
-            dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(machineId, "OrderFlow", "VALIDATE", Instant.now()));
-            dispatcher.onEvent(new ExecutionEvent.TurnCompletedEvent(machineId, "OrderFlow", "COMPLETED", "KEY-1", Duration.ofMillis(12), Instant.now()));
+            dispatcher.onEvent(new TurnStartedEvent(machineId, "OrderFlow", "KEY-1", Instant.now()));
+            dispatcher.onEvent(new StateEnteredEvent(machineId, "OrderFlow", "VALIDATE", Instant.now()));
+            dispatcher.onEvent(new TurnCompletedEvent(machineId, "OrderFlow", "COMPLETED", "KEY-1", Duration.ofMillis(12), Instant.now()));
 
             boolean completed = latch.await(3, TimeUnit.SECONDS);
             assertTrue(completed, "Events should be dispatched asynchronously to the listener");
             assertEquals(3, received.size());
-            assertInstanceOf(ExecutionEvent.TurnStartedEvent.class, received.get(0));
-            assertInstanceOf(ExecutionEvent.StateEnteredEvent.class, received.get(1));
-            assertInstanceOf(ExecutionEvent.TurnCompletedEvent.class, received.get(2));
+            assertInstanceOf(TurnStartedEvent.class, received.get(0));
+            assertInstanceOf(StateEnteredEvent.class, received.get(1));
+            assertInstanceOf(TurnCompletedEvent.class, received.get(2));
             assertEquals(3, dispatcher.publishedCount());
             assertEquals(0, dispatcher.droppedCount());
         }
@@ -79,8 +82,8 @@ class AsyncExecutionEventDispatcherTests {
             });
 
             UUID mId = UUID.randomUUID();
-            dispatcher.onEvent(new ExecutionEvent.TurnStartedEvent(mId, "FlowMachine", "CORR-99", Instant.now()));
-            dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "FlowMachine", "STEP_1", Instant.now()));
+            dispatcher.onEvent(new TurnStartedEvent(mId, "FlowMachine", "CORR-99", Instant.now()));
+            dispatcher.onEvent(new StateEnteredEvent(mId, "FlowMachine", "STEP_1", Instant.now()));
 
             boolean receivedInTime = receivedLatch.await(3, TimeUnit.SECONDS);
             assertTrue(receivedInTime, "Stream should receive 2 items");
@@ -111,12 +114,12 @@ class AsyncExecutionEventDispatcherTests {
 
             UUID mId = UUID.randomUUID();
             // Emit first event to engage the worker and pause it in the listener
-            dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "BufferTest", "STATE_0", Instant.now()));
+            dispatcher.onEvent(new StateEnteredEvent(mId, "BufferTest", "STATE_0", Instant.now()));
             assertTrue(firstDeliveredLatch.await(3, TimeUnit.SECONDS), "Worker should pick up first event");
 
             // With worker paused on event 0 and buffer capacity 2, firing 5 events forces buffer overflow
             for (int i = 1; i <= 5; i++) {
-                dispatcher.onEvent(new ExecutionEvent.StateEnteredEvent(mId, "BufferTest", "STATE_" + i, Instant.now()));
+                dispatcher.onEvent(new StateEnteredEvent(mId, "BufferTest", "STATE_" + i, Instant.now()));
             }
 
             assertTrue(dispatcher.droppedCount() > 0, "Events should have been dropped due to buffer capacity overflow");
@@ -145,8 +148,8 @@ class AsyncExecutionEventDispatcherTests {
             });
 
             UUID mId = UUID.randomUUID();
-            dispatcher.onEvent(new ExecutionEvent.TurnStartedEvent(mId, "ResilientMachine", null, Instant.now()));
-            dispatcher.onEvent(new ExecutionEvent.TurnCompletedEvent(mId, "ResilientMachine", "DONE", null, Duration.ZERO, Instant.now()));
+            dispatcher.onEvent(new TurnStartedEvent(mId, "ResilientMachine", null, Instant.now()));
+            dispatcher.onEvent(new TurnCompletedEvent(mId, "ResilientMachine", "DONE", null, Duration.ZERO, Instant.now()));
 
             boolean done = latch.await(3, TimeUnit.SECONDS);
             assertTrue(done, "Healthy listener should still receive events despite faulty listener throwing");

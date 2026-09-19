@@ -47,7 +47,7 @@ graph TD
 
 ## 2. Telemetry Events (`ExecutionEvent`)
 
-Every milestone in a state machine lifecycle emits an immutable, strongly-typed record implementing `ExecutionEvent`. Core state machine lifecycle events are defined directly within `ExecutionEvent.*`, while domain-specific events (such as `CommandDeduplicatedEvent` in `orchestration/api` or `BatchBarrierReachedEvent` in `orchestration/batch`) implement `ExecutionEvent` cleanly from their own modules without cyclic dependencies.
+Every milestone in a state machine lifecycle emits an immutable, strongly-typed record implementing `ExecutionEvent`. Core state machine lifecycle events are defined directly within modular subpackages (`event.turn`, `event.state`, `event.signal`, `event.compensation`, `event.retry`, `event.child`, `event.parallel`, `event.guard`, `event.control`), while domain-specific events (such as `CommandDeduplicatedEvent` in `orchestration/api` or `BatchBarrierReachedEvent` in `orchestration/batch`) implement `ExecutionEvent` cleanly from their own modules without cyclic dependencies.
 
 In Java 25, pattern-matching `switch` expressions with arrow (`->`) syntax allow elegant consumption:
 
@@ -55,6 +55,30 @@ In Java 25, pattern-matching `switch` expressions with arrow (`->`) syntax allow
 package com.example.telemetry;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.child.ChildMachineCompletedEvent;
+import com.github.f442y.dispersion.event.child.ChildMachineSpawnedEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepCompletedEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepFailedEvent;
+import com.github.f442y.dispersion.event.compensation.CompensationStepStartedEvent;
+import com.github.f442y.dispersion.event.control.ExecutionCancelledEvent;
+import com.github.f442y.dispersion.event.guard.CircuitBreakerTrippedEvent;
+import com.github.f442y.dispersion.event.guard.StateVisitLimitExceededEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelBranchCompletedEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelForkStartedEvent;
+import com.github.f442y.dispersion.event.parallel.ParallelJoinCompletedEvent;
+import com.github.f442y.dispersion.event.retry.RetryAttemptedEvent;
+import com.github.f442y.dispersion.event.retry.RetryExhaustedEvent;
+import com.github.f442y.dispersion.event.signal.SignalAwaitedEvent;
+import com.github.f442y.dispersion.event.signal.SignalDeliveredEvent;
+import com.github.f442y.dispersion.event.state.ActionExecutedEvent;
+import com.github.f442y.dispersion.event.state.StateEnteredEvent;
+import com.github.f442y.dispersion.event.state.StateExitedEvent;
+import com.github.f442y.dispersion.event.state.TransitionEvaluatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompensatedEvent;
+import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
+import com.github.f442y.dispersion.event.turn.TurnFailedEvent;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
+import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,99 +88,99 @@ public final class TelemetryLogger {
 
     public void processEvent(ExecutionEvent event) {
         switch (event) {
-            case ExecutionEvent.TurnStartedEvent started ->
+            case TurnStartedEvent started ->
                 log.atInfo()
                    .addKeyValue("machine_id", started.machineId())
                    .addKeyValue("machine_name", started.machineName())
                    .log("Turn execution started");
 
-            case ExecutionEvent.StateEnteredEvent entered ->
+            case StateEnteredEvent entered ->
                 log.atDebug()
                    .addKeyValue("machine_id", entered.machineId())
                    .addKeyValue("state", entered.stateName())
                    .log("Entering state");
 
-            case ExecutionEvent.ActionExecutedEvent action ->
+            case ActionExecutedEvent action ->
                 log.atDebug()
                    .addKeyValue("machine_id", action.machineId())
                    .addKeyValue("state", action.stateName())
                    .addKeyValue("duration_ms", action.duration().toMillis())
                    .log("State action executed successfully");
 
-            case ExecutionEvent.TransitionEvaluatedEvent transition ->
+            case TransitionEvaluatedEvent transition ->
                 log.atDebug()
                    .addKeyValue("machine_id", transition.machineId())
                    .addKeyValue("source", transition.sourceState())
                    .addKeyValue("target", transition.targetState())
                    .log("State transition evaluated");
 
-            case ExecutionEvent.StateExitedEvent exited ->
+            case StateExitedEvent exited ->
                 log.atDebug()
                    .addKeyValue("machine_id", exited.machineId())
                    .addKeyValue("state", exited.stateName())
                    .addKeyValue("duration_ms", exited.duration().toMillis())
                    .log("Exited state");
 
-            case ExecutionEvent.SignalAwaitedEvent awaited ->
+            case SignalAwaitedEvent awaited ->
                 log.atInfo()
                    .addKeyValue("machine_id", awaited.machineId())
                    .addKeyValue("state", awaited.stateName())
                    .addKeyValue("expected_signal", awaited.expectedSignal())
                    .log("Workflow suspended waiting for external signal");
 
-            case ExecutionEvent.SignalDeliveredEvent delivered ->
+            case SignalDeliveredEvent delivered ->
                 log.atInfo()
                    .addKeyValue("machine_id", delivered.machineId())
                    .addKeyValue("signal", delivered.signalName())
                    .log("External signal delivered to workflow");
 
-            case ExecutionEvent.TurnSuspendedEvent suspended ->
+            case TurnSuspendedEvent suspended ->
                 log.atInfo()
                    .addKeyValue("machine_id", suspended.machineId())
                    .addKeyValue("state", suspended.stateName())
                    .log("Turn suspended and state checkpointed");
 
-            case ExecutionEvent.TurnCompensatedEvent compensated ->
+            case TurnCompensatedEvent compensated ->
                 log.atWarn()
                    .addKeyValue("machine_id", compensated.machineId())
                    .addKeyValue("failed_state", compensated.failedStateName())
                    .log("Turn failure triggered LIFO Saga compensation rollback");
 
-            case ExecutionEvent.TurnCompletedEvent completed ->
+            case TurnCompletedEvent completed ->
                 log.atInfo()
                    .addKeyValue("machine_id", completed.machineId())
                    .addKeyValue("duration_ms", completed.duration().toMillis())
                    .log("Turn execution completed successfully");
 
-            case ExecutionEvent.TurnFailedEvent failed ->
+            case TurnFailedEvent failed ->
                 log.atError()
                    .addKeyValue("machine_id", failed.machineId())
                    .addKeyValue("failed_state", failed.failedStateName())
                    .setCause(failed.cause())
                    .log("Turn execution failed");
 
-            case ExecutionEvent.CompensationStepStartedEvent compStarted ->
+            case CompensationStepStartedEvent compStarted ->
                 log.atInfo()
                    .addKeyValue("machine_id", compStarted.machineId())
                    .addKeyValue("state", compStarted.stateName())
                    .addKeyValue("routed", compStarted.isRouted())
                    .log("Executing single state Saga compensation rollback");
 
-            case ExecutionEvent.CompensationStepCompletedEvent compCompleted ->
+            case CompensationStepCompletedEvent compCompleted ->
                 log.atInfo()
                    .addKeyValue("machine_id", compCompleted.machineId())
                    .addKeyValue("state", compCompleted.stateName())
                    .addKeyValue("duration_ms", compCompleted.duration().toMillis())
                    .log("State compensation completed");
 
-            case ExecutionEvent.CompensationStepFailedEvent compFailed ->
+            case CompensationStepFailedEvent compFailed ->
                 log.atError()
                    .addKeyValue("machine_id", compFailed.machineId())
                    .addKeyValue("state", compFailed.stateName())
                    .setCause(compFailed.cause())
                    .log("State compensation failed");
 
-            case ExecutionEvent.RetryAttemptedEvent retry ->
+            case RetryAttemptedEvent retry ->
                 log.atWarn()
                    .addKeyValue("machine_id", retry.machineId())
                    .addKeyValue("state", retry.stateName())
@@ -164,7 +188,7 @@ public final class TelemetryLogger {
                    .addKeyValue("delay_ms", retry.delay().toMillis())
                    .log("Workload action failed; scheduling retry");
 
-            case ExecutionEvent.RetryExhaustedEvent retryExhausted ->
+            case RetryExhaustedEvent retryExhausted ->
                 log.atError()
                    .addKeyValue("machine_id", retryExhausted.machineId())
                    .addKeyValue("state", retryExhausted.stateName())
@@ -172,34 +196,34 @@ public final class TelemetryLogger {
                    .setCause(retryExhausted.finalCause())
                    .log("Workload retries exhausted");
 
-            case ExecutionEvent.ChildMachineSpawnedEvent childSpawned ->
+            case ChildMachineSpawnedEvent childSpawned ->
                 log.atInfo()
                    .addKeyValue("parent_machine_id", childSpawned.machineId())
                    .addKeyValue("child_machine_id", childSpawned.childMachineId())
                    .addKeyValue("child_machine_name", childSpawned.childMachineName())
                    .log("Spawned sub-workflow execution");
 
-            case ExecutionEvent.ChildMachineCompletedEvent childCompleted ->
+            case ChildMachineCompletedEvent childCompleted ->
                 log.atInfo()
                    .addKeyValue("parent_machine_id", childCompleted.machineId())
                    .addKeyValue("child_machine_id", childCompleted.childMachineId())
                    .log("Sub-workflow completed");
 
-            case ExecutionEvent.ParallelForkStartedEvent fork ->
+            case ParallelForkStartedEvent fork ->
                 log.atInfo()
                    .addKeyValue("machine_id", fork.machineId())
                    .addKeyValue("state", fork.stateName())
                    .addKeyValue("branch_count", fork.branchNames().size())
                    .log("Forked concurrent parallel branches on virtual threads");
 
-            case ExecutionEvent.ParallelBranchCompletedEvent branch ->
+            case ParallelBranchCompletedEvent branch ->
                 log.atDebug()
                    .addKeyValue("machine_id", branch.machineId())
                    .addKeyValue("branch", branch.branchName())
                    .addKeyValue("duration_ms", branch.duration().toMillis())
                    .log("Parallel branch finished");
 
-            case ExecutionEvent.ParallelJoinCompletedEvent join ->
+            case ParallelJoinCompletedEvent join ->
                 log.atInfo()
                    .addKeyValue("machine_id", join.machineId())
                    .addKeyValue("state", join.stateName())
@@ -207,20 +231,20 @@ public final class TelemetryLogger {
                    .addKeyValue("duration_ms", join.duration().toMillis())
                    .log("Parallel branches joined and reduced successfully");
 
-            case ExecutionEvent.CircuitBreakerTrippedEvent cb ->
+            case CircuitBreakerTrippedEvent cb ->
                 log.atError()
                    .addKeyValue("machine_id", cb.machineId())
                    .addKeyValue("max_transitions", cb.maxTransitions())
                    .log("Safety circuit breaker tripped");
 
-            case ExecutionEvent.StateVisitLimitExceededEvent loop ->
+            case StateVisitLimitExceededEvent loop ->
                 log.atWarn()
                    .addKeyValue("machine_id", loop.machineId())
                    .addKeyValue("state", loop.stateName())
                    .addKeyValue("fallback", loop.fallbackState())
                    .log("State visit limit exceeded; loop threshold triggered");
 
-            case ExecutionEvent.ExecutionCancelledEvent cancelled ->
+            case ExecutionCancelledEvent cancelled ->
                 log.atWarn()
                    .addKeyValue("machine_id", cancelled.machineId())
                    .addKeyValue("operator", cancelled.operatorId())
@@ -320,6 +344,7 @@ package com.example.event;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.test.CapturingEventListener;
 import com.github.f442y.dispersion.event.test.RecordingEventBus;
+import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -337,7 +362,7 @@ public class EventTestingExampleTests {
         CapturingEventListener listener = new CapturingEventListener();
         bus.subscribe(listener);
 
-        ExecutionEvent event = new ExecutionEvent.TurnStartedEvent(
+        ExecutionEvent event = new TurnStartedEvent(
             UUID.randomUUID(),
             "SampleMachine",
             Instant.now()
