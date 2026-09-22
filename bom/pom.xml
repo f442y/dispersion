@@ -107,10 +107,49 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-binary-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-fory</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-json-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-avaje</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-server-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-server-jakarta</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-server-standalone</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-testkit</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-examples</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
 </project>
-

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>dispersion-serialization-avaje</artifactId>
+    <packaging>jar</packaging>
+    <name>Dispersion :: Serialization Avaje</name>
+    <description>Avaje JSONB compile-time code-generated serializer extension for Dispersion</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-serialization-json-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-event-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-control-plane-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.avaje</groupId>
+            <artifactId>avaje-jsonb</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+        </dependency>
+
+        <!-- Test Dependencies -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.avaje</groupId>
+                            <artifactId>avaje-jsonb-generator</artifactId>
+                            <version>${avaje-jsonb.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

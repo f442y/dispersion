@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class BatchOrchestrationTests {
+final class BatchOrchestrationTests {
 
-    public enum DocumentState implements StateKey {
+    enum DocumentState implements StateKey {
         UPLOAD,
         OCR_EXTRACT,
         AWAIT_HUMAN_REVIEW,
@@ -31,20 +31,24 @@ public class BatchOrchestrationTests {
         COMPLETED
     }
 
-    public static class BatchContext implements StateMachineContext {
-        public String batchId;
+    static final class BatchContext implements StateMachineContext {
+        String batchId;
+
+        BatchContext() {}
     }
 
-    public static class DocumentContext implements StateMachineContext {
-        public String batchId;
-        public String documentId;
-        public boolean ocrCompleted = false;
-        public boolean humanApproved = false;
-        public String reviewerNote;
-        public List<String> itemLog = new ArrayList<>();
+    static final class DocumentContext implements StateMachineContext {
+        String batchId;
+        String documentId;
+        boolean ocrCompleted = false;
+        boolean humanApproved = false;
+        String reviewerNote;
+        List<String> itemLog = new ArrayList<>();
+
+        DocumentContext() {}
     }
 
-    public record ApproveDocumentCommand(
+    record ApproveDocumentCommand(
             String batchKey,
             String documentId,
             String note
@@ -73,7 +77,7 @@ public class BatchOrchestrationTests {
      * while Item 2 stays suspended waiting for its signal.
      */
     @Test
-    public void testIndependentStreamingAndItemizedSignalProgression() throws Exception {
+    void testIndependentStreamingAndItemizedSignalProgression() throws Exception {
         BatchOrchestrationExecutor<BatchContext, DocumentContext, DocumentState, String> executor =
                 BatchOrchestrationBuilder.<BatchContext, DocumentContext, DocumentState, String>create("DocumentBatchJob", DocumentState.class)
                 .batchContext(BatchContext::new)
@@ -158,7 +162,7 @@ public class BatchOrchestrationTests {
     }
 
     @Test
-    public void testSingularItemAndCommandExecution() throws Exception {
+    void testSingularItemAndCommandExecution() throws Exception {
         try (BatchOrchestrationExecutor<BatchContext, DocumentContext, DocumentState, String> executor = createSingularWorkflow()) {
             BatchContext batchCtx = new BatchContext();
             batchCtx.batchId = "SOLO-1";
@@ -186,7 +190,7 @@ public class BatchOrchestrationTests {
     }
 
     @Test
-    public void testBatchSignalReceiverRouting() throws Exception {
+    void testBatchSignalReceiverRouting() throws Exception {
         try (BatchOrchestrationExecutor<BatchContext, DocumentContext, DocumentState, String> executor = createSingularWorkflow()) {
             BatchContext batchCtx = new BatchContext();
             batchCtx.batchId = "SOLO-RCV";
@@ -212,13 +216,12 @@ public class BatchOrchestrationTests {
 
             Object rawResult = receiver.onMessage(message).get();
             assertInstanceOf(BatchTurnResult.class, rawResult);
-            @SuppressWarnings("unchecked")
-            BatchTurnResult<BatchContext, DocumentContext, DocumentState, String> result =
-                    (BatchTurnResult<BatchContext, DocumentContext, DocumentState, String>) rawResult;
+            BatchTurnResult<?, ?, ?, ?> result = (BatchTurnResult<?, ?, ?, ?>) rawResult;
 
             assertTrue(result.isCompleted());
-            DocumentContext rcvDoc = result.itemContexts().get("DOC-RCV");
-            assertNotNull(rcvDoc);
+            Object rcvDocObj = result.itemContexts().get("DOC-RCV");
+            assertInstanceOf(DocumentContext.class, rcvDocObj);
+            DocumentContext rcvDoc = (DocumentContext) rcvDocObj;
             assertTrue(rcvDoc.humanApproved);
             assertEquals("Approved via BatchSignalReceiver", rcvDoc.reviewerNote);
         }

@@ -10,8 +10,9 @@
     <packaging>pom</packaging>
 
     <name>Dispersion :: Parent</name>
-    <description>Dispersion - High-Performance Finite State Machine and Saga Orchestration Engine for Java Virtual Threads</description>
+    <description>Ultra-high throughput, event-driven deterministic state machine and distributed orchestration framework</description>
     <url>https://github.com/f442y/dispersion</url>
+    <inceptionYear>2026</inceptionYear>
 
     <licenses>
         <license>
@@ -24,7 +25,8 @@
     <developers>
         <developer>
             <id>f442y</id>
-            <name>Faizaan Ahmed</name>
+            <name>Faizan</name>
+            <url>https://github.com/f442y</url>
         </developer>
     </developers>
 
@@ -59,6 +61,13 @@
         <module>routing/api</module>
         <module>routing/core</module>
         <module>routing/test</module>
+        <module>serialization/binary/api</module>
+        <module>serialization/binary/fory</module>
+        <module>serialization/json/api</module>
+        <module>serialization/json/avaje</module>
+        <module>server/api</module>
+        <module>server/jakarta</module>
+        <module>server/standalone</module>
         <module>testkit</module>
         <module>examples</module>
     </modules>
@@ -82,6 +91,10 @@
         <jspecify.version>1.0.0</jspecify.version>
         <slf4j.version>2.0.17</slf4j.version>
         <logback.version>1.5.17</logback.version>
+        <avaje-jsonb.version>3.14</avaje-jsonb.version>
+        <apache-fory.version>1.7.3</apache-fory.version>
+        <jakarta-ws-rs.version>3.1.0</jakarta-ws-rs.version>
+        <helidon.version>4.1.6</helidon.version>
         <junit-jupiter.version>5.12.0</junit-jupiter.version>
         <assertj.version>3.27.3</assertj.version>
 
@@ -197,6 +210,53 @@
                 <artifactId>dispersion-examples</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-binary-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-fory</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-json-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-serialization-avaje</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-server-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-server-jakarta</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-server-standalone</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Helidon WebServer (Standalone Runner) -->
+            <dependency>
+                <groupId>io.helidon.webserver</groupId>
+                <artifactId>helidon-webserver</artifactId>
+                <version>${helidon.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.helidon.webserver.observe</groupId>
+                <artifactId>helidon-webserver-observe</artifactId>
+                <version>${helidon.version}</version>
+            </dependency>
 
             <!-- Annotations -->
             <dependency>
@@ -217,101 +277,161 @@
                 <version>${logback.version}</version>
             </dependency>
 
-            <!-- JUnit 5 Bill of Materials (BOM) -->
+            <!-- Serialization -->
             <dependency>
-                <groupId>org.junit</groupId>
-                <artifactId>junit-bom</artifactId>
-                <version>${junit-jupiter.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
+                <groupId>io.avaje</groupId>
+                <artifactId>avaje-jsonb</artifactId>
+                <version>${avaje-jsonb.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.fory</groupId>
+                <artifactId>fory-core</artifactId>
+                <version>${apache-fory.version}</version>
             </dependency>
 
-            <!-- AssertJ Fluent Assertions -->
+            <!-- Jakarta REST (Compile-time / Optional) -->
+            <dependency>
+                <groupId>jakarta.ws.rs</groupId>
+                <artifactId>jakarta.ws.rs-api</artifactId>
+                <version>${jakarta-ws-rs.version}</version>
+            </dependency>
+
+            <!-- Testing -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit-jupiter.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit-jupiter.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit-jupiter.version}</version>
+                <scope>test</scope>
+            </dependency>
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
+                <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
-
-    <dependencies>
-        <!-- Universal Test Dependencies (inherited by all reactor modules) -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
 
     <build>
         <pluginManagement>
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-clean-plugin</artifactId>
-                    <version>${maven-clean-plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-resources-plugin</artifactId>
-                    <version>${maven-resources-plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${maven-compiler-plugin.version}</version>
                     <configuration>
-                        <source>${java.version}</source>
-                        <target>${java.version}</target>
-                        <release>${java.version}</release>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                        <release>${maven.compiler.release}</release>
                         <parameters>true</parameters>
+                        <compilerArgs>
+                            <arg>-proc:full</arg>
+                            <arg>-parameters</arg>
+                            <arg>-Xlint:all</arg>
+                            <arg>-Xlint:-processing</arg>
+                        </compilerArgs>
                     </configuration>
                 </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-jar-plugin</artifactId>
-                    <version>${maven-jar-plugin.version}</version>
-                    <configuration>
-                        <archive>
-                            <manifest>
-                                <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                                <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                            </manifest>
-                        </archive>
-                    </configuration>
-                </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven-surefire-plugin.version}</version>
                     <configuration>
                         <excludedGroups>${test.excludedGroups}</excludedGroups>
+                        <systemPropertyVariables>
+                            <file.encoding>${project.build.sourceEncoding}</file.encoding>
+                        </systemPropertyVariables>
+                        <argLine>
+                            -XX:+EnableDynamicAgentLoading
+                            -Dfile.encoding=UTF-8
+                        </argLine>
                     </configuration>
                 </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar-plugin.version}</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>${maven-clean-plugin.version}</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven-resources-plugin.version}</version>
+                </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-install-plugin</artifactId>
                     <version>${maven-install-plugin.version}</version>
                 </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-deploy-plugin</artifactId>
                     <version>${maven-deploy-plugin.version}</version>
                 </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven-source-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <id>attach-sources</id>
+                            <goals>
+                                <goal>jar-no-fork</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>${maven-javadoc-plugin.version}</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                        <doclint>none</doclint>
+                        <failOnError>false</failOnError>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>attach-javadocs</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>flatten-maven-plugin</artifactId>
                     <version>${flatten-maven-plugin.version}</version>
                     <configuration>
-                        <skip>${flatten.skip}</skip>
                         <updatePomFile>true</updatePomFile>
                         <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                        <skip>${flatten.skip}</skip>
                     </configuration>
                     <executions>
                         <execution>
@@ -330,44 +450,13 @@
                         </execution>
                     </executions>
                 </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-source-plugin</artifactId>
-                    <version>${maven-source-plugin.version}</version>
-                    <executions>
-                        <execution>
-                            <id>attach-sources</id>
-                            <goals>
-                                <goal>jar-no-fork</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-javadoc-plugin</artifactId>
-                    <version>${maven-javadoc-plugin.version}</version>
-                    <configuration>
-                        <doclint>none</doclint>
-                        <quiet>true</quiet>
-                        <release>${java.version}</release>
-                    </configuration>
-                </plugin>
             </plugins>
         </pluginManagement>
 
         <plugins>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-            </plugin>
-            <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
         </plugins>
     </build>
