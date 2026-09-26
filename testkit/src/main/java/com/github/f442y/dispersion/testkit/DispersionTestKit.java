@@ -55,16 +55,6 @@ public final class DispersionTestKit {
     }
 
     @NonNull
-    public static FakeInspectableMachine fakeMachine(@NonNull String name) {
-        return fakeInspectableMachine(name);
-    }
-
-    @NonNull
-    public static FakeInspectableMachine fakeMachine(@NonNull String name, @NonNull MachineType type) {
-        return fakeInspectableMachine(name, type);
-    }
-
-    @NonNull
     public static TestStateContext testContext() {
         return new TestStateContext();
     }

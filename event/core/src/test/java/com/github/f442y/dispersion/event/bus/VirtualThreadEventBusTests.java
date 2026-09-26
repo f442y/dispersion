@@ -3,6 +3,7 @@ package com.github.f442y.dispersion.event.bus;
 import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.OverflowPolicy;
 import com.github.f442y.dispersion.event.Subscription;
 import com.github.f442y.dispersion.event.state.StateEnteredEvent;
 import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
@@ -99,6 +100,69 @@ class VirtualThreadEventBusTests {
             stream.close();
             consumerThread.join(Duration.ofSeconds(1).toMillis());
             assertTrue(stream.isClosed());
+        }
+    }
+
+    @Test
+    @DisplayName("Should drop oldest events when buffer overflows under DROP_OLDEST policy")
+    void testOverflowDropOldest() throws Exception {
+        CountDownLatch pauseWorkerLatch = new CountDownLatch(1);
+        CountDownLatch firstDeliveredLatch = new CountDownLatch(1);
+
+        try (VirtualThreadEventBus bus = VirtualThreadEventBus.builder()
+                .bufferCapacity(2)
+                .overflowPolicy(OverflowPolicy.DROP_OLDEST)
+                .build()) {
+
+            bus.subscribe(_ -> {
+                firstDeliveredLatch.countDown();
+                try {
+                    pauseWorkerLatch.await(3, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+
+            UUID mId = UUID.randomUUID();
+            bus.onEvent(new StateEnteredEvent(mId, "BufferTest", "STATE_0", Instant.now()));
+            assertTrue(firstDeliveredLatch.await(3, TimeUnit.SECONDS), "Worker should pick up first event");
+
+            for (int i = 1; i <= 5; i++) {
+                bus.onEvent(new StateEnteredEvent(mId, "BufferTest", "STATE_" + i, Instant.now()));
+            }
+
+            assertTrue(bus.metrics().droppedCount() > 0, "Events should have been dropped due to buffer capacity overflow");
+            assertTrue(bus.metrics().publishedCount() > 0);
+
+            pauseWorkerLatch.countDown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should gracefully handle listener exceptions without stopping dispatcher")
+    void testListenerExceptionResilience() throws Exception {
+        CountDownLatch latch = new CountDownLatch(2);
+        AtomicBoolean secondListenerFired = new AtomicBoolean(false);
+
+        try (VirtualThreadEventBus bus = VirtualThreadEventBus.create()) {
+            // Faulty listener
+            bus.subscribe(_ -> {
+                throw new RuntimeException("Faulty listener intentional error");
+            });
+
+            // Healthy listener
+            bus.subscribe(_ -> {
+                secondListenerFired.set(true);
+                latch.countDown();
+            });
+
+            UUID mId = UUID.randomUUID();
+            bus.onEvent(new TurnStartedEvent(mId, "ResilientMachine", null, Instant.now()));
+            bus.onEvent(new TurnCompletedEvent(mId, "ResilientMachine", "DONE", null, Duration.ZERO, Instant.now()));
+
+            boolean done = latch.await(3, TimeUnit.SECONDS);
+            assertTrue(done, "Healthy listener should still receive events despite faulty listener throwing");
+            assertTrue(secondListenerFired.get());
         }
     }
 

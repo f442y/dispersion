@@ -19,9 +19,8 @@ graph TD
 
     subgraph Core["dispersion-event-core (Engine)"]
         VTEB["VirtualThreadEventBus (Lock-Free Ring Buffer)"]
-        AEED["AsyncExecutionEventDispatcher"]
         VTEB --> EB
-        AEED --> EEL
+        VTEB -.-> EEL
     end
 
     subgraph Test["dispersion-event-test (Test Doubles)"]

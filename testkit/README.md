@@ -81,7 +81,7 @@ SimulatedNetworkTransport transport = DispersionTestKit.simulatedNetworkTranspor
 FakeWorkloadEndpoint<String, String> endpoint = DispersionTestKit.fakeWorkloadEndpoint("echo-ep", in -> "ECHO:" + in);
 
 // 5. Control Plane Testing
-FakeInspectableMachine machine = DispersionTestKit.fakeMachine("MockEngine", MachineType.ORCHESTRATION);
+FakeInspectableMachine machine = DispersionTestKit.fakeInspectableMachine("MockEngine", MachineType.ORCHESTRATION);
 ```
 
 ---

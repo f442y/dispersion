@@ -23,7 +23,8 @@
   <a href="#-60-second-quickstarts"><b>Quickstarts</b></a> •
   <a href="#-encompassing-modules"><b>Subsystems</b></a> •
   <a href="#-performance-benchmark-comparison"><b>Benchmarks</b></a> •
-  <a href="#-architectural-guides"><b>Deep Dives</b></a>
+  <a href="#-architectural-guides"><b>Deep Dives</b></a> •
+  <a href="ROADMAP.md"><b>Roadmap</b></a>
 </p>
 
 </div>
@@ -387,6 +388,7 @@ For comprehensive technical deep dives into engine internals:
 * ⚡ [**Virtual Threads & Performance Guide**](docs/virtual-threads-and-performance.md) — Loom mechanics, carrier thread unmounting, zero-pinning guarantees, and JVM escape analysis.
 * 🔄 [**Saga Orchestration & Batch Processing**](docs/saga-orchestration-and-batching.md) — Distributed saga theory, checkpoint storage, durable signal rehydration, and batch barrier policies.
 * 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — Telemetry events, $O(1)$ dual-pool memory topology, and React UI integration patterns.
+* 🗺️ [**Master Engineering Roadmap & Execution Plan**](ROADMAP.md) \u2014 Phased milestones, system capabilities, and Phase 3 Control Panel Web UI plan.
 
 ---
 

@@ -7,7 +7,7 @@ import org.jspecify.annotations.NonNull;
  * across state machine executions.
  *
  * <p>Implementations can process events synchronously or delegate to an asynchronous
- * dispatcher such as {@code AsyncExecutionEventDispatcher} to isolate the virtual thread
+ * event bus such as {@code VirtualThreadEventBus} to isolate the virtual thread
  * hot-path from external telemetry or storage latency.</p>
  */
 @FunctionalInterface
