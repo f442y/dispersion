@@ -1,5 +1,5 @@
 module com.github.f442y.dispersion.routing.api {
-    requires static org.jspecify;
+    requires static transitive org.jspecify;
 
     exports com.github.f442y.dispersion.routing;
     exports com.github.f442y.dispersion.routing.endpoint;

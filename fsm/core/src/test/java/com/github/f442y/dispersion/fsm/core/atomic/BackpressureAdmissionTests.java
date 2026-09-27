@@ -19,21 +19,21 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class BackpressureAdmissionTests {
+class BackpressureAdmissionTests {
 
-    public enum SimpleState implements StateKey {
+    enum SimpleState implements StateKey {
         RUN, DONE
     }
 
-    public static class SimpleContext implements StateMachineContext {
-        public int value = 0;
+    static class SimpleContext implements StateMachineContext {
+        int value = 0;
     }
 
     /**
      * Tests that when buffer permits are exhausted with REJECT_IMMEDIATELY, dispatch throws BackpressureException.
      */
     @Test
-    public void testAdmissionControllerPermitExhaustionThrowsBackpressure() {
+    void testAdmissionControllerPermitExhaustionThrowsBackpressure() {
         CountDownLatch blockLatch = new CountDownLatch(1);
 
         StateMachineConfiguration<SimpleContext, SimpleState, Void, String> stateMachine =
@@ -75,7 +75,7 @@ public class BackpressureAdmissionTests {
      * Tests that timeout permit acquisition fails with BackpressureException when permit is not released in time.
      */
     @Test
-    public void testAdmissionTimeoutThrowsBackpressure() throws Exception {
+    void testAdmissionTimeoutThrowsBackpressure() throws Exception {
         CountDownLatch startedLatch = new CountDownLatch(1);
         CountDownLatch blockLatch = new CountDownLatch(1);
 
@@ -120,7 +120,7 @@ public class BackpressureAdmissionTests {
      * blocking the calling thread, parking permit acquisition on the dedicated Virtual Thread instead.
      */
     @Test
-    public void testDispatchAsyncWithBlockStrategyDoesNotBlockCallingThread() throws Exception {
+    void testDispatchAsyncWithBlockStrategyDoesNotBlockCallingThread() throws Exception {
         CountDownLatch task1RunningLatch = new CountDownLatch(1);
         CountDownLatch task1BlockLatch = new CountDownLatch(1);
 
@@ -176,7 +176,7 @@ public class BackpressureAdmissionTests {
      * and the StateMachineFuture completes exceptionally if the timeout expires while waiting on the virtual thread.
      */
     @Test
-    public void testDispatchAsyncWithWaitWithTimeoutFailsFutureWhenPermitTimesOut() throws Exception {
+    void testDispatchAsyncWithWaitWithTimeoutFailsFutureWhenPermitTimesOut() throws Exception {
         CountDownLatch task1RunningLatch = new CountDownLatch(1);
         CountDownLatch task1BlockLatch = new CountDownLatch(1);
 

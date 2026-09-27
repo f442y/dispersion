@@ -1,10 +1,10 @@
 module com.github.f442y.dispersion.orchestration.batch {
-    requires com.github.f442y.dispersion.event.api;
-    requires com.github.f442y.dispersion.fsm.api;
-    requires com.github.f442y.dispersion.control.api;
-    requires com.github.f442y.dispersion.orchestration.api;
+    requires transitive com.github.f442y.dispersion.event.api;
+    requires transitive com.github.f442y.dispersion.fsm.api;
+    requires transitive com.github.f442y.dispersion.control.api;
+    requires transitive com.github.f442y.dispersion.orchestration.api;
     requires org.slf4j;
-    requires org.jspecify;
+    requires static transitive org.jspecify;
 
     exports com.github.f442y.dispersion.orchestration.batch;
 }

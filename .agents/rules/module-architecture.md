@@ -17,7 +17,7 @@ Dispersion enforces hexagonal multi-module boundaries with zero inter-engine cou
   * Submodules depend on `<domain>-api` and must form a strict DAG (no circular dependencies). Core engines integrate with submodules via SPIs.
 * **Permissible Extension Modules:**
   * `<domain>-adapter-<vendor>`: External infrastructure adapters (e.g. Kafka, JDBC). Depends on `<domain>-api` + vendor SDK. **Never on `*-core`**.
-  * `<domain>-tck`: Contract test suites. Depends on `<domain>-api` + JUnit/AssertJ. Consumed by adapters via `<scope>test</scope>`.
+  * `<domain>-tck`: Contract test suites. Depends on `<domain>-api` + JUnit/AssertJ. Consumed by adapters via `<scope>test</scope>``.
   * `<domain>-benchmarks`: JMH performance harnesses. Depends on `<domain>-core` + JMH.
   * `*-starter`: Framework auto-configurations (Spring Boot, Quarkus).
 
@@ -33,6 +33,8 @@ Dispersion enforces hexagonal multi-module boundaries with zero inter-engine cou
 * **Coordinates:** Package structure strictly mirrors module coordinates: `com.github.f442y.dispersion.<domain>.<module_or_feature>.*`.
 * **Zero Cross-Core Imports:** Production code in `*-api`, `*-test`, or external `*-core` must **never** import classes from `*.core.*`.
 * **Package-Private by Default:** All engine internals, concrete state representations, and helpers must be package-private (`default`). Only public factories, builders, or SPI implementations satisfying `*-api` contracts are `public`.
+* **Modular Test Encapsulation:** Test suites and internal fixtures residing in exported packages must be package-private (`default`) to avoid leaking into the JPMS exported API surface.
+* **JPMS Modular Exports & JSpecify:** In `module-info.java`, dependencies whose types or annotations appear in exported public signatures must be declared `requires transitive` (e.g. `requires static transitive org.jspecify;` for nullness annotations, and `requires transitive <module>.api;` for contract interfaces/classes).
 
 ### 4. System Governance
 * **Control Plane Inversion:** `control-core` has zero compile-time dependencies on engine runtimes; engines adapt via `InspectableMachine` SPI.

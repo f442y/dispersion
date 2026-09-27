@@ -19,9 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class CommandPatternOrchestrationTests {
+class CommandPatternOrchestrationTests {
 
-    public enum EcomState implements StateKey {
+    enum EcomState implements StateKey {
         VALIDATE,
         RESERVE_INVENTORY,
         AWAIT_PAYMENT_COMMAND,
@@ -30,16 +30,16 @@ public class CommandPatternOrchestrationTests {
         FAILED
     }
 
-    public static class EcomContext implements StateMachineContext {
-        public String orderId;
-        public int amount;
+    static class EcomContext implements StateMachineContext {
+        String orderId;
+        int amount;
         public String transactionId;
         public boolean inventoryReserved = false;
         public boolean orderFulfilled = false;
         public List<String> executionLog = new ArrayList<>();
     }
 
-    public record ConfirmPaymentCommand(
+    record ConfirmPaymentCommand(
             String correlationKey,
             String transactionId,
             int amount
@@ -51,7 +51,7 @@ public class CommandPatternOrchestrationTests {
         }
     }
 
-    public record ReserveInventorySagaCommand(
+    record ReserveInventorySagaCommand(
             String sku,
             int quantity
     ) implements SagaCommand<EcomContext> {
@@ -76,7 +76,7 @@ public class CommandPatternOrchestrationTests {
      * Tests typed SignalCommand dispatching and reversible SagaCommand integration.
      */
     @Test
-    public void testTypedSignalCommandAndSagaCommand() throws Exception {
+    void testTypedSignalCommandAndSagaCommand() throws Exception {
         InMemoryCheckpointStore<EcomContext, EcomState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<EcomContext, EcomState, EcomContext, String> executor =
@@ -154,7 +154,7 @@ public class CommandPatternOrchestrationTests {
      * Tests idempotent delivery via CommandEnvelope: Duplicate deliveries with the same commandId are deduplicated.
      */
     @Test
-    public void testIdempotentCommandEnvelopeDeduplication() throws Exception {
+    void testIdempotentCommandEnvelopeDeduplication() throws Exception {
         InMemoryCheckpointStore<EcomContext, EcomState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<EcomContext, EcomState, EcomContext, String> executor =

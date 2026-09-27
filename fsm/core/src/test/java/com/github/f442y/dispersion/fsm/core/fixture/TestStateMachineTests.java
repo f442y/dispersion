@@ -14,12 +14,12 @@ import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class TestStateMachineTests {
+class TestStateMachineTests {
     private static final Logger log = LoggerFactory.getLogger(TestStateMachineTests.class);
     private static TestStateMachineExecutor testStateMachineExecutor;
 
     @BeforeAll
-    public static void before() {
+    static void before() {
         testStateMachineExecutor = new TestStateMachineExecutor();
     }
 
@@ -28,7 +28,7 @@ public class TestStateMachineTests {
      */
     @Test
     @Tag("LongRunningTests")
-    public void testNoSpringMultiVT() throws InterruptedException {
+    void testNoSpringMultiVT() throws InterruptedException {
         int numOfSimultaneousCallingThreads = 2_000;
         int numOfSequentialCallsPerThread = 1_000;
         try (ExecutorService executorService = Executors.newThreadPerTaskExecutor(Thread
@@ -64,7 +64,7 @@ public class TestStateMachineTests {
      */
     @Test
     @Tag("LongRunningTests")
-    public void testNoSpringMultiVTLatched() throws InterruptedException {
+    void testNoSpringMultiVTLatched() throws InterruptedException {
         int numOfSequentialCalls = 2_000_000;
         CountDownLatch latch = new CountDownLatch(numOfSequentialCalls);
         Thread.startVirtualThread(() -> {
@@ -84,7 +84,7 @@ public class TestStateMachineTests {
      */
     @Test
     @Tag("LongRunningTests")
-    public void testNoSpringSingleVT() throws InterruptedException {
+    void testNoSpringSingleVT() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
         Thread.startVirtualThread(() -> {
             try {

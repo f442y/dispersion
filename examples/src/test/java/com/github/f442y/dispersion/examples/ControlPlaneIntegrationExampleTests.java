@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and register into {@link DefaultControlPlane} with full telemetry and signal routing.
  */
 @DisplayName("Control Plane End-to-End Integration Tests")
-public class ControlPlaneIntegrationExampleTests {
+class ControlPlaneIntegrationExampleTests {
 
     private DefaultControlPlane controlPlane;
 
@@ -62,12 +62,12 @@ public class ControlPlaneIntegrationExampleTests {
     // 1. Atomic State Machine Integration
     // =========================================================================
 
-    public enum AtomicStep implements StateKey {
+    enum AtomicStep implements StateKey {
         INIT, PROCESS, FINISHED
     }
 
-    public static class SimpleContext implements StateMachineContext {
-        public int value = 0;
+    static class SimpleContext implements StateMachineContext {
+        int value = 0;
     }
 
     @Test
@@ -127,11 +127,11 @@ public class ControlPlaneIntegrationExampleTests {
     // 2. Orchestration State Machine Integration (Signal Delivery & Checkpoints)
     // =========================================================================
 
-    public enum ApprovalState implements StateKey {
+    enum ApprovalState implements StateKey {
         START, PENDING_REVIEW, APPROVED
     }
 
-    public record ReviewSignal(@NonNull String correlationKey, @NonNull String reviewer) implements SignalCommand {
+    record ReviewSignal(@NonNull String correlationKey, @NonNull String reviewer) implements SignalCommand {
         @Override
         @NonNull
         public String signalName() {
@@ -139,9 +139,9 @@ public class ControlPlaneIntegrationExampleTests {
         }
     }
 
-    public static class ApprovalContext implements StateMachineContext {
-        public String docId = "DOC-100";
-        public String reviewer;
+    static class ApprovalContext implements StateMachineContext {
+        String docId = "DOC-100";
+        String reviewer;
     }
 
     @Test
@@ -222,19 +222,19 @@ public class ControlPlaneIntegrationExampleTests {
     // 3. Batch Orchestration State Machine Integration
     // =========================================================================
 
-    public enum BatchStep implements StateKey {
+    enum BatchStep implements StateKey {
         IMPORT, RUN_CHECKS, AWAIT_TRIGGER, COMPLETE
     }
 
-    public static class BatchCtx implements StateMachineContext {
-        public String batchId = "BATCH-ALPHA";
+    static class BatchCtx implements StateMachineContext {
+        String batchId = "BATCH-ALPHA";
     }
 
-    public static class ItemCtx implements StateMachineContext {
-        public String itemId;
-        public String status = "INIT";
-        public ItemCtx() {}
-        public ItemCtx(String itemId) { this.itemId = itemId; }
+    static class ItemCtx implements StateMachineContext {
+        String itemId;
+        String status = "INIT";
+        ItemCtx() {}
+        ItemCtx(String itemId) { this.itemId = itemId; }
     }
 
     @Test

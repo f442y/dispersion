@@ -13,6 +13,7 @@ Use this skill to audit Java files, recent changes, or git diffs against the cod
 - [ ] **Typing & Generics:** No `var`; generics must use full-word `SCREAMING_SNAKE_CASE` (e.g. `<STATE_KEY>`, never `<T>`).
 - [ ] **Warnings & Exceptions:** Zero `@SuppressWarnings` or suppression comments; catch specific checked/declared exceptions (never `Exception` or `Throwable`).
 - [ ] **Structured Logging & Idioms:** SLF4J fluent logging with `.addKeyValue("key", val)` and `.setCause(ex)`; prefer immutable `record`s and arrow `switch` expressions.
+- [ ] **Test Encapsulation:** Test classes, test methods (`@Test`), lifecycle hooks, and fixture types are package-private (no `public` modifier) to prevent JPMS export leakage.
 
 ## Automated Audit Commands (PowerShell)
 
@@ -33,4 +34,7 @@ Get-ChildItem -Recurse -Filter "*.java" | Where-Object { $_.FullName -notmatch "
 
 # 5. Check for @SuppressWarnings annotations
 Get-ChildItem -Recurse -Filter "*.java" | Where-Object { $_.FullName -notmatch "\\target\\" } | Select-String "@SuppressWarnings"
+
+# 6. Check for public test classes and methods
+Get-ChildItem -Path "*\src\test\java" -Recurse -Include "*Test.java","*Tests.java" -ErrorAction SilentlyContinue | Select-String "(public\s+class\s+\w+Test|public\s+void\s+test)"
 ```

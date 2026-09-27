@@ -26,3 +26,7 @@ trigger: always_on
   ```
   Use `.setCause(throwable)` when logging exceptions.
 * **Modern Idioms:** Prefer `record`s for immutable data/events, pattern-matching switch expressions with arrow (`->`) syntax without `break`, and immutable collections (`List.of()`, `Set.of()`).
+
+### 5. Testing & Compiler Conventions
+* **Package-Private Tests:** Test classes, `@Test` methods, lifecycle callbacks (`@BeforeEach`, `@AfterEach`), and inner fixture types must be package-private (`default`). Never declare them `public`. In modular Java (JPMS), public test classes in exported packages pollute the exported API surface and cause `in module is not exported` warnings.
+* **Compiler & Build Hygiene:** Builds enforce `-proc:full`, `-parameters`, `-Xlint:all`, `-Xdiags:verbose`, and debug symbols `lines,vars,source`. Test compilation specifically suppresses `-Xlint:-exports` and `-Xlint:-transitive` for classpath-loaded test libraries.

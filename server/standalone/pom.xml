@@ -72,6 +72,11 @@
                         <id>default-testCompile</id>
                         <configuration>
                             <compilerArgs>
+                                <arg>-proc:full</arg>
+                                <arg>-Xlint:all</arg>
+                                <arg>-Xlint:-processing</arg>
+                                <arg>-Xlint:-exports</arg>
+                                <arg>-Xdiags:verbose</arg>
                                 <arg>--add-modules</arg>
                                 <arg>java.net.http</arg>
                                 <arg>--add-reads</arg>
@@ -86,6 +91,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>
+                        @{argLine}
                         --add-modules java.net.http
                         --add-reads com.github.f442y.dispersion.server.standalone=java.net.http,com.github.f442y.dispersion.serialization.avaje
                     </argLine>

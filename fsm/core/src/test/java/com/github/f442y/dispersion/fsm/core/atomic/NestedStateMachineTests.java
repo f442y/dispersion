@@ -12,35 +12,35 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class NestedStateMachineTests {
+class NestedStateMachineTests {
 
     // Parent States & Context
-    public enum ParentState implements StateKey {
+    enum ParentState implements StateKey {
         VALIDATE, EXECUTE_CHILD, FINALIZE, DONE
     }
 
-    public static class ParentContext implements StateMachineContext {
-        public String orderId;
-        public int amount;
-        public String paymentTxId;
-        public List<String> logs = new ArrayList<>();
+    static class ParentContext implements StateMachineContext {
+        String orderId;
+        int amount;
+        String paymentTxId;
+        List<String> logs = new ArrayList<>();
     }
 
     // Child States & Context
-    public enum ChildState implements StateKey {
+    enum ChildState implements StateKey {
         AUTH, CAPTURE, COMPLETED
     }
 
-    public static class ChildContext implements StateMachineContext {
-        public String txId;
-        public boolean authorized;
+    static class ChildContext implements StateMachineContext {
+        String txId;
+        boolean authorized;
     }
 
-    public record PaymentRequest(String orderId, int amount) {}
-    public record PaymentResponse(String txId, boolean success) {}
+    record PaymentRequest(String orderId, int amount) {}
+    record PaymentResponse(String txId, boolean success) {}
 
     @Test
-    public void testNestedSubStateMachineExecution() throws Exception {
+    void testNestedSubStateMachineExecution() throws Exception {
         // Define Child State Machine
         StateMachineConfiguration<ChildContext, ChildState, PaymentRequest, PaymentResponse> childStateMachine =
                 AtomicStateMachineBuilder.<ChildContext, ChildState, PaymentRequest, PaymentResponse>create(ChildState.class)
@@ -114,7 +114,7 @@ public class NestedStateMachineTests {
     }
 
     @Test
-    public void testChildExceptionBubblesUpToParent() {
+    void testChildExceptionBubblesUpToParent() {
         // Child that throws an exception
         StateMachineConfiguration<ChildContext, ChildState, Void, Void> failingChildMachine =
                 AtomicStateMachineBuilder.<ChildContext, ChildState, Void, Void>create(ChildState.class)

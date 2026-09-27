@@ -18,40 +18,40 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class NestedAndParallelOrchestrationTests {
+class NestedAndParallelOrchestrationTests {
 
-    public enum RootOrchState implements StateKey {
+    enum RootOrchState implements StateKey {
         INIT, FORK_PARALLEL_CHECKS, RUN_SUB_ORCHESTRATION, COMPLETED, FAILED
     }
 
-    public enum SubOrchState implements StateKey {
+    enum SubOrchState implements StateKey {
         SUB_INIT, SUB_RUN_ATOMIC, SUB_DONE
     }
 
-    public enum MicroState implements StateKey {
+    enum MicroState implements StateKey {
         MICRO_ACTION, MICRO_DONE
     }
 
-    public static class MicroContext implements StateMachineContext {
-        public String microPayload;
+    static class MicroContext implements StateMachineContext {
+        String microPayload;
     }
 
-    public static class SubOrchContext implements StateMachineContext {
-        public String subResult;
+    static class SubOrchContext implements StateMachineContext {
+        String subResult;
     }
 
-    public static class RootContext implements StateMachineContext {
-        public ConcurrentLinkedQueue<String> parallelLog = new ConcurrentLinkedQueue<>();
-        public ConcurrentLinkedQueue<String> branchCompensations = new ConcurrentLinkedQueue<>();
-        public List<String> sagaHistory = new ArrayList<>();
-        public String finalSummary;
+    static class RootContext implements StateMachineContext {
+        ConcurrentLinkedQueue<String> parallelLog = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<String> branchCompensations = new ConcurrentLinkedQueue<>();
+        List<String> sagaHistory = new ArrayList<>();
+        String finalSummary;
     }
 
     /**
      * Tests parallel fork-join execution across multiple independent virtual threads.
      */
     @Test
-    public void testParallelForkJoinExecution() throws Exception {
+    void testParallelForkJoinExecution() throws Exception {
         CountDownLatch startLatch = new CountDownLatch(3);
 
         try (OrchestrationExecutor<RootContext, RootOrchState, Void, List<String>> executor =
@@ -106,7 +106,7 @@ public class NestedAndParallelOrchestrationTests {
      * Tests parallel branch failure triggering branch-level rollback and parent Saga compensation.
      */
     @Test
-    public void testParallelBranchFailureRollsBackSiblingBranches() {
+    void testParallelBranchFailureRollsBackSiblingBranches() {
         try (OrchestrationExecutor<RootContext, RootOrchState, Void, Void> executor =
                 OrchestrationBuilder.<RootContext, RootOrchState, Void, Void>create("FailingParallelOrchestrator", RootOrchState.class)
                         .context(RootContext::new)
@@ -152,7 +152,7 @@ public class NestedAndParallelOrchestrationTests {
      * Tests recursive orchestration nesting: Root Orchestrator -> Sub-Orchestrator -> Atomic Machine.
      */
     @Test
-    public void testRecursiveNestedOrchestrationExecution() throws Exception {
+    void testRecursiveNestedOrchestrationExecution() throws Exception {
         // Level 3: Micro Atomic Machine
         StateMachineConfiguration<MicroContext, MicroState, String, String> microMachine =
                 AtomicStateMachineBuilder.<MicroContext, MicroState, String, String>create(MicroState.class)
@@ -220,13 +220,13 @@ public class NestedAndParallelOrchestrationTests {
     /**
      * Context class with non-thread-safe collections and fields to test branch isolation via cloner &amp; reducer.
      */
-    public static class UnsynchronizedContext implements StateMachineContext {
-        public List<String> list = new ArrayList<>();
-        public int sum = 0;
+    static class UnsynchronizedContext implements StateMachineContext {
+        List<String> list = new ArrayList<>();
+        int sum = 0;
 
-        public UnsynchronizedContext() {}
+        UnsynchronizedContext() {}
 
-        public UnsynchronizedContext(UnsynchronizedContext other) {
+        UnsynchronizedContext(UnsynchronizedContext other) {
             this.list = new ArrayList<>(other.list);
             this.sum = other.sum;
         }
@@ -238,7 +238,7 @@ public class NestedAndParallelOrchestrationTests {
      * and correctly folding branch results back into the root context.
      */
     @Test
-    public void testParallelBranchIsolationAndReduction() throws Exception {
+    void testParallelBranchIsolationAndReduction() throws Exception {
         try (OrchestrationExecutor<UnsynchronizedContext, RootOrchState, Void, Integer> executor =
                 OrchestrationBuilder.<UnsynchronizedContext, RootOrchState, Void, Integer>create("IsolatedParallelOrchestrator", RootOrchState.class)
                         .context(UnsynchronizedContext::new)

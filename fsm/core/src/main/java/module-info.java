@@ -1,5 +1,5 @@
 module com.github.f442y.dispersion.fsm.core {
-    requires static org.jspecify;
+    requires static transitive org.jspecify;
     requires org.slf4j;
     requires transitive com.github.f442y.dispersion.fsm.api;
     requires transitive com.github.f442y.dispersion.control.api;

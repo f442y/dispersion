@@ -18,25 +18,25 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Demonstrates high-throughput concurrent dispatch of Atomic State Machines
  * on Java 25 Virtual Threads with admission control and backpressure management.
  */
-public class HighThroughputPipelineExampleTests {
+class HighThroughputPipelineExampleTests {
 
-    public enum PipelineState implements StateKey {
+    enum PipelineState implements StateKey {
         INGEST, TRANSFORM, ENRICH, FINALIZE, DONE
     }
 
-    public static class EventContext implements StateMachineContext {
-        public String eventId;
-        public long timestamp;
-        public String payload;
-        public int processingScore;
+    static class EventContext implements StateMachineContext {
+        String eventId;
+        long timestamp;
+        String payload;
+        int processingScore;
     }
 
-    public record EventInput(String eventId, String rawData) {}
-    public record EventOutput(String eventId, int score, String status) {}
+    record EventInput(String eventId, String rawData) {}
+    record EventOutput(String eventId, int score, String status) {}
 
     @Test
     @DisplayName("Should process burst of 500 concurrent events with high throughput on Virtual Threads")
-    public void testHighThroughputBurst() throws Exception {
+    void testHighThroughputBurst() throws Exception {
         StateMachineConfiguration<EventContext, PipelineState, EventInput, EventOutput> pipeline =
                 AtomicStateMachineBuilder.<EventContext, PipelineState, EventInput, EventOutput>create(PipelineState.class)
                         .context(EventContext::new)

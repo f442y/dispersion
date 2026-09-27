@@ -12,19 +12,19 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 
-public class AtomicStateMachineBuilderTests {
+class AtomicStateMachineBuilderTests {
 
-    public enum FlowState implements StateKey {
+    enum FlowState implements StateKey {
         INIT, STEP_ONE, STEP_TWO, DONE
     }
 
-    public static class FlowContext implements StateMachineContext {
-        public int counter = 0;
-        public List<String> trail = new ArrayList<>();
+    static class FlowContext implements StateMachineContext {
+        int counter = 0;
+        List<String> trail = new ArrayList<>();
     }
 
     @Test
-    public void testAtomicStateMachineExecution() throws Exception {
+    void testAtomicStateMachineExecution() throws Exception {
         StateMachineConfiguration<FlowContext, FlowState, Integer, String> stateMachine =
                 AtomicStateMachineBuilder.<FlowContext, FlowState, Integer, String>create(FlowState.class)
                         .context(FlowContext::new)
@@ -73,7 +73,7 @@ public class AtomicStateMachineBuilderTests {
     }
 
     @Test
-    public void testCustomInitialContext() throws Exception {
+    void testCustomInitialContext() throws Exception {
         StateMachineConfiguration<FlowContext, FlowState, Void, List<String>> stateMachine =
                 AtomicStateMachineBuilder.<FlowContext, FlowState, Void, List<String>>create(FlowState.class)
                         .context(FlowContext::new)

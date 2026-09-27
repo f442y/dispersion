@@ -19,10 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class UnifiedOrchestrationStateMachineTests {
+class UnifiedOrchestrationStateMachineTests {
 
     // 1. Orchestration (Macro) State Key Enum
-    public enum OrderOrchState implements StateKey {
+    enum OrderOrchState implements StateKey {
         VALIDATE_ORDER,
         RESERVE_INVENTORY,
         CHARGE_PAYMENT,
@@ -33,28 +33,28 @@ public class UnifiedOrchestrationStateMachineTests {
     }
 
     // 2. Atomic (Micro) State Key Enums
-    public enum InventoryAtomicState implements StateKey { CHECK_STOCK, DEDUCT_STOCK, DONE }
-    public enum PaymentAtomicState implements StateKey { TOKENIZE, CHARGE, DONE }
+    enum InventoryAtomicState implements StateKey { CHECK_STOCK, DEDUCT_STOCK, DONE }
+    enum PaymentAtomicState implements StateKey { TOKENIZE, CHARGE, DONE }
 
     // 3. Contexts
-    public static class AtomicContext implements StateMachineContext {
-        public String payload;
+    static class AtomicContext implements StateMachineContext {
+        String payload;
     }
 
-    public static class OrderOrchestrationContext implements StateMachineContext {
-        public String orderId;
-        public boolean isVip = false;
-        public boolean inventoryReserved = false;
-        public boolean paymentCharged = false;
-        public List<String> executionHistory = new ArrayList<>();
-        public List<String> compensationHistory = new ArrayList<>();
+    static class OrderOrchestrationContext implements StateMachineContext {
+        String orderId;
+        boolean isVip = false;
+        boolean inventoryReserved = false;
+        boolean paymentCharged = false;
+        List<String> executionHistory = new ArrayList<>();
+        List<String> compensationHistory = new ArrayList<>();
     }
 
     /**
      * Tests full directed-graph branching at the macro orchestration level (skipping states for VIPs).
      */
     @Test
-    public void testOrchestrationGraphWithDynamicBranching() throws Exception {
+    void testOrchestrationGraphWithDynamicBranching() throws Exception {
         // Atomic Inventory Machine
         StateMachineConfiguration<AtomicContext, InventoryAtomicState, String, String> inventoryMachine =
                 AtomicStateMachineBuilder.<AtomicContext, InventoryAtomicState, String, String>create(InventoryAtomicState.class)
@@ -184,7 +184,7 @@ public class UnifiedOrchestrationStateMachineTests {
      * Tests ContextRecoverer recreating clean inputs on retry on fresh virtual threads.
      */
     @Test
-    public void testContextRecoveryOnVirtualThreadRetry() throws Exception {
+    void testContextRecoveryOnVirtualThreadRetry() throws Exception {
         AtomicInteger attempts = new AtomicInteger(0);
 
         // Flaky machine that crashes on attempt 1, succeeds on attempt 2
@@ -237,7 +237,7 @@ public class UnifiedOrchestrationStateMachineTests {
      * Tests automated Saga compensation rollback in reverse order (LIFO) upon permanent failure.
      */
     @Test
-    public void testAutomatedSagaCompensationRollback() {
+    void testAutomatedSagaCompensationRollback() {
         StateMachineConfiguration<AtomicContext, InventoryAtomicState, Void, Void> dummyMachine =
                 AtomicStateMachineBuilder.<AtomicContext, InventoryAtomicState, Void, Void>create(InventoryAtomicState.class)
                         .context(AtomicContext::new)

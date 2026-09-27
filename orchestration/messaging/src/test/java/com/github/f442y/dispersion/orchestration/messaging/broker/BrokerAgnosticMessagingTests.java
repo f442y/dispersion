@@ -29,9 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class BrokerAgnosticMessagingTests {
+class BrokerAgnosticMessagingTests {
 
-    public enum ShippingState implements StateKey {
+    enum ShippingState implements StateKey {
         INITIALIZE,
         NOTIFY_WAREHOUSE,
         AWAIT_PICKED_SIGNAL,
@@ -40,17 +40,17 @@ public class BrokerAgnosticMessagingTests {
         FAILED
     }
 
-    public static class ShippingContext implements StateMachineContext {
-        public String shipmentId;
-        public boolean warehouseNotified = false;
-        public boolean packagePicked = false;
-        public boolean carrierDispatched = false;
-        public String warehouseId;
-        public String trackingNumber;
-        public List<String> eventLog = new ArrayList<>();
+    static class ShippingContext implements StateMachineContext {
+        String shipmentId;
+        boolean warehouseNotified = false;
+        boolean packagePicked = false;
+        boolean carrierDispatched = false;
+        String warehouseId;
+        String trackingNumber;
+        List<String> eventLog = new ArrayList<>();
     }
 
-    public record WarehouseNotificationCommand(String correlationKey, String warehouseCode) implements SignalCommand {
+    record WarehouseNotificationCommand(String correlationKey, String warehouseCode) implements SignalCommand {
         @Override
         @NonNull
         public String signalName() {
@@ -58,7 +58,7 @@ public class BrokerAgnosticMessagingTests {
         }
     }
 
-    public record PackagePickedCommand(String correlationKey, String warehouseId) implements SignalCommand {
+    record PackagePickedCommand(String correlationKey, String warehouseId) implements SignalCommand {
         @Override
         @NonNull
         public String signalName() {
@@ -66,7 +66,7 @@ public class BrokerAgnosticMessagingTests {
         }
     }
 
-    public record CarrierDispatchedCommand(String correlationKey, String trackingNumber) implements SignalCommand {
+    record CarrierDispatchedCommand(String correlationKey, String trackingNumber) implements SignalCommand {
         @Override
         @NonNull
         public String signalName() {
@@ -79,7 +79,7 @@ public class BrokerAgnosticMessagingTests {
      * and inbound broker signal consumption via the in-memory broker abstraction.
      */
     @Test
-    public void testBrokerAgnosticPubSubWithInMemoryBroker() throws Exception {
+    void testBrokerAgnosticPubSubWithInMemoryBroker() throws Exception {
         InMemoryCheckpointStore<ShippingContext, ShippingState> store = new InMemoryCheckpointStore<>();
         InMemorySignalBroker broker = new InMemorySignalBroker();
         List<SignalMessage> publishedMessages = new CopyOnWriteArrayList<>();
@@ -204,7 +204,7 @@ public class BrokerAgnosticMessagingTests {
      * Tests simulated Kafka / SQS adapter passing raw broker headers, message IDs, and correlation keys via {@link SignalMessage}.
      */
     @Test
-    public void testKafkaOrSqsAdapterSimulation() throws Exception {
+    void testKafkaOrSqsAdapterSimulation() throws Exception {
         InMemoryCheckpointStore<ShippingContext, ShippingState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<ShippingContext, ShippingState, ShippingContext, String> executor =
@@ -260,7 +260,7 @@ public class BrokerAgnosticMessagingTests {
     }
 
     @Test
-    public void testBrokerSubscriberFaultIsolation() {
+    void testBrokerSubscriberFaultIsolation() {
         InMemorySignalBroker broker = new InMemorySignalBroker();
         List<String> receivedBySecond = new CopyOnWriteArrayList<>();
         List<String> receivedByGlobal = new CopyOnWriteArrayList<>();
@@ -296,7 +296,7 @@ public class BrokerAgnosticMessagingTests {
     }
 
     @Test
-    public void testBrokerUnsubscribeAndAutoCloseableRegistration() throws Exception {
+    void testBrokerUnsubscribeAndAutoCloseableRegistration() throws Exception {
         InMemorySignalBroker broker = new InMemorySignalBroker();
         List<String> received = new CopyOnWriteArrayList<>();
 
@@ -307,6 +307,7 @@ public class BrokerAgnosticMessagingTests {
 
         // 1. AutoCloseable registration on topic
         try (AutoCloseable sub = broker.register("topic-a", consumer)) {
+            assertNotNull(sub);
             broker.publish(new SignalMessage("topic-a", "SIG", null, "1")).join();
             assertEquals(1, received.size());
         }
@@ -334,6 +335,7 @@ public class BrokerAgnosticMessagingTests {
         };
 
         try (AutoCloseable sub = broker.registerGlobal(globalConsumer)) {
+            assertNotNull(sub);
             broker.publish(new SignalMessage("topic-x", "SIG", null, "5")).join();
             assertEquals(1, globalReceived.size());
         }

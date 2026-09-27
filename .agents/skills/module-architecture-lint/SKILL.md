@@ -17,6 +17,7 @@ Use this skill to audit module structures, Maven dependency scopes, and package 
   - Child POMs contain no hardcoded `<version>` tags for internal artifacts.
 - [ ] **Package Isolation:** Zero `import ...core.` statements inside `api` or `test` source code, and no cross-subsystem `*.core.*` imports in production code.
 - [ ] **Encapsulation:** Internal engine classes are package-private (`default`).
+- [ ] **Modular Test Encapsulation:** Test suites and fixtures residing in packages exported by `module-info.java` are package-private (`default`) to avoid leaking into the JPMS exported API surface.
 
 ## Automated Audit Commands (PowerShell)
 
@@ -44,8 +45,8 @@ Get-ChildItem -Path "*\core\pom.xml", "*\batch\pom.xml", "*\messaging\pom.xml" -
 }
 
 # 3. Check for forbidden *.core.* imports in API and Test source trees
-Get-ChildItem -Path "*\api\src\main\java", "*\test\src\main\java" -Recurse -Filter "*.java" -ErrorAction SilentlyContinue | 
-    Select-String "import\s+com\.github\.f442y\.dispersion\.[a-z0-9_\.]+\.core\." | 
+Get-ChildItem -Path "*\api\src\main\java", "*\test\src\main\java" -Recurse -Filter "*.java" -ErrorAction SilentlyContinue |
+    Select-String "import\s+com\.github\.f442y\.dispersion\.[a-z0-9_\.]+\.core\." |
     ForEach-Object { "VIOLATION: Forbidden core import in $($_.Path):$($_.LineNumber)" }
 
 # 4. Check for hardcoded versions of internal dependencies in child POMs
@@ -57,6 +58,11 @@ Get-ChildItem -Path "*\pom.xml" -Recurse | Where-Object { $_.FullName -notmatch 
         "VIOLATION: Hardcoded version for $($_.Groups[1].Value) in $filePath"
     }
 }
+
+# 5. Check for public test classes in test source trees
+Get-ChildItem -Path "*\src\test\java" -Recurse -Include "*Test.java","*Tests.java" -ErrorAction SilentlyContinue |
+    Select-String "public\s+class\s+\w+Test" |
+    ForEach-Object { "VIOLATION: Public test class in $($_.Path):$($_.LineNumber) (must be package-private)" }
 ```
 
 ## Scaffolding Guide

@@ -18,24 +18,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class GraphTraversalAndValidationTests {
+class GraphTraversalAndValidationTests {
 
-    public enum GraphState implements StateKey {
+    enum GraphState implements StateKey {
         START, VALIDATE, RETRY, SKIP_FORWARD, PROCESS, SUCCESS, FAILED, TIMEOUT_EXCEEDED
     }
 
-    public static class OrderContext implements StateMachineContext {
-        public int retryCount = 0;
-        public boolean isVip = false;
-        public boolean isFraud = false;
-        public List<String> history = new ArrayList<>();
+    static class OrderContext implements StateMachineContext {
+        int retryCount = 0;
+        boolean isVip = false;
+        boolean isFraud = false;
+        List<String> history = new ArrayList<>();
     }
 
     /**
      * Tests cyclic loop back / revisits and forward skipping using dynamic Transition functions.
      */
     @Test
-    public void testMultiDirectionalTraversalWithCyclesAndSkips() throws Exception {
+    void testMultiDirectionalTraversalWithCyclesAndSkips() throws Exception {
         StateMachineConfiguration<OrderContext, GraphState, OrderContext, String> stateMachine =
                 AtomicStateMachineBuilder.<OrderContext, GraphState, OrderContext, String>create(GraphState.class)
                         .context(OrderContext::new)
@@ -128,7 +128,7 @@ public class GraphTraversalAndValidationTests {
      * Tests per-state visit limiter automatically diverting to fallback state when exceeded.
      */
     @Test
-    public void testMaxVisitsDivertsToFallbackState() throws Exception {
+    void testMaxVisitsDivertsToFallbackState() throws Exception {
         StateMachineConfiguration<OrderContext, GraphState, Void, String> stateMachine =
                 AtomicStateMachineBuilder.<OrderContext, GraphState, Void, String>create(GraphState.class)
                         .context(OrderContext::new)
@@ -168,7 +168,7 @@ public class GraphTraversalAndValidationTests {
      * Tests per-state visit limiter throwing MaxStateVisitsExceededException when no fallback is configured.
      */
     @Test
-    public void testMaxVisitsThrowsExceptionWhenNoFallbackConfigured() {
+    void testMaxVisitsThrowsExceptionWhenNoFallbackConfigured() {
         StateMachineConfiguration<OrderContext, GraphState, Void, String> stateMachine =
                 AtomicStateMachineBuilder.<OrderContext, GraphState, Void, String>create(GraphState.class)
                         .context(OrderContext::new)
@@ -192,7 +192,7 @@ public class GraphTraversalAndValidationTests {
      * Tests global max transitions circuit breaker halting runaway infinite loops.
      */
     @Test
-    public void testGlobalMaxTransitionsCircuitBreaker() {
+    void testGlobalMaxTransitionsCircuitBreaker() {
         StateMachineConfiguration<OrderContext, GraphState, Void, String> stateMachine =
                 AtomicStateMachineBuilder.<OrderContext, GraphState, Void, String>create(GraphState.class)
                         .context(OrderContext::new)
@@ -218,7 +218,7 @@ public class GraphTraversalAndValidationTests {
      * Tests build-time verification failing when a state declares an edge to an unregistered state.
      */
     @Test
-    public void testBuildTimeGraphIntegrityFailsOnUnregisteredTarget() {
+    void testBuildTimeGraphIntegrityFailsOnUnregisteredTarget() {
         assertThrows(IllegalStateException.class, () ->
             AtomicStateMachineBuilder.<OrderContext, GraphState, Void, Void>create(GraphState.class)
                     .context(OrderContext::new)
@@ -233,7 +233,7 @@ public class GraphTraversalAndValidationTests {
      * Tests runtime validation failing when transition function returns an undeclared target state.
      */
     @Test
-    public void testRuntimeAdjacencyGuardRejectsUndeclaredTransition() {
+    void testRuntimeAdjacencyGuardRejectsUndeclaredTransition() {
         StateMachineConfiguration<OrderContext, GraphState, Void, String> stateMachine =
                 AtomicStateMachineBuilder.<OrderContext, GraphState, Void, String>create(GraphState.class)
                         .context(OrderContext::new)

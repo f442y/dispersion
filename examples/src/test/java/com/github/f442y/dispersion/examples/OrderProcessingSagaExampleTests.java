@@ -19,9 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Demonstrates an e-commerce checkout workflow using a macro Orchestration State Machine
  * that embeds atomic child state machines and coordinates automated Saga compensation rollbacks.
  */
-public class OrderProcessingSagaExampleTests {
+class OrderProcessingSagaExampleTests {
 
-    public enum OrderWorkflowState implements StateKey {
+    enum OrderWorkflowState implements StateKey {
         VALIDATE_ORDER,
         RESERVE_INVENTORY,
         PROCESS_PAYMENT,
@@ -30,31 +30,31 @@ public class OrderProcessingSagaExampleTests {
         FAILED
     }
 
-    public enum InventoryStep implements StateKey {
+    enum InventoryStep implements StateKey {
         CHECK_STOCK, ALLOCATE_ITEM, FINISHED
     }
 
-    public record OrderRequest(String orderId, String customerId, int amountCents, boolean forcePaymentFailure) {}
+    record OrderRequest(String orderId, String customerId, int amountCents, boolean forcePaymentFailure) {}
 
-    public static class InventoryContext implements StateMachineContext {
-        public String sku;
-        public boolean allocated;
+    static class InventoryContext implements StateMachineContext {
+        String sku;
+        boolean allocated;
     }
 
-    public static class OrderWorkflowContext implements StateMachineContext {
-        public String orderId;
-        public String customerId;
-        public int amountCents;
-        public boolean forcePaymentFailure;
-        public boolean inventoryAllocated;
-        public boolean paymentSettled;
-        public List<String> auditTrail = new ArrayList<>();
-        public List<String> compensationTrail = new ArrayList<>();
+    static class OrderWorkflowContext implements StateMachineContext {
+        String orderId;
+        String customerId;
+        int amountCents;
+        boolean forcePaymentFailure;
+        boolean inventoryAllocated;
+        boolean paymentSettled;
+        List<String> auditTrail = new ArrayList<>();
+        List<String> compensationTrail = new ArrayList<>();
     }
 
     @Test
     @DisplayName("Should successfully complete end-to-end checkout Saga")
-    public void testSuccessfulCheckout() throws Exception {
+    void testSuccessfulCheckout() throws Exception {
         // 1. Child Atomic Machine for Inventory
         StateMachineConfiguration<InventoryContext, InventoryStep, String, Boolean> inventoryMachine =
                 AtomicStateMachineBuilder.<InventoryContext, InventoryStep, String, Boolean>create(InventoryStep.class)
@@ -146,7 +146,7 @@ public class OrderProcessingSagaExampleTests {
 
     @Test
     @DisplayName("Should execute LIFO Saga compensations when payment fails downstream")
-    public void testFailedPaymentTriggersSagaRollback() {
+    void testFailedPaymentTriggersSagaRollback() {
         // 1. Child Atomic Machine for Inventory
         StateMachineConfiguration<InventoryContext, InventoryStep, String, Boolean> inventoryMachine =
                 AtomicStateMachineBuilder.<InventoryContext, InventoryStep, String, Boolean>create(InventoryStep.class)

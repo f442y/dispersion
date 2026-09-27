@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class SignalAndRehydrationOrchestrationTests {
+class SignalAndRehydrationOrchestrationTests {
 
-    public enum OrderState implements StateKey {
+    enum OrderState implements StateKey {
         VALIDATE,
         RESERVE_INVENTORY,
         AWAIT_PAYMENT_SIGNAL,
@@ -31,23 +31,23 @@ public class SignalAndRehydrationOrchestrationTests {
         FAILED
     }
 
-    public static class OrderContext implements StateMachineContext {
-        public String orderId;
-        public int amount;
-        public String transactionId;
-        public boolean inventoryReserved = false;
-        public boolean inventoryReleased = false;
-        public boolean orderFulfilled = false;
-        public List<String> log = new ArrayList<>();
+    static class OrderContext implements StateMachineContext {
+        String orderId;
+        int amount;
+        String transactionId;
+        boolean inventoryReserved = false;
+        boolean inventoryReleased = false;
+        boolean orderFulfilled = false;
+        List<String> log = new ArrayList<>();
     }
 
-    public record PaymentSignalPayload(String transactionId, int amountPaid) {}
+    record PaymentSignalPayload(String transactionId, int amountPaid) {}
 
     /**
      * Tests turn-based execution suspending at a signal state, saving checkpoint, and rehydrating by machine ID.
      */
     @Test
-    public void testSuspendAndResumeWithSignalByMachineId() throws Exception {
+    void testSuspendAndResumeWithSignalByMachineId() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
@@ -142,7 +142,7 @@ public class SignalAndRehydrationOrchestrationTests {
      * Tests signal delivery correlated via domain business key (e.g. orderId).
      */
     @Test
-    public void testSignalDeliveryByCorrelationKey() throws Exception {
+    void testSignalDeliveryByCorrelationKey() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
@@ -194,7 +194,7 @@ public class SignalAndRehydrationOrchestrationTests {
      * Tests Saga compensation rollbacks spanning multiple turns across dehydration/rehydration boundaries.
      */
     @Test
-    public void testSagaCompensationRollbackAcrossMultipleTurns() throws Exception {
+    void testSagaCompensationRollbackAcrossMultipleTurns() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
@@ -276,7 +276,7 @@ public class SignalAndRehydrationOrchestrationTests {
      * stripe lock and execute with strict mutual exclusion without data races or corruption.
      */
     @Test
-    public void testConcurrentSignalsByMachineIdAndCorrelationKeySerializeCorrectly() throws Exception {
+    void testConcurrentSignalsByMachineIdAndCorrelationKeySerializeCorrectly() throws Exception {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =
@@ -332,7 +332,7 @@ public class SignalAndRehydrationOrchestrationTests {
     }
 
     @Test
-    public void testDispatchSyncOnSuspendingWorkflowThrowsIllegalStateException() {
+    void testDispatchSyncOnSuspendingWorkflowThrowsIllegalStateException() {
         InMemoryCheckpointStore<OrderContext, OrderState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> executor =

@@ -44,19 +44,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Tests verifying modern Java 25+ language capabilities (exhaustive pattern matching switch
  * on sealed exceptions, record pattern deconstruction, virtual-thread concurrency, and robust error recovery).
  */
-public class Java25ModernFeaturesTests {
+class Java25ModernFeaturesTests {
 
-    public enum ModernState implements StateKey {
+    enum ModernState implements StateKey {
         INIT, STEP_A, STEP_B, COMPLETED, FAILED
     }
 
-    public static class ModernContext implements StateMachineContext {
-        public String data = "";
-        public int counter = 0;
-        public List<String> trail = new ArrayList<>();
+    static class ModernContext implements StateMachineContext {
+        String data = "";
+        int counter = 0;
+        List<String> trail = new ArrayList<>();
     }
 
-    public record PaymentApprovedCommand(String paymentId, int amount, String authCode) implements SignalCommand {
+    record PaymentApprovedCommand(String paymentId, int amount, String authCode) implements SignalCommand {
         @Override
         public String correlationKey() {
             return paymentId;
@@ -74,7 +74,7 @@ public class Java25ModernFeaturesTests {
      */
     @Test
     @DisplayName("Should exhaustively match all sealed StateMachineException subtypes with pattern matching switch")
-    public void testExhaustivePatternMatchingOnSealedExceptions() {
+    void testExhaustivePatternMatchingOnSealedExceptions() {
         List<StateMachineException> exceptions = List.of(
                 new ActionException("STATE_1", "Action failed", new RuntimeException("DB down")),
                 new TransitionException("STATE_1", "STATE_2", "Illegal edge"),
@@ -114,7 +114,7 @@ public class Java25ModernFeaturesTests {
      */
     @Test
     @DisplayName("Should perform clean record pattern deconstruction on CommandEnvelope and SignalMessage")
-    public void testRecordPatternDeconstruction() {
+    void testRecordPatternDeconstruction() {
         UUID cmdId = UUID.randomUUID();
         Instant now = Instant.now();
         CommandEnvelope<PaymentApprovedCommand> envelope = new CommandEnvelope<>(
@@ -157,7 +157,7 @@ public class Java25ModernFeaturesTests {
      */
     @Test
     @DisplayName("Should process 1,000 concurrent atomic state machine instances seamlessly on Virtual Threads")
-    public void testConcurrentVirtualThreadBurst() throws Exception {
+    void testConcurrentVirtualThreadBurst() throws Exception {
         StateMachineConfiguration<ModernContext, ModernState, Integer, String> machine =
                 AtomicStateMachineBuilder.<ModernContext, ModernState, Integer, String>create(ModernState.class)
                         .context(ModernContext::new)
@@ -222,7 +222,7 @@ public class Java25ModernFeaturesTests {
      */
     @Test
     @DisplayName("Should guarantee exactly-once processing under concurrent duplicate command delivery")
-    public void testConcurrentDuplicateCommandDelivery() throws Exception {
+    void testConcurrentDuplicateCommandDelivery() throws Exception {
         InMemoryCheckpointStore<ModernContext, ModernState> store = new InMemoryCheckpointStore<>();
 
         OrchestrationExecutor<ModernContext, ModernState, String, String> executor =
@@ -302,7 +302,7 @@ public class Java25ModernFeaturesTests {
      */
     @Test
     @DisplayName("Should execute compensate() actions during Saga unwinding in LIFO order")
-    public void testSagaCompensationUnwinding() {
+    void testSagaCompensationUnwinding() {
         OrchestrationExecutor<ModernContext, ModernState, Void, String> executor =
                 OrchestrationBuilder.<ModernContext, ModernState, Void, String>create("SagaTest", ModernState.class)
                 .context(ModernContext::new)
@@ -352,7 +352,7 @@ public class Java25ModernFeaturesTests {
      */
     @Test
     @DisplayName("Should execute 50,000 atomic state machine workflows with sub-microsecond latency")
-    public void testUltraHighThroughputAtomicExecution() throws Exception {
+    void testUltraHighThroughputAtomicExecution() throws Exception {
         StateMachineConfiguration<ModernContext, ModernState, Integer, String> config =
                 AtomicStateMachineBuilder.<ModernContext, ModernState, Integer, String>create(ModernState.class)
                 .context(ModernContext::new)

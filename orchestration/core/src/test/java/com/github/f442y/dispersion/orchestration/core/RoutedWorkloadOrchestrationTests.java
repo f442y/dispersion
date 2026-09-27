@@ -36,12 +36,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * in-process monolith execution, remote distributed workers over message transport,
  * Canary traffic routing, Developer Sandbox isolation, and automated routed Saga compensations.
  */
-public class RoutedWorkloadOrchestrationTests {
+class RoutedWorkloadOrchestrationTests {
 
     private static final Logger log = LoggerFactory.getLogger(RoutedWorkloadOrchestrationTests.class);
 
     // --- State Keys ---
-    public enum OrderState implements StateKey {
+    enum OrderState implements StateKey {
         INIT,
         RESERVE_INVENTORY,
         PROCESS_PAYMENT,
@@ -50,39 +50,39 @@ public class RoutedWorkloadOrchestrationTests {
         FAILED
     }
 
-    public enum InventoryAtomicState implements StateKey {
+    enum InventoryAtomicState implements StateKey {
         CHECK_AND_RESERVE,
         DONE
     }
 
     // --- Contexts ---
-    public static class OrderContext implements StateMachineContext {
-        public String orderId;
-        public String reservationId;
-        public String trackingId;
-        public List<String> sagaTrace = new CopyOnWriteArrayList<>();
+    static class OrderContext implements StateMachineContext {
+        String orderId;
+        String reservationId;
+        String trackingId;
+        List<String> sagaTrace = new CopyOnWriteArrayList<>();
     }
 
-    public static class InventoryContext implements StateMachineContext {
-        public ReserveRequest request;
-        public ReserveResponse response;
+    static class InventoryContext implements StateMachineContext {
+        ReserveRequest request;
+        ReserveResponse response;
     }
 
     // --- Typed Domain Records ---
-    public record ReserveRequest(String orderId, int quantity) {}
-    public record ReserveResponse(boolean success, String reservationId) {}
-    public record ReleaseRequest(String reservationId) {}
-    public record ReleaseResponse(boolean released) {}
+    record ReserveRequest(String orderId, int quantity) {}
+    record ReserveResponse(boolean success, String reservationId) {}
+    record ReleaseRequest(String reservationId) {}
+    record ReleaseResponse(boolean released) {}
 
-    public record ShippingRequest(String orderId, String destination) {}
-    public record ShippingResponse(boolean shipped, String trackingId) {}
+    record ShippingRequest(String orderId, String destination) {}
+    record ShippingResponse(boolean shipped, String trackingId) {}
 
     /**
      * 1. Monolith In-Process Execution:
      * Invocations route to an in-memory LocalFsmEndpoint with zero network overhead.
      */
     @Test
-    public void testMonolithLocalInProcessExecution() throws Exception {
+    void testMonolithLocalInProcessExecution() throws Exception {
         try (WorkloadRouter router = new DefaultWorkloadRouter()) {
 
             // Build local Inventory Atomic State Machine
@@ -157,7 +157,7 @@ public class RoutedWorkloadOrchestrationTests {
      * to a standalone WorkerHost executing on virtual threads.
      */
     @Test
-    public void testDistributedWorkerRemoteExecution() throws Exception {
+    void testDistributedWorkerRemoteExecution() throws Exception {
         try (InMemoryChannelTransport transport = new InMemoryChannelTransport();
              WorkloadRouter router = new DefaultWorkloadRouter();
              DefaultWorkerHost workerHost = new DefaultWorkerHost(
@@ -231,7 +231,7 @@ public class RoutedWorkloadOrchestrationTests {
      * sandbox node, while default traffic routes to the production pool.
      */
     @Test
-    public void testDeveloperSandboxIsolation() throws Exception {
+    void testDeveloperSandboxIsolation() throws Exception {
         try (WorkloadRouter router = new DefaultWorkloadRouter()) {
 
             FakeWorkloadEndpoint<String, String> prodWorker =
@@ -290,7 +290,7 @@ public class RoutedWorkloadOrchestrationTests {
      * Verifies that CanaryWeightedRoutingPolicy splits traffic between version 1.0.0 and 2.0.0.
      */
     @Test
-    public void testCanaryRollingUpdateTrafficSplit() throws Exception {
+    void testCanaryRollingUpdateTrafficSplit() throws Exception {
         try (WorkloadRouter router = new DefaultWorkloadRouter()) {
             router.setDefaultPolicy(CanaryWeightedRoutingPolicy.of(
                     EndpointTags.of("version", "2.0.0"), 25, // 25% canary
@@ -349,7 +349,7 @@ public class RoutedWorkloadOrchestrationTests {
      * - Executes Step 1 local compensation!
      */
     @Test
-    public void testDistributedLifoSagaCompensationRollback() throws Exception {
+    void testDistributedLifoSagaCompensationRollback() throws Exception {
         try (InMemoryChannelTransport transport = new InMemoryChannelTransport();
              WorkloadRouter router = new DefaultWorkloadRouter();
              DefaultWorkerHost workerHost = new DefaultWorkerHost(

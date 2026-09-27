@@ -1,5 +1,5 @@
 module com.github.f442y.dispersion.fsm.api {
-    requires static org.jspecify;
+    requires static transitive org.jspecify;
     requires transitive com.github.f442y.dispersion.event.api;
 
     exports com.github.f442y.dispersion.fsm;
