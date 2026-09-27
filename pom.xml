@@ -25,7 +25,7 @@
     <developers>
         <developer>
             <id>f442y</id>
-            <name>Faizan</name>
+            <name>Faizaan Ahmed</name>
             <url>https://github.com/f442y</url>
         </developer>
     </developers>
@@ -73,12 +73,11 @@
     </modules>
 
     <properties>
-        <!-- Project Versioning (CI Friendly) -->
+        <!-- Project Versioning & CI Friendly Resolution -->
         <revision>0.1.0${changelist}</revision>
         <changelist>-SNAPSHOT</changelist>
-        <flatten.skip>false</flatten.skip>
 
-        <!-- Java Runtime & Encoding -->
+        <!-- Java Runtime & Encoding Constraints -->
         <java.version>25</java.version>
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
@@ -87,28 +86,43 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-        <!-- Dependency Versions -->
-        <jspecify.version>1.0.0</jspecify.version>
-        <slf4j.version>2.0.17</slf4j.version>
-        <logback.version>1.5.17</logback.version>
-        <avaje-jsonb.version>3.14</avaje-jsonb.version>
-        <apache-fory.version>1.7.3</apache-fory.version>
-        <jakarta-ws-rs.version>3.1.0</jakarta-ws-rs.version>
-        <helidon.version>4.1.6</helidon.version>
-        <junit-jupiter.version>5.12.0</junit-jupiter.version>
-        <assertj.version>3.27.3</assertj.version>
+        <!-- Dependency Versions: Specifications & Annotations -->
+        <jspecify.version>1.0.1</jspecify.version>
 
-        <!-- Plugin Versions -->
-        <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
-        <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
-        <maven-clean-plugin.version>3.4.1</maven-clean-plugin.version>
-        <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
-        <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
-        <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
-        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-        <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+        <!-- Dependency Versions: Logging Subsystem -->
+        <slf4j.version>2.0.20</slf4j.version>
+        <logback.version>1.6.4</logback.version>
+
+        <!-- Dependency Versions: Serialization Frameworks -->
+        <avaje-jsonb.version>3.16</avaje-jsonb.version>
+        <apache-fory.version>1.7.5</apache-fory.version>
+
+        <!-- Dependency Versions: Server & Web Frameworks -->
+        <jakarta-ws-rs.version>4.0.0</jakarta-ws-rs.version>
+        <helidon.version>4.5.5</helidon.version>
+
+        <!-- Dependency Versions: Testing Frameworks & Assertions -->
+        <junit-jupiter.version>6.1.3</junit-jupiter.version>
+        <assertj.version>3.27.7</assertj.version>
+
+        <!-- Plugin Versions: Compilation & Testing -->
+        <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
+
+        <!-- Plugin Versions: Packaging & Documentation -->
+        <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+
+        <!-- Plugin Versions: Lifecycle & Deployment -->
+        <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
+        <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+        <maven-install-plugin.version>3.2.0</maven-install-plugin.version>
+        <maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
+
+        <!-- Plugin Versions & Build Configuration Flags -->
         <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+        <flatten.skip>false</flatten.skip>
         <test.excludedGroups>LongRunningTests, Playground</test.excludedGroups>
     </properties>
 
@@ -258,14 +272,14 @@
                 <version>${helidon.version}</version>
             </dependency>
 
-            <!-- Annotations -->
+            <!-- Static Analysis & Specifications -->
             <dependency>
                 <groupId>org.jspecify</groupId>
                 <artifactId>jspecify</artifactId>
                 <version>${jspecify.version}</version>
             </dependency>
 
-            <!-- Logging -->
+            <!-- Logging Subsystem -->
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
@@ -277,7 +291,7 @@
                 <version>${logback.version}</version>
             </dependency>
 
-            <!-- Serialization -->
+            <!-- Serialization Frameworks -->
             <dependency>
                 <groupId>io.avaje</groupId>
                 <artifactId>avaje-jsonb</artifactId>
@@ -296,7 +310,14 @@
                 <version>${jakarta-ws-rs.version}</version>
             </dependency>
 
-            <!-- Testing -->
+            <!-- Testing Libraries (Granular Management) -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit-jupiter.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
@@ -306,6 +327,12 @@
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit-jupiter.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
                 <version>${junit-jupiter.version}</version>
                 <scope>test</scope>
             </dependency>

@@ -75,7 +75,7 @@
                                 <arg>--add-modules</arg>
                                 <arg>java.net.http</arg>
                                 <arg>--add-reads</arg>
-                                <arg>com.github.f442y.dispersion.server.standalone=java.net.http</arg>
+                                <arg>com.github.f442y.dispersion.server.standalone=java.net.http,com.github.f442y.dispersion.serialization.avaje</arg>
                             </compilerArgs>
                         </configuration>
                     </execution>
@@ -87,7 +87,7 @@
                 <configuration>
                     <argLine>
                         --add-modules java.net.http
-                        --add-reads com.github.f442y.dispersion.server.standalone=java.net.http
+                        --add-reads com.github.f442y.dispersion.server.standalone=java.net.http,com.github.f442y.dispersion.serialization.avaje
                     </argLine>
                 </configuration>
             </plugin>
