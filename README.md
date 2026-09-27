@@ -1,7 +1,7 @@
 <div align="center">
 
 ```
-  ██████╗ ██╗███████╗██████╗ ███████╗██████╗ ███████╗██╗ ██████╗ ███╗   ██╗
+  ██████╗ ██╗███████╗██████╗ ███████╗██████╗ ███████╗██╗ ██████╗ ███╗   ███╗
   ██╔══██╗██║██╔════╝██╔══██╗██╔════╝██╔══██╗██╔════╝██║██╔═══██╗████╗  ██║
   ██║  ██║██║███████╗██████╔╝█████╗  ██████╔╝███████╗██║██║   ██║██╔██╗ ██║
   ██║  ██║██║╚════██║██╔═══╝ ██╔══╝  ██╔══██╗╚════██║██║██║   ██║██║╚██╗██║
@@ -16,6 +16,7 @@
 [![Build & Test](https://img.shields.io/github/actions/workflow/status/f442y/dispersion/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/f442y/dispersion/actions/workflows/ci.yml)
 [![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20Dual--Tier-6366f1?style=for-the-badge)](docs/architecture-and-design.md)
 [![Hot Path](https://img.shields.io/badge/Latency-%3C%201%20%CE%BCs%20(Zero--Allocation)-06b6d4?style=for-the-badge)](docs/virtual-threads-and-performance.md)
+[![Co-Engineered with Gemini](https://img.shields.io/badge/Co--Engineered%20with-Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
 
 <p align="center">
   <a href="#-why-dispersion"><b>Why Dispersion?</b></a> •
@@ -24,7 +25,8 @@
   <a href="#-encompassing-modules"><b>Subsystems</b></a> •
   <a href="#-performance-benchmark-comparison"><b>Benchmarks</b></a> •
   <a href="#-architectural-guides"><b>Deep Dives</b></a> •
-  <a href="ROADMAP.md"><b>Roadmap</b></a>
+  <a href="ROADMAP.md"><b>Roadmap</b></a> •
+  <a href="#-co-engineered-with-gemini"><b>AI Co-Engineering</b></a>
 </p>
 
 </div>
@@ -388,7 +390,7 @@ For comprehensive technical deep dives into engine internals:
 * ⚡ [**Virtual Threads & Performance Guide**](docs/virtual-threads-and-performance.md) — Loom mechanics, carrier thread unmounting, zero-pinning guarantees, and JVM escape analysis.
 * 🔄 [**Saga Orchestration & Batch Processing**](docs/saga-orchestration-and-batching.md) — Distributed saga theory, checkpoint storage, durable signal rehydration, and batch barrier policies.
 * 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — Telemetry events, $O(1)$ dual-pool memory topology, and React UI integration patterns.
-* 🗺️ [**Master Engineering Roadmap & Execution Plan**](ROADMAP.md) \u2014 Phased milestones, system capabilities, and Phase 3 Control Panel Web UI plan.
+* 🗺️ [**Master Engineering Roadmap & Execution Plan**](ROADMAP.md) — Phased milestones, system capabilities, and Phase 3 Control Panel Web UI plan.
 
 ---
 
@@ -474,6 +476,18 @@ Add the modules required by your application:
 # Execute end-to-end integration tests (500-thread pipeline bursts, distributed sagas)
 ./mvnw verify -B -ntp -T 1C
 ```
+
+---
+
+## 🤖 Co-Engineered with Gemini
+
+Dispersion was designed and engineered in collaboration with **Google Gemini**.
+
+From architectural formulation to the sub-microsecond virtual-thread engine and web control plane, Gemini assisted across:
+* **Hexagonal Systems Architecture:** Enforcing compile-time modular boundaries, symmetrical triplet patterns (`api`/`core`/`test`), and zero-coupling between execution tiers.
+* **Low-Latency & Virtual Thread Concurrency:** Designing lock-free thread confinement, non-pinning virtual thread coordination, pre-compiled ordinal array state lookup (`StateMap`), and primitive bitmask guards with zero hot-path heap allocations.
+* **Distributed Sagas & Resilient Routing:** Architecting automated reverse-chronological (LIFO) compensation unwinding, durable signal rehydration with pluggable checkpoints, and location-agnostic routing topologies.
+* **Control Plane & Reactive Web UI:** Building the Helidon SE reactive HTTP/SSE backend, polymorphic telemetry event streams, and decomposing the React 19 / TanStack Query control plane dashboard.
 
 ---
 
