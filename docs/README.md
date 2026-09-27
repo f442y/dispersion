@@ -23,6 +23,7 @@ graph TD
     PATH -->|Platform & Observability| O1[1. Observability & Control Plane]
     O1 --> O2[2. Standalone Server & Jakarta REST]
     O2 --> O3[3. Telemetry Event Bus]
+    O3 --> O4[4. Control Plane & UI Hosting Proposal]
 
     PATH -->|Testing & Integration| T1[1. Dispersion Testing Framework]
     T1 --> T2[2. Interactive Examples & Demo App]
@@ -45,6 +46,7 @@ graph TD
 1. [**Observability & Control Plane Guide**](observability-and-control-plane.md) — Operational control plane architecture, live machine topologies, dynamic Mermaid generation, and SSE streaming.
 2. [**Server Subsystem Guide**](../server/README.md) — Running the native Helidon SE 4.x Níma virtual-thread standalone HTTP/SSE server, or mounting the Jakarta REST 3.1 resource into Spring Boot/Quarkus.
 3. [**Event Subsystem Guide**](../event/README.md) — 64k ring buffer event bus, asynchronous thread-confined event delivery, and zero-contention telemetry dispatching.
+4. [**Control Plane Service & UI Hosting Proposal**](control-plane-service-and-ui-hosting-design.md) — Production deployment topology, dedicated control plane microservice per environment, Helidon SE embedded UI hosting, and zero-CORS architecture.
 
 ### Path 4: Verification, Quality Assurance & Testing
 * **Target Audience:** QA engineers, test automation developers, and application testers.
@@ -64,6 +66,7 @@ graph TD
 | [**`workload-routing-and-traffic-splitting.md`**](workload-routing-and-traffic-splitting.md) | Canary routing, developer sandboxes, worker hosts, location abstraction | `routing` |
 | [**`serialization-and-wire-formats.md`**](serialization-and-wire-formats.md) | Avaje JSON codec, Apache Fury binary codec, polymorphic events | `serialization`, `event` |
 | [**`observability-and-control-plane.md`**](observability-and-control-plane.md) | Control plane SPI, REST API catalog, SSE stream, UI integration | `control-plane`, `server` |
+| [**`control-plane-service-and-ui-hosting-design.md`**](control-plane-service-and-ui-hosting-design.md) | Dedicated per-environment control plane, embedded UI hosting, zero-CORS, cluster query engine | `server-standalone`, `control-plane`, `ui` |
 
 ---
 
