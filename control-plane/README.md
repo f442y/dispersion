@@ -196,9 +196,7 @@ public final class ControlPlaneExample {
 
 ---
 
-## 4. Testing Control Plane Integrations (`dispersion-control-plane-test`)
-
-Use `FakeInspectableMachine` to test dashboards, REST controllers, or CLI admin tools without running heavy execution engines:
+## 4. Testing Control Plane Integrations (`dispersion-control-plane-test`)\n\nUse `FakeInspectableMachine` to test dashboards, REST controllers, or CLI admin tools without running heavy execution engines:
 
 ```java
 package com.example.control;
@@ -240,7 +238,7 @@ public class ControlPlaneTestingExampleTests {
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-bom</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -274,10 +272,11 @@ public class ControlPlaneTestingExampleTests {
 ## 🔗 Related Subsystems & Guides
 
 * 🏠 [**Project Showcase (`README.md`)**](../README.md) — Landing page, architecture overview, and quickstarts.
+* 🌐 [**Server Subsystem (`server/`)**](../server/README.md) — Virtual-thread HTTP/SSE hosting and Jakarta REST resource.
+* 📦 [**Serialization Subsystem (`serialization/`)**](../serialization/README.md) — Reflection-free Avaje JSON and Apache Fury codecs.
 * ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Adapting atomic state machines via `executor.asInspectableMachine()`.
 * 🚦 [**Routing Subsystem (`routing/`)**](../routing/README.md) — Inspectable workload router, Canary traffic splits, and Developer Sandboxes.
 * 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Adapting saga orchestrators and batch engines via `executor.asInspectableMachine()`.
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Connecting event buses and telemetry listeners to `DefaultControlPlane`.
-* 🧪 [**Testing Framework (`testing/`)**](../testkit/README.md) — Unit testing control plane workflows with `FakeInspectableMachine`.
-* 🔭 [**Observability & UI Deep Dive**](../docs/observability-and-control-plane.md) — React + TanStack Router integration blueprints.
-
+* 🧪 [**Testing Framework (`testkit/`)**](../testkit/README.md) — Unit testing control plane workflows with `FakeInspectableMachine`.
+* 🔭 [**Observability & UI Deep Dive**](../docs/observability-and-control-plane.md) — Control plane guide and SSE integration.

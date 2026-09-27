@@ -14,7 +14,7 @@ Dispersion resolves these challenges through a unified design rooted in **thread
 
 ## 1. Hexagonal Decoupling & Module Symmetrical Topology
 
-Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 21 Maven modules:
+Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 28 Maven reactor projects (Parent aggregator POM, BOM, and 26 child modules):
 
 ```mermaid
 graph TD
@@ -77,7 +77,30 @@ graph TD
         C_TEST --> C_API
     end
 
-    subgraph Testing["6. Testing Facade"]
+    subgraph Serialization["6. Serialization Subsystem"]
+        S_BIN_API["dispersion-serialization-binary-api<br/>(BinarySerializer SPI)"]
+        S_FORY["dispersion-serialization-fory<br/>(Apache Fury Implementation)"]
+        S_JSON_API["dispersion-serialization-json-api<br/>(JsonSerializer SPI)"]
+        S_AVAJE["dispersion-serialization-avaje<br/>(Compile-Time Avaje-Jsonb)"]
+
+        S_FORY --> S_BIN_API
+        S_JSON_API --> E_API
+        S_JSON_API --> C_API
+        S_AVAJE --> S_JSON_API
+    end
+
+    subgraph Server["7. Server Subsystem"]
+        SRV_API["dispersion-server-api<br/>(ControlPlaneServer SPI)"]
+        SRV_JAKARTA["dispersion-server-jakarta<br/>(Jakarta REST Resource)"]
+        SRV_STANDALONE["dispersion-server-standalone<br/>(Helidon SE Níma HTTP/SSE)"]
+
+        SRV_API --> C_API
+        SRV_API --> S_JSON_API
+        SRV_JAKARTA --> SRV_API
+        SRV_STANDALONE --> SRV_API
+    end
+
+    subgraph Testing["8. Testing Facade"]
         TESTING["dispersion-testkit<br/>(DispersionTestKit)"]
         TESTING --> E_TEST & F_TEST & R_TEST & O_TEST & C_TEST
         TESTING --> E_API & F_API & R_API & O_API & C_API
@@ -87,7 +110,7 @@ graph TD
 ### Decoupling Rules & Architectural Invariants
 
 1. **`*-api` Modules Are Pure Contracts:**
-   Contain only interfaces, immutable records, and domain exceptions. They depend exclusively on standard Java and JSpecify annotations—never on third-party frameworks or runtime engines.
+   Contain only interfaces, immutable records, and domain exceptions. They depend exclusively on standard Java and JSpecify annotations—never on third-party runtime frameworks.
 2. **Decoupled Cross-Domain Boundaries:**
    `dispersion-routing-api` has zero compile-time dependencies on `dispersion-event-api`, and `dispersion-orchestration-api` interacts with routing solely via its internal `WorkloadDispatcher` SPI. Concrete bridges exist exclusively in engine modules (e.g. `WorkloadRouterDispatcher` in `orchestration-core`).
 3. **`*-core` Modules Contain Runtimes:**
@@ -96,6 +119,8 @@ graph TD
    Contain deterministic fakes and recorders. A test companion module **never depends on `*-core`**, ensuring test doubles cannot accidentally rely on engine internals.
 5. **Control Plane Inversion via `InspectableMachine`:**
    `dispersion-control-plane-core` has **zero compile-time dependencies** on `fsm-core` or `orchestration-core`. Executors implement the `InspectableMachine` SPI and adapt themselves via `.asInspectableMachine()`, allowing the control plane to observe any engine generically.
+6. **Pluggable Serialization & Transport Inversion:**
+   The `serialization-json-api` and `serialization-binary-api` contracts abstract data formatting so `server-standalone` (Helidon SE virtual-thread HTTP/SSE) and `server-jakarta` remain completely independent of concrete serialization libraries. Avaje compile-time JSON and Apache Fury binary codecs plug in via standard Java `ServiceLoader`.
 
 ---
 
@@ -125,7 +150,7 @@ graph TB
 
     subgraph Tier3["Tier 3: Turn-Based Batch Processing (dispersion-orchestration-batch)"]
         direction LR
-        B_ITEMS["Batch Items [1..N]"] --> B_BARRIER{"Barrier Policy: ALL_ITEMS | QUORUM"}
+        B_ITEMS["Batch Items [1..N]"] --> B_BARRIER{"Barrier Policy: ALL_ITEMS_ARRIVED | SIGNAL_TRIGGERED"}
         B_BARRIER --> B_ADVANCE["Advance to Next Batch Step"]
     end
 
@@ -171,7 +196,7 @@ Dispersion relies instead on **Thread Confinement**:
                        │         │                     ▲                         │
                        │         ▼                     │                         │
                        │  ┌──────────────┐      ┌──────────────┐                 │
-                       │  │   Action 1   │──────►│   Action 2   │                 │
+                       │  │   Action 1   │─────►│   Action 2   │                 │
                        │  └──────────────┘      └──────────────┘                 │
                        └─────────────────────────────────────────────────────────┘
                                    Zero Locks • Zero Volatiles
@@ -207,6 +232,13 @@ Dispersion is built strictly for the Java Platform Module System (JPMS). Every m
 | `dispersion-control-plane-api` | `com.github.f442y.dispersion.control.api` | `com.github.f442y.dispersion.control` |
 | `dispersion-control-plane-core` | `com.github.f442y.dispersion.control.core` | `com.github.f442y.dispersion.control.core` |
 | `dispersion-control-plane-test` | `com.github.f442y.dispersion.control.test` | `com.github.f442y.dispersion.control.test` |
+| `dispersion-serialization-binary-api` | `com.github.f442y.dispersion.serialization.binary` | `com.github.f442y.dispersion.serialization.binary` |
+| `dispersion-serialization-fory` | `com.github.f442y.dispersion.serialization.fory` | `com.github.f442y.dispersion.serialization.fory` |
+| `dispersion-serialization-json-api` | `com.github.f442y.dispersion.serialization.json` | `com.github.f442y.dispersion.serialization.json` |
+| `dispersion-serialization-avaje` | `com.github.f442y.dispersion.serialization.avaje` | `com.github.f442y.dispersion.serialization.avaje` |
+| `dispersion-server-api` | `com.github.f442y.dispersion.server.api` | `com.github.f442y.dispersion.server.api` |
+| `dispersion-server-jakarta` | `com.github.f442y.dispersion.server.jakarta` | `com.github.f442y.dispersion.server.jakarta` |
+| `dispersion-server-standalone` | `com.github.f442y.dispersion.server.standalone` | `com.github.f442y.dispersion.server.standalone` |
 | `dispersion-testkit` | `com.github.f442y.dispersion.testkit` | `com.github.f442y.dispersion.testkit` |
 | `dispersion-examples` | `com.github.f442y.dispersion.examples` | `com.github.f442y.dispersion.examples` |
 
@@ -216,4 +248,4 @@ Dispersion is built strictly for the Java Platform Module System (JPMS). Every m
 
 * ⚡ [**Virtual Threads & Performance Guide**](virtual-threads-and-performance.md) — Carrier thread scheduling, unmounting mechanics, zero-pinning guarantees, and JVM escape analysis.
 * 🔄 [**Saga Orchestration & Batch Processing**](saga-orchestration-and-batching.md) — Turn-based lifecycle, LIFO compensation unwind, and batch barrier policies.
-* 🔭 [**Observability & Control Plane**](observability-and-control-plane.md) — Telemetry streaming, $O(1)$ dual-pool memory topology, and React UI integration.
+* 🔭 [**Observability & Control Plane**](observability-and-control-plane.md) — Telemetry streaming, $O(1)$ dual-pool memory topology, standalone Helidon server, and event streaming.

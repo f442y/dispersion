@@ -102,7 +102,7 @@ Forward state transitions register compensation closures via `.compensate(...)`.
 2. The forward execution stops immediately.
 3. The engine unwinds the registered compensation closures in **Last-In, First-Out (LIFO)** order.
 4. If an atomic micro-machine was embedded in a step, its configured compensation is also invoked.
-5. A `TurnCompensatedEvent` (from package `com.github.f442y.dispersion.event.turn`) is emitted to the telemetry bus.
+5. A `TurnCompensatedEvent` is emitted to the telemetry bus.
 
 ```java
 .state(OrderState.RESERVE_INVENTORY)
@@ -200,7 +200,7 @@ graph TD
     end
 
     subgraph Barrier["Synchronization Barrier"]
-        BP{"Barrier Policy:<br/>ALL_ITEMS or QUORUM"}
+        BP{"Barrier Policy:<br/>ALL_ITEMS_ARRIVED or SIGNAL_TRIGGERED"}
     end
 
     subgraph BatchStage2["Stage 2: Processing"]
@@ -210,7 +210,7 @@ graph TD
     end
 
     I1 & I2 & I3 --> BP
-    BP -->|"All Items Arrived"| P1 & P2 & P3
+    BP -->|"Barrier Condition Satisfied"| P1 & P2 & P3
 ```
 
 ### Barrier Policies
@@ -218,11 +218,47 @@ graph TD
 ```java
 import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
 
-// 1. ALL_ITEMS: All items must reach the barrier before advancing
-BarrierPolicy allPolicy = BarrierPolicy.ALL_ITEMS;
+// 1. ALL_ITEMS_ARRIVED: All items in the batch must reach the barrier before advancing
+BarrierPolicy allPolicy = BarrierPolicy.ALL_ITEMS_ARRIVED;
 
-// 2. QUORUM: Advances as soon as the threshold ratio (e.g. 80%) reaches the barrier
-BarrierPolicy quorumPolicy = BarrierPolicy.quorum(0.80);
+// 2. SIGNAL_TRIGGERED: Pauses batch items at the barrier until an explicit external signal triggers continuation
+BarrierPolicy signalPolicy = BarrierPolicy.SIGNAL_TRIGGERED;
+```
+
+### Batch Orchestration Example
+
+```java
+import com.github.f442y.dispersion.orchestration.batch.BarrierPolicy;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationBuilder;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationConfiguration;
+import com.github.f442y.dispersion.orchestration.batch.BatchOrchestrationExecutor;
+import java.util.List;
+import java.util.Map;
+
+BatchOrchestrationConfiguration<BatchSummaryContext, ItemWorkContext, ProcessingState, List<String>> config =
+    BatchOrchestrationBuilder.<BatchSummaryContext, ItemWorkContext, ProcessingState, List<String>>create("BatchEngine", ProcessingState.class)
+        .batchContext(BatchSummaryContext::new)
+        .batchKey(ItemWorkContext::batchId)
+        .itemKey(ItemWorkContext::itemId)
+        .initialState(ProcessingState.VALIDATE)
+        .endStates(ProcessingState.COMPLETED)
+        .itemState(ProcessingState.VALIDATE)
+            .action((ItemWorkContext item) -> {
+                item.validated = true;
+                return item;
+            })
+            .barrier(BarrierPolicy.ALL_ITEMS_ARRIVED)
+            .transition(ProcessingState.COMPLETED)
+        .output((BatchSummaryContext batchCtx, Map<String, ItemWorkContext> items) ->
+            items.values().stream().map(ItemWorkContext::result).toList()
+        )
+        .build();
+
+try (BatchOrchestrationExecutor<BatchSummaryContext, ItemWorkContext, ProcessingState, List<String>> executor =
+         new BatchOrchestrationExecutor<>("batch-exec", config)) {
+
+    List<String> results = executor.dispatchBatchSync(List.of(item1, item2, item3));
+}
 ```
 
 ### Batch Engine Capabilities

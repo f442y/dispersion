@@ -46,9 +46,7 @@ graph TD
 
 ---
 
-## 2. Factory Methods (`DispersionTestKit`)
-
-All test doubles are instantiated via clean, static methods on `DispersionTestKit`:
+## 2. Factory Methods (`DispersionTestKit`)\n\nAll test doubles are instantiated via clean, static methods on `DispersionTestKit`:
 
 ```java
 import com.github.f442y.dispersion.control.MachineType;
@@ -238,7 +236,7 @@ Add `dispersion-testkit` with test scope to your project:
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-bom</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>0.1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -263,6 +261,5 @@ Add `dispersion-testkit` with test scope to your project:
 * ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Unit testing atomic machines with `TestStateContext` and `TestStateKey`.
 * 🔄 [**Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Testing sagas with `FakeSignalBroker` and `RecordingCheckpointStore`.
 * 📡 [**Event Subsystem (`event/`)**](../event/README.md) — Capturing execution events with `RecordingEventBus` and `CapturingEventListener`.
-* 🔭 [**Control Subsystem (`control/`)**](../control-plane/README.md) — Testing registry and signal delivery with `FakeInspectableMachine`.
+* 🔭 [**Control Subsystem (`control-plane/`)**](../control-plane/README.md) — Testing registry and signal delivery with `FakeInspectableMachine`.
 * 📐 [**Architecture & Hexagonal Design**](../docs/architecture-and-design.md) — Symmetrical triplet decoupling and test double invariants.
-

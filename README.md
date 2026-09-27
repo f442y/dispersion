@@ -14,13 +14,13 @@
 [![Java 25](https://img.shields.io/badge/Java-25%2B%20Loom-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-22c55e?style=for-the-badge&logo=apache&logoColor=white)](LICENSE)
 [![Build & Test](https://img.shields.io/github/actions/workflow/status/f442y/dispersion/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/f442y/dispersion/actions/workflows/ci.yml)
-[![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20Dual--Tier-6366f1?style=for-the-badge)](docs/architecture-and-design.md)
+[![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20Multi--Tier-6366f1?style=for-the-badge)](docs/architecture-and-design.md)
 [![Hot Path](https://img.shields.io/badge/Latency-%3C%201%20%CE%BCs%20(Zero--Allocation)-06b6d4?style=for-the-badge)](docs/virtual-threads-and-performance.md)
 [![Co-Engineered with Gemini](https://img.shields.io/badge/Co--Engineered%20with-Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
 
 <p align="center">
   <a href="#-why-dispersion"><b>Why Dispersion?</b></a> •
-  <a href="#-the-dual-tier-architecture"><b>Architecture</b></a> •
+  <a href="#-the-multi-tier-architecture"><b>Architecture</b></a> •
   <a href="#-60-second-quickstarts"><b>Quickstarts</b></a> •
   <a href="#-encompassing-modules"><b>Subsystems</b></a> •
   <a href="#-performance-benchmark-comparison"><b>Benchmarks</b></a> •
@@ -64,7 +64,7 @@
     <td width="50%" valign="top">
       <h3>🛡️ Network Deduplication</h3>
       <p>Guaranteed at-most-once idempotency across distributed message brokers (Kafka, RabbitMQ, SQS) via immutable <code>CommandEnvelope</code> tracking.</p>
-      <p>👉 <i>See <a href="orchestration/README.md#5-network-idempotency--deduplication"><b>Messaging & Deduplication</b></a></i></p>
+      <p>👉 <i>See <a href="orchestration/README.md#2-core-architectural-capabilities"><b>Messaging & Deduplication</b></a></i></p>
     </td>
     <td width="50%" valign="top">
       <h3>🔭 Hexagonal Control Plane</h3>
@@ -79,16 +79,16 @@
       <p>👉 <i>Explore the <a href="routing/README.md"><b>Routing Subsystem</b></a></i></p>
     </td>
     <td width="50%" valign="top">
-      <h3>🧪 Zero-Mock Testkit</h3>
-      <p>Deterministic in-memory test doubles across all subsystems. Verify saga recovery, network routing, and checkpoints without mocks or containers.</p>
-      <p>👉 <i>Explore the <a href="testkit/README.md"><b>TestKit Subsystem</b></a></i></p>
+      <h3>🌐 Standalone Virtual-Thread Server</h3>
+      <p>Built-in Helidon SE 4.x Níma HTTP and SSE control plane host with reflection-free compile-time JSON (<a href="serialization/README.md">Avaje</a>) and binary (<a href="serialization/README.md">Fury</a>) serialization.</p>
+      <p>👉 <i>Explore the <a href="server/README.md"><b>Server Subsystem</b></a> & <a href="serialization/README.md"><b>Serialization Subsystem</b></a></i></p>
     </td>
   </tr>
 </table>
 
 ---
 
-## 🏛️ The Dual-Tier Architecture
+## 🏛️ The Multi-Tier Architecture
 
 Dispersion separates state execution into complementary, composable tiers:
 
@@ -101,7 +101,7 @@ graph TD
     classDef store fill:#312e81,stroke:#6366f1,stroke-width:2px,color:#f8fafc;
 
     subgraph Client["Inbound Traffic"]
-        REQ["Inbound REST / gRPC / Kafka Message"]:::client
+        REQ["Inbound REST / SSE / Kafka / gRPC"]:::client
     end
 
     subgraph Tier2["Tier 2: Macro Orchestration State Machine (Durable, Turn-Based)"]
@@ -134,7 +134,9 @@ graph TD
         DCP["DefaultControlPlane"]:::control
         TOP["Dynamic Mermaid Topologies"]:::control
         ROUT["Bi-directional Signal Router"]:::control
+        SRV["Helidon SE Níma HTTP / SSE Server"]:::control
         DCP --> TOP & ROUT
+        DCP --> SRV
     end
 
     REQ --> Tier2
@@ -150,16 +152,16 @@ graph TD
 
 | Feature | Tier 1: Atomic State Machine | Tier 2: Saga Orchestrator | Tier 3: Turn-Based Batching |
 | :--- | :--- | :--- | :--- |
-| **Target Subsystem** | [**`fsm/`** (`dispersion-fsm-core`)](fsm/README.md) | [**`orchestration/`** (`dispersion-orchestration-core`)](orchestration/README.md) | [**`orchestration/batch/`** (`dispersion-orchestration-batch`)](orchestration/README.md#5-turn-based-batch-processing-dispersion-orchestration-batch) |
-| **Execution Latency** | **Sub-microsecond (< 1 µs)** | Turn-based (~ 10–50 µs) | Parallel items with barrier sync |
+| **Target Subsystem** | [**`fsm/`** (`dispersion-fsm-core`)](fsm/README.md) | [**`orchestration/`** (`dispersion-orchestration-core`)](orchestration/README.md) | [**`orchestration/batch/`** (`dispersion-orchestration-batch`)](orchestration/batch/README.md) |
+| **Execution Latency** | **Sub-microsecond (< 1 µs)** | Turn-based (~ 10–50 µs) | Parallel items with barrier synchronization |
 | **Threading Model** | Single Virtual Thread (confined) | Virtual Thread per turn | Virtual Thread per batch item |
 | **State Mutability** | Lock-free POJO direct mutation | Checkpoint snapshots on suspension | Isolated item contexts |
 | **Lifecycle** | Ephemeral, in-memory | Long-lived, suspendable (`waitForCommand`) | Batch-synchronized turns |
-| **Failure Recovery** | Fast-fail terminal diverting | [**Automated LIFO Saga rollbacks**](orchestration/README.md#2-automated-lifo-saga-rollbacks) | Item-level error isolation |
-| **Concurrency** | Sequential graph traversal | [**Parallel fork-join (`.parallel()`)**](orchestration/README.md#4-parallel-fork-join-concurrency) | Concurrent item processing |
+| **Failure Recovery** | Fast-fail terminal diverting | [**Automated LIFO Saga rollbacks**](orchestration/README.md#2-core-architectural-capabilities) | Item-level error isolation |
+| **Concurrency** | Sequential graph traversal | [**Parallel fork-join (`.parallel()`)**](orchestration/README.md#2-core-architectural-capabilities) | Concurrent item processing |
 | **Telemetry & Events** | Core `ExecutionEvent` records | Core `ExecutionEvent` records | `BatchBarrierReachedEvent`, `BatchBarrierUnlockedEvent` |
-| **Persistence** | None (zero overhead) | Pluggable [`CheckpointStore`](orchestration/README.md#1-turn-based-execution--signal-suspension) | [`BatchCheckpoint`](orchestration/README.md#5-turn-based-batch-processing-dispersion-orchestration-batch) |
-| **Testing Doubles** | [`TestStateContext`, `TestStateKey`](fsm/README.md#4-testing-atomic-state-machines-dispersion-fsm-test) | [`FakeSignalBroker`, `RecordingCheckpointStore`](orchestration/README.md#6-testing-orchestrations-dispersion-orchestration-test) | [`DispersionTestKit`](testkit/README.md) |
+| **Persistence** | None (zero overhead) | Pluggable [`CheckpointStore`](orchestration/README.md#2-core-architectural-capabilities) | [`BatchCheckpoint`](orchestration/batch/README.md) |
+| **Testing Doubles** | [`TestStateContext`, `TestStateKey`](fsm/README.md#4-testing-atomic-state-machines-dispersion-fsm-test) | [`FakeSignalBroker`, `RecordingCheckpointStore`](orchestration/README.md#5-testing-orchestrations-dispersion-orchestration-test) | [`DispersionTestKit`](testkit/README.md) |
 | **Best Used For** | Rules, protocol parsing, trading engines | Multi-service sagas, checkout, approvals | Bulk ingest, payroll, daily reconciliations |
 
 ---
@@ -171,11 +173,11 @@ How Dispersion compares to legacy orchestration and state machine engines:
 | Dimension | Legacy BPMN Engines | Traditional Actor / FSM Libs | Dispersion |
 | :--- | :--- | :--- | :--- |
 | **Runtime Threading** | Heavy OS Thread Pools (Starvation risk) | Reactive Event Loops (Callback hell) | [**Java 25 Virtual Threads (Millions concurrent)**](docs/virtual-threads-and-performance.md#1-project-loom--virtual-thread-mechanics) |
-| **Transition Latency** | 15–50 ms (Mandatory DB roundtrip) | 50–200 µs (Object hashing & reflection) | [**< 1 µs (Pre-compiled ordinal arrays)**](fsm/README.md#1-pre-compiled-graph-topology-statemap) |
+| **Transition Latency** | 15–50 ms (Mandatory DB roundtrip) | 50–200 µs (Object hashing & reflection) | [**< 1 µs (Pre-compiled ordinal arrays)**](fsm/README.md#2-architectural-design--zero-allocation-hot-paths) |
 | **Hot-Path Allocations** | Hundreds of objects per transition | Medium (Map entries, wrappers) | [**0 heap allocations on transition hot paths**](docs/virtual-threads-and-performance.md#3-zero-allocation-hot-paths--jvm-c2-optimization) |
 | **Thread Synchronization** | Synchronized locks & DB mutexes | Concurrent maps & atomic references | [**100% Lock-Free Thread Confinement**](docs/architecture-and-design.md#3-concurrency-guarantees--thread-confinement) |
-| **Saga Compensation** | Manual compensation choreography | Ad-hoc error handlers | [**Automated LIFO Saga Rollback Unwind**](orchestration/README.md#2-automated-lifo-saga-rollbacks) |
-| **Control Plane Coupling** | Heavy monolithic web application | Missing or ad-hoc | [**Decoupled `InspectableMachine` SPI**](control-plane/README.md#1-decoupled-inspectablemachine-spi) |
+| **Saga Compensation** | Manual compensation choreography | Ad-hoc error handlers | [**Automated LIFO Saga Rollback Unwind**](orchestration/README.md#2-core-architectural-capabilities) |
+| **Control Plane Coupling** | Heavy monolithic web application | Missing or ad-hoc | [**Decoupled `InspectableMachine` SPI**](control-plane/README.md#1-module-structure--hexagonal-spi-inversion) |
 
 ---
 
@@ -283,6 +285,7 @@ try (OrchestrationExecutor<OrderContext, OrderState, OrderRequest, String> execu
 > * Full Subsystem Guide: [**`orchestration/README.md`**](orchestration/README.md)
 > * Distributed Saga Theory: [**`docs/saga-orchestration-and-batching.md`**](docs/saga-orchestration-and-batching.md)
 > * Embedding Atomic Child Machines: [**`orchestration/README.md#3-end-to-end-saga-orchestration-example`**](orchestration/README.md#3-end-to-end-saga-orchestration-example)
+> * Runnable Test Specification: [OrderProcessingSagaExampleTests.java](examples/src/test/java/com/github/f442y/dispersion/examples/OrderProcessingSagaExampleTests.java)
 
 ---
 
@@ -311,9 +314,10 @@ OrchestrationTurnResult<OrderContext, OrderState, String> turn2 =
 
 > [!TIP]
 > 📖 **Related Documentation:**
-> * Suspension & Checkpoint Stores: [**`orchestration/README.md#1-turn-based-execution--signal-suspension`**](orchestration/README.md#1-turn-based-execution--signal-suspension)
+> * Suspension & Checkpoint Stores: [**`orchestration/README.md#2-core-architectural-capabilities`**](orchestration/README.md#2-core-architectural-capabilities)
 > * Routing Signals through Control Plane: [**`control-plane/README.md#3-end-to-end-control-plane-example`**](control-plane/README.md#3-end-to-end-control-plane-example)
 > * Testing Checkpoints: [**`testkit/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga`**](testkit/README.md#recipe-2-verifying-checkpoint-persistence-in-a-suspended-saga)
+> * Runnable Demo Integration: [DispersionDemoAppIntegrationTests.java](examples/src/test/java/com/github/f442y/dispersion/examples/DispersionDemoAppIntegrationTests.java)
 
 ---
 
@@ -341,17 +345,45 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane()) {
 }
 ```
 
-> [!TIP]
-> 📖 **Related Documentation:**
-> * Full Control Plane Guide: [**`control-plane/README.md`**](control-plane/README.md)
-> * Telemetry & Extensible Events: [**`event/README.md`**](event/README.md)
-> * UI Integration Patterns (React + TanStack Router): [**`docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router`**](docs/observability-and-control-plane.md#5-modern-web-ui-integration-react--tanstack-router)
+---
+
+### 5. Standalone Control Plane Server & Demo App
+Dispersion includes a ready-to-run interactive demo application and embedded virtual-thread HTTP/SSE server powered by **Helidon SE 4.x Níma**:
+
+```bash
+# Run the interactive demo application
+./mvnw compile exec:java -pl examples -Dexec.mainClass="com.github.f442y.dispersion.examples.DispersionDemoApp"
+```
+
+Once running on port `8080` (base path `/api/v1`), interact with the control plane from any terminal:
+
+```bash
+# 1. Discover all registered state machines
+curl -s http://localhost:8080/api/v1/machines
+
+# 2. Query dynamic Mermaid topology for a workflow
+curl -s http://localhost:8080/api/v1/machines/OrderWorkflow
+
+# 3. Inspect suspended executions awaiting external signals
+curl -s "http://localhost:8080/api/v1/executions?status=SUSPENDED"
+
+# 4. Stream real-time telemetry events over Server-Sent Events (SSE)
+curl -N http://localhost:8080/api/v1/events/stream
+
+# 5. Deliver external signal to resume suspended execution
+curl -X POST http://localhost:8080/api/v1/executions/signal \
+  -H "Content-Type: application/json" \
+  -d '{"machineName":"OrderWorkflow","correlationKey":"ORDER-DEMO-99","signalName":"PaymentSignal","payload":{"correlationKey":"ORDER-DEMO-99","paymentMethod":"APPLE_PAY","amountCents":9995}}'
+```
+
+> [!NOTE]
+> An interactive web dashboard (Vite, React 19, Tailwind CSS) is documented in [`ui/README.md`](ui/README.md) for visualizing real-time topologies and event streams. As the UI design is actively iterating, backend server APIs and JSON schemas remain the stable contract.
 
 ---
 
 ## 📦 Encompassing Modules
 
-Dispersion is engineered as 21 modular components partitioned into 6 functional subsystems. Click each subsystem below for its dedicated guide:
+Dispersion is engineered as **28 modular projects** (Parent BOM/POM + 27 reactor submodules) partitioned into **8 functional subsystems**. Click each subsystem below for its dedicated guide:
 
 ```mermaid
 graph LR
@@ -361,6 +393,8 @@ graph LR
         R["<b>routing/</b><br/>Workload Router SPI & Core"]
         O["<b>orchestration/</b><br/>Tier 2 Saga, Batch & Messaging"]
         C["<b>control-plane/</b><br/>Control Plane & SPI"]
+        S["<b>serialization/</b><br/>Avaje JSON & Fury Binary"]
+        SRV["<b>server/</b><br/>Helidon SE & Jakarta Host"]
         T["<b>testkit/</b><br/>DispersionTestKit"]
     end
 
@@ -368,7 +402,9 @@ graph LR
     O --> F & E
     O -.->|adapter| R
     C --> E & R
-    T --> E & F & R & O & C
+    S --> E & C
+    SRV --> C & S
+    T --> E & F & R & O & C & S & SRV
 ```
 
 | Subsystem | Included Modules | Focus & Capabilities | Documentation |
@@ -377,20 +413,27 @@ graph LR
 | **`fsm/`** | `dispersion-fsm-api`<br/>`dispersion-fsm-core`<br/>`dispersion-fsm-test` | Sub-microsecond atomic FSM engine, pre-compiled `StateMap` ordinal arrays, and adaptive admission control. | [**`fsm/README.md`**](fsm/README.md) |
 | **`routing/`** | `dispersion-routing-api`<br/>`dispersion-routing-core`<br/>`dispersion-routing-test` | Location-agnostic workload router, Canary traffic splits, Developer Sandboxes, backpressure admission, and worker hosting. | [**`routing/README.md`**](routing/README.md) |
 | **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, routed compensations, signal rehydration, parallel branches, batch barriers, and broker-agnostic messaging. | [**`orchestration/README.md`**](orchestration/README.md) |
-| **`control/`** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Decoupled `InspectableMachine` and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control-plane/README.md`**](control-plane/README.md) |
-| **`testing/`** | `dispersion-testkit` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testkit/README.md`**](testkit/README.md) |
+| **`control-plane/`** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Decoupled `InspectableMachine` and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control-plane/README.md`**](control-plane/README.md) |
+| **`serialization/`** | `dispersion-serialization-binary-api`<br/>`dispersion-serialization-fory`<br/>`dispersion-serialization-json-api`<br/>`dispersion-serialization-avaje` | Fast, reflection-free JSON (Avaje-Jsonb compile-time code generation) and binary (Apache Fury) serialization for control plane and telemetry events. | [**`serialization/README.md`**](serialization/README.md) |
+| **`server/`** | `dispersion-server-api`<br/>`dispersion-server-jakarta`<br/>`dispersion-server-standalone` | Lightweight control plane HTTP & SSE servers. `dispersion-server-standalone` runs on Helidon SE 4.x Níma virtual threads. | [**`server/README.md`**](server/README.md) |
+| **`testkit/`** | `dispersion-testkit` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testkit/README.md`**](testkit/README.md) |
+| **`examples/`** | `dispersion-examples` | Interactive demo application (`DispersionDemoApp`), end-to-end integration workflows, and traffic simulation. | [**`examples/README.md`**](examples/README.md) |
 
 ---
 
 ## 📚 Architectural Guides
 
-For comprehensive technical deep dives into engine internals:
+For comprehensive technical deep dives into engine internals, visit the [**Documentation Hub (`docs/README.md`)**](docs/README.md) or explore individual guides:
+
+* 🧭 [**Documentation Hub**](docs/README.md) — Master navigation index, curated role-based reading paths, and subsystem matrix.
 
 * 📐 [**Architecture & Hexagonal Design**](docs/architecture-and-design.md) — Hexagonal ports and adapters, symmetrical triplet patterns, and thread confinement guarantees.
 * ⚡ [**Virtual Threads & Performance Guide**](docs/virtual-threads-and-performance.md) — Loom mechanics, carrier thread unmounting, zero-pinning guarantees, and JVM escape analysis.
 * 🔄 [**Saga Orchestration & Batch Processing**](docs/saga-orchestration-and-batching.md) — Distributed saga theory, checkpoint storage, durable signal rehydration, and batch barrier policies.
-* 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — Telemetry events, $O(1)$ dual-pool memory topology, and React UI integration patterns.
-* 🗺️ [**Master Engineering Roadmap & Execution Plan**](ROADMAP.md) — Phased milestones, system capabilities, and Phase 3 Control Panel Web UI plan.
+* 🌐 [**Workload Routing & Traffic Splitting**](docs/workload-routing-and-traffic-splitting.md) — Location-agnostic execution, Canary traffic steering, developer sandboxes, and backpressure admission.
+* 💾 [**Serialization & Wire Formats Guide**](docs/serialization-and-wire-formats.md) — Compile-time reflection-free JSON (Avaje), Apache Fury binary snapshots, and event wire schema.
+* 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — Telemetry events, $O(1)$ dual-pool memory topology, standalone Helidon server, and event streaming.
+* 🗺️ [**Master Engineering Roadmap & Execution Plan**](ROADMAP.md) — Phased milestones, system capabilities, and active focus areas.
 
 ---
 
@@ -446,10 +489,22 @@ Add the modules required by your application:
         <artifactId>dispersion-orchestration-messaging</artifactId>
     </dependency>
 
-    <!-- Observability & Control Plane (Optional) -->
+    <!-- Observability & Control Plane Core (Optional) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-control-plane-core</artifactId>
+    </dependency>
+
+    <!-- Fast Reflection-Free JSON Serialization (Optional) -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-serialization-avaje</artifactId>
+    </dependency>
+
+    <!-- Standalone Helidon SE Níma HTTP/SSE Server Host (Optional) -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-server-standalone</artifactId>
     </dependency>
 
     <!-- Testing Facade (Test Scope) -->
@@ -470,10 +525,10 @@ Add the modules required by your application:
 * Apache Maven 3.9+ (or use the included wrapper `./mvnw`)
 
 ```bash
-# Fast parallel compilation and unit test execution across all 21 modules
+# Fast parallel compilation and unit test execution across all 28 reactor projects
 ./mvnw test -B -ntp -T 1C
 
-# Execute end-to-end integration tests (500-thread pipeline bursts, distributed sagas)
+# Execute end-to-end integration tests (500-thread pipeline bursts, distributed sagas, demo app)
 ./mvnw verify -B -ntp -T 1C
 ```
 
@@ -487,7 +542,7 @@ From architectural formulation to the sub-microsecond virtual-thread engine and 
 * **Hexagonal Systems Architecture:** Enforcing compile-time modular boundaries, symmetrical triplet patterns (`api`/`core`/`test`), and zero-coupling between execution tiers.
 * **Low-Latency & Virtual Thread Concurrency:** Designing lock-free thread confinement, non-pinning virtual thread coordination, pre-compiled ordinal array state lookup (`StateMap`), and primitive bitmask guards with zero hot-path heap allocations.
 * **Distributed Sagas & Resilient Routing:** Architecting automated reverse-chronological (LIFO) compensation unwinding, durable signal rehydration with pluggable checkpoints, and location-agnostic routing topologies.
-* **Control Plane & Reactive Web UI:** Building the Helidon SE reactive HTTP/SSE backend, polymorphic telemetry event streams, and decomposing the React 19 / TanStack Query control plane dashboard.
+* **Control Plane & Reactive Server Host:** Building the Helidon SE reactive HTTP/SSE backend, polymorphic telemetry event streams, and reflection-free compile-time serialization.
 
 ---
 

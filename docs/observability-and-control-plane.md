@@ -1,6 +1,6 @@
 # Observability & Control Plane Guide
 
-Dispersion features a centralized, hexagonal **Observability and Control Plane** designed for zero hot-path overhead, real-time workflow inspection, dynamic Mermaid diagram generation, $O(1)$ dual-pool memory topology, and bidirectional external signal routing.
+Dispersion features a centralized, hexagonal **Observability and Control Plane** designed for zero hot-path overhead, real-time workflow inspection, dynamic Mermaid diagram generation, $O(1)$ dual-pool memory topology, standalone Helidon SE virtual-thread HTTP/SSE hosting, and bidirectional external signal routing.
 
 ---
 
@@ -10,10 +10,16 @@ Traditional monitoring tools intrude upon execution engines via reflection, byte
 
 ```mermaid
 graph TD
-    subgraph Frontend["Modern Web UI (React + TanStack Router)"]
+    subgraph UI["Web Client / Dashboard (ui/)"]
         TOP_UI["Topology Diagram (Mermaid / SVG)"]
         EXEC_UI["Execution Explorer & Timelines"]
         SIG_UI["Manual Signal Dispatcher"]
+    end
+
+    subgraph ServerHost["dispersion-server-standalone (Helidon SE 4.x Níma)"]
+        HTTP["HTTP Routing on Virtual Threads"]
+        SSE["Server-Sent Events Stream"]
+        JAK["dispersion-server-jakarta (JAX-RS)"]
     end
 
     subgraph ControlPlane["dispersion-control-plane-core (DefaultControlPlane)"]
@@ -38,7 +44,8 @@ graph TD
         BOSE["BatchOrchestrationExecutor"]
     end
 
-    Frontend <-->|"REST / SSE / WebSockets"| DCP
+    UI <-->|"REST / SSE (/api/v1)"| ServerHost
+    ServerHost <--> DCP
     DCP ..> IM
     ASME -.->|"asInspectableMachine()"| IM
     OSME -.->|"asInspectableMachine()"| IM
@@ -52,6 +59,8 @@ graph TD
    When telemetry is not subscribed, event dispatching evaluates to a single branch predictor check—**0** allocations, **0** system clock queries, and **0** thread context switches.
 3. **Strict Fault Isolation:**
    Listener invocations are isolated with error boundaries. Telemetry failures or slow monitoring sinks **never** cause workflow state transitions or Saga compensations to abort.
+4. **Decoupled Server Hosting:**
+   `dispersion-server-standalone` hosts the control plane using Helidon SE 4.x Níma on virtual threads without polluting core domain logic. JSON serialization is offloaded to compile-time reflection-free codecs (`dispersion-serialization-avaje`).
 
 ---
 
@@ -293,87 +302,58 @@ public final class ControlPlaneOperations {
 
 ---
 
-## 5. Modern Web UI Integration (React + TanStack Router)
+## 5. Standalone Server Host & HTTP/SSE Endpoints (`dispersion-server-standalone`)
 
-Because `DefaultControlPlane` is built with pure Java and zero web framework coupling, exposing its operations over REST, Server-Sent Events (SSE), or WebSockets is trivial.
+Dispersion provides built-in HTTP and Server-Sent Events (SSE) servers via `dispersion-server-standalone` (powered by Helidon SE 4.x Níma virtual threads) and `dispersion-server-jakarta` (JAX-RS 3.1).
 
-### Spring Boot / Javalin REST Controller Example
+### Starting the Helidon Standalone Server
 
 ```java
-package com.example.web;
-
-import com.github.f442y.dispersion.control.ExecutionStatus;
-import com.github.f442y.dispersion.control.ExecutionSummary;
-import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.core.DefaultControlPlane;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import com.github.f442y.dispersion.server.api.ControlPlaneServer;
+import com.github.f442y.dispersion.server.api.ControlPlaneServerFactory;
+import com.github.f442y.dispersion.server.api.ServerConfig;
 
-import java.util.List;
+DefaultControlPlane controlPlane = new DefaultControlPlane();
+// ... register inspectable machines ...
 
-@RestController
-@RequestMapping("/api/control")
-public class ControlPlaneRestController {
+ServerConfig config = ServerConfig.builder()
+    .port(8080)
+    .basePath("/api/v1")
+    .cors(true)
+    .build();
 
-    private final DefaultControlPlane controlPlane;
+ControlPlaneServer server = ControlPlaneServerFactory.create(controlPlane, config);
+server.start();
 
-    public ControlPlaneRestController(DefaultControlPlane controlPlane) {
-        this.controlPlane = controlPlane;
-    }
-
-    @GetMapping("/machines/{name}")
-    public ResponseEntity<MachineDescriptor> getMachine(@PathVariable String name) {
-        return controlPlane.getMachine(name)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @GetMapping("/machines/{name}/executions")
-    public List<ExecutionSummary> listExecutions(
-            @PathVariable String name,
-            @RequestParam(required = false, defaultValue = "SUSPENDED") ExecutionStatus status,
-            @RequestParam(required = false, defaultValue = "50") int limit) {
-        return controlPlane.listExecutions(name, status, limit);
-    }
-}
+System.out.println("Control Plane Server listening on: " + server.boundAddress());
 ```
 
-### React + TanStack Router UI View
+### Standard HTTP & SSE Endpoints
 
-In the React frontend, rendering the interactive topology uses the generated Mermaid string directly:
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/node` | Cluster node health, CPU core count, JVM uptime, active machine count. |
+| `GET` | `/api/v1/machines` | List all registered state machine descriptors. |
+| `GET` | `/api/v1/machines/{name}` | Machine topology, initial/end states, and dynamic Mermaid graph string. |
+| `POST` | `/api/v1/machines/{name}/dispatch` | Dispatches an execution input directly into a registered machine. |
+| `GET` | `/api/v1/executions` | Query executions filtered by `machine`, `status`, or limit. |
+| `GET` | `/api/v1/executions/{id}` | Summary status and current state for a specific execution. |
+| `GET` | `/api/v1/executions/{id}/timeline` | Ordered chronological event timeline for an execution. |
+| `POST` | `/api/v1/executions/signal` | Deliver external signal (`machineName`, `correlationKey`, `signalName`, `payload`). |
+| `GET` | `/api/v1/events/stream` | Real-time Server-Sent Events (SSE) telemetry event stream (`text/event-stream`). Optional filter query parameters: `machine`, `executionId`. |
 
-```tsx
-import React, { useEffect, useRef } from 'react';
-import mermaid from 'mermaid';
+---
 
-interface TopologyViewerProps {
-  machineName: string;
-  mermaidDiagram: string;
-}
+## 6. Web Control Panel UI Integration
 
-export const TopologyViewer: React.FC<TopologyViewerProps> = ({ machineName, mermaidDiagram }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+A modern browser interface is provided in [`ui/`](../ui/) (built with Vite, React 19, and Tailwind CSS).
 
-  useEffect(() => {
-    if (containerRef.current && mermaidDiagram) {
-      mermaid.initialize({ startOnLoad: false, theme: 'dark' });
-      mermaid.render(`mermaid-${machineName}`, mermaidDiagram).then(({ svg }) => {
-        if (containerRef.current) {
-          containerRef.current.innerHTML = svg;
-        }
-      });
-    }
-  }, [machineName, mermaidDiagram]);
+The web client interacts directly with the Helidon SE control plane server:
+* **Topology Diagrams:** Consumes `/api/v1/machines/{name}` and renders the pre-computed Mermaid graph.
+* **Execution Explorer:** Queries `/api/v1/executions` to visualize active, suspended, and terminal turns.
+* **Live SSE Telemetry:** Subscribes to `/api/v1/events/stream` to update node highlights and event logs in real time.
+* **Signal Injection:** Submits manual signals via `POST /api/v1/executions/signal`.
 
-  return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-      <h2 className="text-xl font-bold text-white mb-4">Topology: {machineName}</h2>
-      <div ref={containerRef} className="overflow-x-auto flex justify-center" />
-    </div>
-  );
-};
-```
+> [!NOTE]
+> The UI in `ui/` is subject to ongoing design refinements and frontend UX iteration. The backend server endpoints and Avaje JSON schemas serve as the stable system contract.

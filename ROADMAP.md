@@ -2,7 +2,7 @@
 
 > **Document Status:** Authoritative Master Plan & Living Engineering Roadmap
 > **Last Updated:** September 27, 2026
-> **Repository Baseline:** `main` branch, 28 Maven reactor modules, 100% test pass rate, Java 25 virtual-thread native, Helidon SE Níma standalone HTTP/SSE server, Avaje compile-time JSON serialization, interactive runnable local demo app ([`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java)), and production-ready Web UI ([`ui/`](file:///C:/Users/faiza/development/dispersion/ui)).
+> **Repository Baseline:** `main` branch, 28 Maven reactor modules, 100% test pass rate, Java 25 virtual-thread native, Helidon SE Níma standalone HTTP/SSE server, Avaje compile-time JSON serialization, interactive runnable local demo app ([`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java)), and Web UI ([`ui/`](file:///C:/Users/faiza/development/dispersion/ui)).
 > **Active Focus:** Phase 4 — Distributed Stores, Clustered Leases & Enterprise Messaging Integration.
 
 ---
@@ -13,7 +13,7 @@ Dispersion is a high-throughput, virtual-thread-native state engine and distribu
 
 1. **Tier 1 (Atomic FSMs):** Ultra-low latency, thread-confined, lock-free finite state machines with sub-microsecond state transitions.
 2. **Tier 2 (Discrete Sagas):** Turn-based macro workflows supporting safe suspension, signal injection, child machine composition, and automated LIFO compensation rollbacks.
-3. **Tier 3 (Batch Processing):** Item-level virtual-thread concurrency with barrier-synchronized progression (`ALL_ITEMS`, `QUORUM`) and granular item-level checkpoints.
+3. **Tier 3 (Batch Processing):** Item-level virtual-thread concurrency with barrier-synchronized progression (`ALL_ITEMS_ARRIVED`, `SIGNAL_TRIGGERED`) and granular item-level checkpoints.
 
 ---
 
@@ -25,7 +25,7 @@ flowchart TD
         DEC["28 Hexagonal Modules<br/>• Zero split-package collisions<br/>• Symmetrical API/Core/Test triplets"]
         FSM["Tier 1: Atomic FSM<br/>• Pre-compiled StateMap ordinal arrays<br/>• Circuit breakers & visit limits<br/>• Lock-free virtual thread runner"]
         SAGA["Tier 2: Discrete Sagas<br/>• Turn-based suspension<br/>• Automated LIFO compensation<br/>• Child composition & fork-join"]
-        BATCH["Tier 3: Batch Engine<br/>• Item-level virtual thread concurrency<br/>• ALL_ITEMS & QUORUM barriers"]
+        BATCH["Tier 3: Batch Engine<br/>• Item-level virtual thread concurrency<br/>• ALL_ITEMS_ARRIVED & SIGNAL_TRIGGERED barriers"]
         ROUTE["Routing Engine<br/>• Canary traffic control<br/>• Location-agnostic dispatch"]
         EVENT["Telemetry Subsystem<br/>• 64k ring buffer event bus<br/>• Polymorphic ExecutionEvent records"]
     end
@@ -36,7 +36,7 @@ flowchart TD
         DEMO["Interactive Demo App<br/>• Runnable local demo<br/>• Multi-step saga & burst pipelines"]
     end
 
-    subgraph P3["✅ Phase 3: Control Panel Web UI (Complete)"]
+    subgraph P3["✅ Phase 3: Control Panel Web UI (Milestone Delivered)"]
         UI_SCAF["Modern Web Stack<br/>• React 19 + TypeScript + Vite<br/>• TanStack Router + TanStack Query v5<br/>• Tailwind CSS minimalist monochrome theme"]
         UI_MODELS["Decomposed Domain Layers<br/>• Typed API modules & domain models<br/>• SSE stream subscriber with query invalidation"]
         UI_VIEWS["Mission Control Dashboard<br/>• Interactive State Pipeline & Mermaid DAG<br/>• Execution Detail Drawer & Signal Console<br/>• Real-time polymorphic telemetry stream"]
@@ -70,10 +70,10 @@ All modules are decomposed into topic-nested directories with strict hexagonal b
 
 | Subsystem | Modules (`groupId: com.github.f442y.dispersion`) | Key Responsibilities & Invariants |
 | :--- | :--- | :--- |
-| **Eventing** | `dispersion-event-api`<br/>`dispersion-event-core`<br/>`dispersion-event-test` | Polymorphic [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java) record hierarchy partitioned into subpackages (`lifecycle`, `transition`, `compensation`, `guard`, `batch`, `signal`, `routing`). Bounded lock-free ring buffer dispatcher running on virtual threads with zero lock contention. |
+| **Eventing** | `dispersion-event-api`<br/>`dispersion-event-core`<br/>`dispersion-event-test` | Polymorphic [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java) record hierarchy partitioned into subpackages (`event.turn`, `event.state`, `event.signal`, `event.compensation`, `event.retry`, `event.child`, `event.parallel`, `event.guard`, `event.control`). Bounded lock-free ring buffer dispatcher running on virtual threads with zero lock contention. |
 | **FSM (Tier 1)** | `dispersion-fsm-api`<br/>`dispersion-fsm-core`<br/>`dispersion-fsm-test` | Ultra-fast atomic state transitions (`transitionsTo`), state visit limits (`maxVisits`), circuit breaker trip detection, and direct virtual thread execution pathway (`executeDirect`) with zero heap thread allocations. |
 | **Routing** | `dispersion-routing-api`<br/>`dispersion-routing-core`<br/>`dispersion-routing-test` | Location-agnostic workload routing, Canary traffic splitting, metadata-driven dispatch, and developer isolation sandboxes. |
-| **Orchestration (Tiers 2 & 3)** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based execution lifecycle, safe suspension (`waitForSignal`), automated LIFO compensation rollbacks on fault/cancellation, parallel fork-join concurrency, batch barriers (`ALL_ITEMS`, `QUORUM`), and idempotent message envelope deduplication. |
+| **Orchestration (Tiers 2 & 3)** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based execution lifecycle, safe suspension (`waitForSignal`), automated LIFO compensation rollbacks on fault/cancellation, parallel fork-join concurrency, batch barriers (`ALL_ITEMS_ARRIVED`, `SIGNAL_TRIGGERED`), and idempotent message envelope deduplication. |
 | **Control Plane** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Unified operator control SPI ([`ControlPlane`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ControlPlane.java)) with reference implementation ([`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java)), machine topology registry, live query interfaces, and dynamic Mermaid graph generation. |
 | **Serialization** | `dispersion-serialization-binary-api`<br/>`dispersion-serialization-fory`<br/>`dispersion-serialization-json-api`<br/>`dispersion-serialization-avaje` | Zero-copy binary serialization SPI (Fury) and compile-time reflection-free JSON serialization (Avaje-Jsonb) supporting polymorphic discrimination across all 28 execution events without runtime reflection. |
 | **Server** | `dispersion-server-api`<br/>`dispersion-server-jakarta`<br/>`dispersion-server-standalone` | Lightweight server SPI decoupled from web frameworks. Standalone Helidon SE 4.x Níma HTTP server running natively on Java 25 virtual threads with SSE streaming and REST endpoints, plus Jakarta REST adapter module. |
@@ -96,75 +96,12 @@ The standalone server (port `8080`) provides the communication layer for the Web
 
 ---
 
-## 💻 Phase 3: Control Panel Web UI (`ui/`) [Completed Milestone]
+## 💻 Phase 3: Control Panel Web UI (`ui/`)
 
-> **Stack:** React 19, TypeScript 5.8+, Vite, TanStack Router (file-based routing), TanStack Query v5, Tailwind CSS, Lucide Icons, Mermaid.js.
+The web UI in `ui/` is built with React 19, TypeScript, Vite, TanStack Router, TanStack Query v5, and Tailwind CSS. It communicates with the standalone server via REST and SSE.
 
-```
-ui/
-├── index.html
-├── package.json
-├── vite.config.ts                    # Configured with cross-platform @/ path alias
-├── tsconfig.json
-├── src/
-│   ├── api/
-│   │   ├── client.ts                 # Base HTTP fetch wrapper with dynamic base URL
-│   │   ├── machines.api.ts           # Machine query & dispatch REST endpoints
-│   │   ├── executions.api.ts         # Execution listing, timeline & signal endpoints
-│   │   ├── nodes.api.ts              # Node health probe and discovery endpoints
-│   │   └── index.ts                  # Unified API facade
-│   ├── types/
-│   │   ├── machine.types.ts          # MachineDescriptor, MachineType, Dispatch contracts
-│   │   ├── execution.types.ts        # ExecutionSummary, ListExecutionsFilter, Signal contracts
-│   │   ├── event.types.ts            # StreamExecutionEvent polymorphic record schema
-│   │   ├── node.types.ts             # NodeInfo, DiscoveredNode, NodeProbeResult
-│   │   └── index.ts                  # Re-exports
-│   ├── hooks/
-│   │   ├── queryKeys.ts              # TanStack Query key factory (machineKeys, executionKeys, nodeKeys)
-│   │   ├── useMachines.ts            # useMachinesQuery, useMachineQuery, useDispatchMachineMutation
-│   │   ├── useExecutions.ts          # useExecutionsQuery, useExecutionQuery, useSendSignalMutation
-│   │   ├── useNodeCluster.ts         # Node probe, 10s auto-reconnect timer, cluster selector
-│   │   ├── useEventStream.ts         # Resilient SSE subscriber with automated query cache invalidation
-│   │   └── index.ts                  # Re-exports
-│   ├── utils/
-│   │   ├── cn.ts                     # Tailwind class merge helper (clsx + twMerge)
-│   │   ├── formatters.ts             # formatUptime, formatTime, truncateId
-│   │   └── index.ts                  # Re-exports
-│   ├── components/
-│   │   ├── common/                   # Design primitives (Badge, Button, Card, Modal)
-│   │   ├── node/                     # ConnectedNodeBar, NodeTelemetryBadges
-│   │   ├── flow/                     # FlowCard, FlowCatalog, FlowHeader, FlowKpiGrid, FlowInspector, DispatchModal
-│   │   ├── pipeline/                 # StateStepPill, SimpleStatePipeline, MermaidDiagram
-│   │   ├── execution/                # ExecutionsTable, ExecutionRow, ExecutionMetadataGrid, ExecutionSignalConsole, ExecutionTimeline, ExecutionDetailDrawer
-│   │   ├── telemetry/                # LiveTelemetryStream, TelemetryEventRow
-│   │   └── index.ts                  # Component barrel export
-│   ├── routes/
-│   │   ├── __root.tsx                # App layout shell with monochrome theme & toaster
-│   │   └── index.tsx                 # Decomposed Mission Control dashboard
-│   ├── index.css                     # Monochrome dark theme palette & sleek scrollbars
-│   └── main.tsx                      # App bootstrap with QueryClientProvider
-```
-
-### Verified Implementation Steps
-
-- [x] **Step 3.1 — UI Scaffolding & Build Infrastructure**
-  - Initialized `ui/` with Vite, React 19, TypeScript, `@tanstack/react-router`, and `@tanstack/react-query`.
-  - Configured `@/` path alias with cross-platform URL resolution.
-  - Implemented sleek dark monochrome theme with Tailwind CSS.
-- [x] **Step 3.2 — Domain Contracts & Modular API Client**
-  - Modularized API operations into `machines.api`, `executions.api`, and `nodes.api`.
-  - Added TypeScript discriminated schemas for all 28 polymorphic backend execution event types.
-- [x] **Step 3.3 — Live State Synchronization (SSE + TanStack Query)**
-  - Developed `useEventStream` with automatic reconnection and immediate TanStack Query cache invalidation on any backend lifecycle, transition, signal, or compensation event.
-  - Implemented 10-second automatic reconnect ticker and node health telemetry in `useNodeCluster`.
-- [x] **Step 3.4 — Decomposed Route Views & Mission Control Dashboard**
-  - Refactored dashboard into focused single-responsibility components (`FlowHeader`, `FlowKpiGrid`, `ExecutionsTable`, `ExecutionRow`, `ExecutionTimeline`, `LiveTelemetryStream`).
-  - Added live state-step counter pills showing execution volume across individual workflow states.
-- [x] **Step 3.5 — Interactive Workflow Visualizer**
-  - Added toggleable views: interactive step pipeline (`SimpleStatePipeline`) and dark-themed Mermaid SVG topology graph (`MermaidDiagram`).
-- [x] **Step 3.6 — Operator Signal Console & Execution Drawer**
-  - Implemented slide-out `ExecutionDetailDrawer` with turn timeline, correlation ID tags, and signal injection console.
-  - Added custom JSON dispatch modal allowing operators to trigger workflow runs with arbitrary payloads.
+> [!NOTE]
+> The Web UI is designed as an uncoupled client against the server API and is subject to active iteration.
 
 ---
 
