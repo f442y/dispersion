@@ -3,7 +3,7 @@
 > **Document Status:** Authoritative Master Plan & Living Engineering Roadmap
 > **Last Updated:** September 27, 2026
 > **Repository Baseline:** `main` branch, 28 Maven reactor modules, 100% test pass rate, Java 25 virtual-thread native, Helidon SE Níma standalone HTTP/SSE server, Avaje compile-time JSON serialization, interactive runnable local demo app ([`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java)), and Web UI ([`ui/`](file:///C:/Users/faiza/development/dispersion/ui)).
-> **Active Focus:** Phase 4 — Distributed Stores, Clustered Leases & Enterprise Messaging Integration.
+> **Active Focus:** Phase 4 — Dedicated Control Plane Service & Embedded UI Hosting Architecture (Immediate Design Target), followed by Clustered Stores & Messaging Integration.
 
 ---
 
@@ -42,7 +42,8 @@ flowchart TD
         UI_VIEWS["Mission Control Dashboard<br/>• Interactive State Pipeline & Mermaid DAG<br/>• Execution Detail Drawer & Signal Console<br/>• Real-time polymorphic telemetry stream"]
     end
 
-    subgraph P4["🌐 Phase 4: Distributed Stores & Cluster Integration (Active Focus)"]
+    subgraph P4["🌐 Phase 4: Control Plane Service & Clustered Integration (Active Focus)"]
+        CP_SRV["Dedicated Control Plane Service<br/>• Standalone service per environment<br/>• Helidon SE embedded UI hosting<br/>• SPA fallback routing & zero-CORS"]
         JAKARTA["Host Framework Adapters<br/>• Jakarta REST / Servlet resource bindings<br/>• Spring Boot / Quarkus runtime starters"]
         STORES["Durable Stores<br/>• PostgreSQL snapshot persistence<br/>• Redis checkpoint cache"]
         MESSAGING["Distributed Messaging<br/>• Kafka partitioned topics<br/>• RabbitMQ exchange adapters"]
@@ -105,7 +106,30 @@ The web UI in `ui/` is built with React 19, TypeScript, Vite, TanStack Router, T
 
 ---
 
-## 🌐 Phase 4: Clustered, Distributed & Enterprise Integrations [Active Focus]
+## 🌐 Phase 4: Control Plane Service & Clustered Enterprise Integrations [Active Focus]
+
+### 🎯 Immediate Next Design Target: Dedicated Control Plane Service & Embedded UI Hosting
+
+Formulate and plan the production deployment topology for a dedicated Control Plane service per environment with built-in Single-Page Application (SPA) dashboard hosting:
+
+- [ ] **Dedicated Control Plane Service per Environment Topology**:
+  - **Single Operational Ingress**: Deploy `dispersion-server-standalone` as a dedicated control plane microservice per environment (`control-plane-staging`, `control-plane-prod`), isolating operators from volatile worker pod IPs.
+  - **Global Telemetry Aggregator**: Worker and saga nodes stream `ExecutionEvent` records over ring buffers or broker topics into the control plane service, which fans out unified Server-Sent Events (SSE) to browser clients.
+  - **Cluster-Wide Checkpoint Discovery**: Query the shared `CheckpointStore` to discover and list suspended sagas across the cluster even when zero worker nodes are actively running turns.
+  - **Decoupled External Signal Ingress**: `POST /api/v1/executions/signal` hits the Control Plane service, which resolves routing to the target worker or places resume commands onto the messaging fabric.
+
+- [ ] **Embedded UI Hosting in Helidon SE Níma (`dispersion-server-standalone`)**:
+  - **Virtual-Thread Static Asset Serving**: Mount compiled `ui/dist` bundle (`index.html`, `assets/*`) natively via Helidon SE `StaticContentSupport` on virtual threads without servlet overhead.
+  - **SPA Fallback Routing**: Catch-all routing redirecting client-side TanStack Router paths (`/machines/*`, `/executions/*`) back to `index.html`.
+  - **Zero-CORS & Same-Origin Reliability**: Serve the UI and backend `/api/v1/*` from the same origin, eliminating cross-origin preflight requests (`OPTIONS`), cookie barriers, and SSL domain mismatches.
+  - **External CDN Option Preservation**: Maintain total decoupling of backend REST/SSE schemas so enterprise platforms retain the option to host UI assets externally (e.g. Cloudflare Pages or AWS CloudFront/S3) if preferred.
+
+- [ ] **Build & Packaging Automation**:
+  - Integrate Node 24 UI build (`npm run build`) into the Maven build lifecycle or multi-stage Docker container so `ui/dist` is packaged directly into the deployable standalone server artifact.
+
+---
+
+### Additional Phase 4 Capabilities
 
 - [ ] **Jakarta EE / Host Framework Adapters (`dispersion-server-jakarta`)**:
   - Expose `@Path` Jakarta REST / Servlet resource endpoints so users deploying to Spring Boot, Helidon MP, Quarkus, or Micronaut can use native container HTTP.
