@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -47,6 +48,7 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     private WebServer server;
+    private volatile Instant startedAt;
     private int boundPort;
 
     public HelidonControlPlaneServer(
@@ -68,12 +70,14 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
         String basePath = sanitizeBasePath(config.basePath());
 
         server = WebServer.builder()
+                .host(config.host())
                 .port(config.port())
                 .routing(routing -> routing.register(basePath, this::configureRoutes))
                 .build()
                 .start();
 
         boundPort = server.port();
+        startedAt = Instant.now();
         running.set(true);
 
         log.info("Dispersion Control Plane Server (Helidon SE / Níma) started on port {} with base path '{}'",
@@ -110,11 +114,14 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
     private void configureRoutes(HttpRules rules) {
         rules.get("/machines", this::handleListMachines)
                 .get("/machines/{name}", this::handleGetMachine)
+                .post("/machines/{name}/dispatch", this::handleDispatchMachine)
                 .get("/executions", this::handleListExecutions)
                 .get("/executions/{id}", this::handleGetExecution)
                 .get("/executions/{id}/timeline", this::handleGetExecutionTimeline)
                 .post("/executions/signal", this::handleSendSignal)
-                .get("/events/stream", this::handleEventStream);
+                .get("/events/stream", this::handleEventStream)
+                .get("/node", this::handleGetNode)
+                .options(this::handleOptions);
     }
 
     private void handleListMachines(ServerRequest req, ServerResponse res) {
@@ -123,6 +130,33 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
         String json = jsonSerializer.serializeDescriptors(machines);
         res.header(HeaderNames.CONTENT_TYPE, "application/json")
                 .send(json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void handleDispatchMachine(ServerRequest req, ServerResponse res) {
+        addCorsHeaders(res);
+        String name = req.path().pathParameters().get("name");
+        try {
+            byte[] bodyBytes = req.content().inputStream().readAllBytes();
+            Object inputPayload = null;
+            if (bodyBytes.length > 0) {
+                String bodyStr = new String(bodyBytes, StandardCharsets.UTF_8).trim();
+                if (!bodyStr.isEmpty() && !bodyStr.equals("{}")) {
+                    inputPayload = bodyStr;
+                }
+            }
+
+            CompletableFuture<Object> future = controlPlane.dispatchExecution(name, inputPayload);
+            future.join();
+            String responseJson = "{\"status\":\"DISPATCHED\",\"machineName\":\"" + name + "\"}";
+            res.status(Status.OK_200)
+                    .header(HeaderNames.CONTENT_TYPE, "application/json")
+                    .send(responseJson.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ex) {
+            log.error("Failed to dispatch machine execution for '{}'", name, ex);
+            res.status(Status.INTERNAL_SERVER_ERROR_500)
+                    .header(HeaderNames.CONTENT_TYPE, "application/json")
+                    .send(("{\"error\": \"Failed to dispatch execution: " + ex.getMessage() + "\"}").getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     private void handleGetMachine(ServerRequest req, ServerResponse res) {
@@ -259,6 +293,32 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
                 .findFirst()
                 .map(desc -> controlPlane.watchMachine(desc.name()))
                 .orElseGet(() -> controlPlane.watchMachine(""));
+    }
+
+    
+    private void handleGetNode(ServerRequest req, ServerResponse res) {
+        addCorsHeaders(res);
+        long uptime = startedAt != null ? Duration.between(startedAt, Instant.now()).toSeconds() : 0L;
+        int activeMachines = controlPlane.listMachines().size();
+        String json = "{\n"
+                + "  \"nodeId\": \"dispersion-node-" + boundPort + "\",\n"
+                + "  \"host\": \"" + config.host() + "\",\n"
+                + "  \"port\": " + boundPort + ",\n"
+                + "  \"basePath\": \"" + config.basePath() + "\",\n"
+                + "  \"runtime\": \"Helidon SE Níma (Java " + System.getProperty("java.version", "25") + ")\",\n"
+                + "  \"virtualThreadsEnabled\": true,\n"
+                + "  \"uptimeSeconds\": " + uptime + ",\n"
+                + "  \"availableProcessors\": " + Runtime.getRuntime().availableProcessors() + ",\n"
+                + "  \"activeMachines\": " + activeMachines + ",\n"
+                + "  \"status\": \"HEALTHY\"\n"
+                + "}";
+        res.header(HeaderNames.CONTENT_TYPE, "application/json")
+                .send(json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void handleOptions(ServerRequest req, ServerResponse res) {
+        addCorsHeaders(res);
+        res.status(Status.NO_CONTENT_204).send();
     }
 
     private void addCorsHeaders(ServerResponse res) {

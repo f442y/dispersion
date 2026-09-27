@@ -400,6 +400,16 @@ public class BatchOrchestrationExecutor<
             public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
                 return getCheckpoint(correlationKey).map(cp -> (Object) cp);
             }
+
+            @Override
+            @NonNull
+            @SuppressWarnings("unchecked")
+            public CompletableFuture<Object> dispatchExecution(@Nullable Object input) {
+                if (input instanceof List<?> list) {
+                    return dispatchBatchAsync((List<ITEM_CONTEXT>) list).thenApply(out -> (Object) out);
+                }
+                return dispatchBatchAsync(List.of()).thenApply(out -> (Object) out);
+            }
         };
     }
 

@@ -390,6 +390,18 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         return machine.sendSignal(correlationKey, signalName, payload);
     }
 
+    @Override
+    @NonNull
+    public CompletableFuture<Object> dispatchExecution(@NonNull String machineName, @Nullable Object input) {
+        Objects.requireNonNull(machineName, "machineName must not be null");
+        InspectableMachine machine = machines.get(machineName);
+        if (machine == null) {
+            return CompletableFuture.failedFuture(
+                    new IllegalArgumentException("Machine [" + machineName + "] is not registered in the Control Plane"));
+        }
+        return machine.dispatchExecution(input);
+    }
+
     // =========================================================================
     // ExecutionEventListener Implementation & Segmented O(1) Eviction
     // =========================================================================

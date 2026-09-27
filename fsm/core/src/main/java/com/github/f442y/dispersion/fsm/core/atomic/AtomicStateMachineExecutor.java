@@ -121,6 +121,13 @@ public class AtomicStateMachineExecutor<
             public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
                 return Optional.empty();
             }
+
+            @Override
+            @NonNull
+            @SuppressWarnings("unchecked")
+            public CompletableFuture<Object> dispatchExecution(@Nullable Object input) {
+                return dispatchAsync((INPUT) input).toCompletableFuture().thenApply(out -> (Object) out);
+            }
         };
     }
 }

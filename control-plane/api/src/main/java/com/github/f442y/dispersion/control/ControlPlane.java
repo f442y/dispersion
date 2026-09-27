@@ -113,6 +113,19 @@ public interface ControlPlane extends AutoCloseable {
     );
 
     /**
+     * Dispatches a new execution of a registered state machine with optional input.
+     *
+     * @param machineName The state machine name
+     * @param input       Optional input payload
+     * @return A {@link CompletableFuture} completing with the execution output or completion result
+     */
+    @NonNull
+    default CompletableFuture<Object> dispatchExecution(@NonNull String machineName, @Nullable Object input) {
+        return CompletableFuture.failedFuture(
+                new UnsupportedOperationException("ControlPlane does not support dynamic dispatch"));
+    }
+
+    /**
      * Inspects a saved checkpoint snapshot for a specific machine and correlation key.
      *
      * @param machineName    The state machine name
@@ -161,6 +174,16 @@ public interface ControlPlane extends AutoCloseable {
      */
     @NonNull
     EventStream watchMachine(@NonNull String machineName);
+
+    /**
+     * Opens a real-time, pull-based {@link EventStream} for observing all events globally across all machines.
+     *
+     * @return An open {@link EventStream} on a dedicated Virtual Thread queue
+     */
+    @NonNull
+    default EventStream watchAll() {
+        return watchMachine("");
+    }
 
     /**
      * Returns the telemetry event listener that state machine builders and dispatchers can hook into

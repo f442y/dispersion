@@ -1,5 +1,10 @@
+# ==============================================================================
+# Dispersion Git Ignore Configuration
+# ==============================================================================
+
 # Maven Build Outputs
 target/
+**/target/
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
@@ -9,6 +14,33 @@ dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
 .flattened-pom.xml
+**/.flattened-pom.xml
+
+# JVM Crash & Diagnostic Logs
+hs_err_pid*
+replay_pid*
+.attach_pid*
+
+# Node / UI Workspace
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+**/.vite/
+coverage/
+**/coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Local Secrets
+.env
+.env.local
+.env.*.local
+*.local
 
 # IntelliJ IDEA
 .idea/
@@ -16,6 +48,7 @@ buildNumber.properties
 *.iml
 *.ipr
 out/
+**/*.iml
 
 # Eclipse / STS
 .apt_generated/
@@ -28,17 +61,29 @@ out/
 
 # VS Code
 .vscode/
+*.code-workspace
 
 # NetBeans
 nbproject/private/
 nbbuild/
-dist/
 nbdist/
 .nb-gradle/
 
 # OS & Environment
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
 *.log
 *.tmp
 *.bak
+*.swp
+*.swo
+*~
+
+# AI Assistant & Tool Local Artifacts
+.gemini/

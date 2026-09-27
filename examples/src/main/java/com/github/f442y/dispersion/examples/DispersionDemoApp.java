@@ -38,6 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class DispersionDemoApp {
 
     private static final Logger log = LoggerFactory.getLogger(DispersionDemoApp.class);
+    private static final String SERVER_HOST = "127.0.0.1";
     private static final int SERVER_PORT = 8080;
     private static final String BASE_PATH = "/api/v1";
 
@@ -167,6 +168,12 @@ public final class DispersionDemoApp {
                                 ctx.customerId = in.customerId;
                                 ctx.amountCents = in.amountCents;
                             }
+                            if (ctx.orderId == null || ctx.orderId.isBlank()) {
+                                long id = System.currentTimeMillis();
+                                ctx.orderId = "ORD-" + (id % 10000);
+                                ctx.customerId = "CUST-" + (id % 100);
+                                ctx.amountCents = (int) ((id % 4500) + 500);
+                            }
                             return ctx;
                         })
                         .state(OrderState.VALIDATE_ORDER)
@@ -215,7 +222,7 @@ public final class DispersionDemoApp {
                         .eventListener(controlPlane.getEventListener())
                         .input((ctx, val) -> {
                             ctx.sensorId = "sensor-" + (System.currentTimeMillis() % 10);
-                            ctx.metricValue = val != null ? val : 0.0;
+                            ctx.metricValue = val != null ? val : (Math.round((Math.random() * 85.0 + 15.0) * 10.0) / 10.0);
                             return ctx;
                         })
                         .state(PipelineState.INGEST)
@@ -277,7 +284,7 @@ public final class DispersionDemoApp {
         ControlPlaneServer server = ControlPlaneServer.create(config, controlPlane, jsonSerializer);
         server.start();
 
-        printBanner(server.port());
+        printBanner(SERVER_HOST, server.port());
 
         // 7. Start background virtual thread activity generator
         AtomicBoolean running = new AtomicBoolean(true);
@@ -322,8 +329,8 @@ public final class DispersionDemoApp {
         Thread.currentThread().join();
     }
 
-    private static void printBanner(int port) {
-        String base = "http://localhost:" + port + BASE_PATH;
+    private static void printBanner(String host, int port) {
+        String base = "http://" + host + ":" + port + BASE_PATH;
         System.out.println("""
             ========================================================================================
             🚀 DISPERSION CONTROL PLANE & HELIDON SE DEMO IS RUNNING

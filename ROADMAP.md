@@ -41,7 +41,7 @@ flowchart TD
         UI_MODELS["Step 3.2: Domain Contracts<br/>• Strong TypeScript event schemas<br/>• REST API client bindings"]
         UI_SSE["Step 3.3: Live State Sync<br/>• Resilient auto-reconnecting SSE<br/>• TanStack Query cache invalidator"]
         UI_ROUTES["Step 3.4: Route Views<br/>• Mission Control Dashboard<br/>• Machine Catalog & Inspector<br/>• Execution Explorer & Timeline"]
-        UI_DAG["Step 3.5: Interactive DAG<br/>• React Flow / @xyflow/react<br/>• Real-time active state pulse<br/>• LIFO compensation rollback paths"]
+        UI_DAG["Step 3.5: Interactive DAG<br/>• Bespoke React SVG Canvas / @dagrejs/dagre<br/>• Real-time active state pulse<br/>• LIFO compensation rollback paths"]
         UI_OPS["Step 3.6: Operator Console<br/>• External signal injection modal<br/>• Manual compensation abort"]
     end
 
@@ -97,7 +97,7 @@ The standalone server (port `8080`) provides the communication layer for the Web
 
 ## 🎯 Phase 3: Control Panel Web UI (`dispersion-ui`) [Active Milestone]
 
-> **Target Stack:** React 19, TypeScript 5.8+, Vite, TanStack Router (file-based routing), TanStack Query v5, Tailwind CSS, Lucide Icons, React Flow (`@xyflow/react`).
+> **Target Stack:** React 19, TypeScript 5.8+, Vite, TanStack Router (file-based routing), TanStack Query v5, Tailwind CSS, Lucide Icons, Bespoke React SVG Canvas (`@dagrejs/dagre`).
 
 ```
 dispersion-ui/
@@ -115,7 +115,7 @@ dispersion-ui/
 │   │   │   ├── Header.tsx        # Top navbar, connection badge, global metric indicators
 │   │   │   └── Sidebar.tsx       # Navigation links (Dashboard, Machines, Executions)
 │   │   ├── graph/
-│   │   │   ├── MachineFlow.tsx   # React Flow DAG canvas with auto-layout (Dagre/ELK)
+│   │   │   ├── MachineFlow.tsx   # Bespoke React SVG Canvas DAG canvas with auto-layout (Dagre/ELK)
 │   │   │   ├── CustomNode.tsx    # Styled nodes (Initial, Action, Suspended, Terminal, Compensated)
 │   │   │   └── AnimatedEdge.tsx  # Dynamic transition traversal animations
 │   │   ├── common/
@@ -159,7 +159,7 @@ dispersion-ui/
 - [ ] **`routes/machines/index.tsx` & `$machineName.tsx`**: Machine catalog cards and deep inspector showing state transition matrix and topology.
 - [ ] **`routes/executions/index.tsx` & `$executionId.tsx`**: Searchable execution table and deep inspector with step-by-step turn history timeline.
 
-#### 🔷 Step 3.5 — Interactive Visual DAG Canvas (`@xyflow/react`)
+#### 🔷 Step 3.5 — Interactive Visual DAG Canvas (`@dagrejs/dagre`)
 - [ ] Convert machine topology transitions into interactive nodes and edges.
 - [ ] Auto-layout graph positioning (via Dagre).
 - [ ] Real-time glowing node pulse when a state is active; transition pulse when moving between states.

@@ -292,6 +292,13 @@ public class OrchestrationExecutor<
                 }
                 return store.findByCorrelationKey(correlationKey).map(cp -> (Object) cp);
             }
+
+            @Override
+            @NonNull
+            @SuppressWarnings("unchecked")
+            public CompletableFuture<Object> dispatchExecution(@Nullable Object input) {
+                return dispatchTurnAsync(null, (INPUT) input).thenApply(turnResult -> (Object) turnResult);
+            }
         };
     }
 

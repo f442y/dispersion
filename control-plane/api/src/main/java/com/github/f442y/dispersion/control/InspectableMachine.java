@@ -49,4 +49,16 @@ public interface InspectableMachine {
     default Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
         return Optional.empty();
     }
+
+    /**
+     * Triggers or runs a new execution of this state machine with optional input.
+     *
+     * @param input Optional input payload
+     * @return CompletableFuture completing with the execution result
+     */
+    @NonNull
+    default CompletableFuture<Object> dispatchExecution(@Nullable Object input) {
+        return CompletableFuture.failedFuture(
+                new UnsupportedOperationException("Machine '" + descriptor().name() + "' does not support dynamic dispatch"));
+    }
 }
