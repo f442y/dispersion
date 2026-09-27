@@ -29,4 +29,10 @@ trigger: always_on
 
 ### 5. Testing & Compiler Conventions
 * **Package-Private Tests:** Test classes, `@Test` methods, lifecycle callbacks (`@BeforeEach`, `@AfterEach`), and inner fixture types must be package-private (`default`). Never declare them `public`. In modular Java (JPMS), public test classes in exported packages pollute the exported API surface and cause `in module is not exported` warnings.
+* **Test Logging Quietness & Parameterization:**
+  * Tests must run quiet by default in CI and CLI builds (`WARN` root level), logging only warnings, errors, and intentional benchmark outputs.
+  * Every module utilizing `logback-classic` in tests must provide `src/test/resources/logback-test.xml` defaulting to `${dispersion.log.level:-WARN}` and suppressing 3rd-party logger noise (`io.helidon`, `org.apache.fory`).
+  * Never allow Logback to fall back to `BasicConfigurator` (which sets root level to `DEBUG` and spams tens of thousands of lines into test output).
+  * Modules running embedded servers (e.g., Helidon) must provide a test-scoped `logging.properties` referenced via Surefire `systemPropertyVariables` to suppress server socket/channel startup noise.
+  * Engineers can dynamically elevate log levels during local debugging via `-Ddispersion.log.level=DEBUG` without modifying codebase files.
 * **Compiler & Build Hygiene:** Builds enforce `-proc:full`, `-parameters`, `-Xlint:all`, `-Xdiags:verbose`, and debug symbols `lines,vars,source`. Test compilation specifically suppresses `-Xlint:-exports` and `-Xlint:-transitive` for classpath-loaded test libraries.

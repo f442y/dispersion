@@ -9,7 +9,7 @@ Dispersion enforces hexagonal multi-module boundaries with zero inter-engine cou
 ### 1. Module Taxonomy & Hierarchy
 * **Foundational Domain Triad (Mandatory):**
   * `<domain>-api`: Pure contract (interfaces, sealed records/events, exceptions, builders). Zero runtime or 3rd-party dependencies.
-  * `<domain>-core`: Primary runtime engine implementing `<domain>-api`.
+  * `<domain>-core`: Primary runtime engine implementing `<domain>-api` .
   * `<domain>-test`: Deterministic in-memory test doubles (fakes, spies). **Never couples to `*-core`**.
   * `dispersion-testkit`: Aggregates all `*-test` companion modules into a unified testkit.
 * **Feature Submodules (Decomposition):**
@@ -17,7 +17,7 @@ Dispersion enforces hexagonal multi-module boundaries with zero inter-engine cou
   * Submodules depend on `<domain>-api` and must form a strict DAG (no circular dependencies). Core engines integrate with submodules via SPIs.
 * **Permissible Extension Modules:**
   * `<domain>-adapter-<vendor>`: External infrastructure adapters (e.g. Kafka, JDBC). Depends on `<domain>-api` + vendor SDK. **Never on `*-core`**.
-  * `<domain>-tck`: Contract test suites. Depends on `<domain>-api` + JUnit/AssertJ. Consumed by adapters via `<scope>test</scope>``.
+  * `<domain>-tck`: Contract test suites. Depends on `<domain>-api` + JUnit/AssertJ. Consumed by adapters via `<scope>test</scope>`.
   * `<domain>-benchmarks`: JMH performance harnesses. Depends on `<domain>-core` + JMH.
   * `*-starter`: Framework auto-configurations (Spring Boot, Quarkus).
 
@@ -40,3 +40,4 @@ Dispersion enforces hexagonal multi-module boundaries with zero inter-engine cou
 * **Control Plane Inversion:** `control-core` has zero compile-time dependencies on engine runtimes; engines adapt via `InspectableMachine` SPI.
 * **Centralized BOM Alignment:** All modules inherit from `dispersion-parent` and are registered in root `pom.xml` and `bom/pom.xml`. Child POMs must never specify `<version>` for internal artifacts.
 * **Virtual-Thread Safety:** Execution hot paths must be thread-confined or lock-free. Never use `synchronized` monitors on hot paths.
+* **Quiet CI Test Logging:** Root `pom.xml` manages `<dispersion.log.level>WARN</dispersion.log.level>` propagated via Surefire `argLine`. All modules employing `logback-classic` during test execution must maintain `src/test/resources/logback-test.xml` with `${dispersion.log.level:-WARN}` to prevent unconfigured Logback fallback to `BasicConfigurator` (which emits tens of thousands of DEBUG lines in CI). Embedded HTTP servers must supply test-scoped `logging.properties` to suppress channel startup noise.

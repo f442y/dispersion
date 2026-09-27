@@ -14,6 +14,7 @@ Use this skill to audit Java files, recent changes, or git diffs against the cod
 - [ ] **Warnings & Exceptions:** Zero `@SuppressWarnings` or suppression comments; catch specific checked/declared exceptions (never `Exception` or `Throwable`).
 - [ ] **Structured Logging & Idioms:** SLF4J fluent logging with `.addKeyValue("key", val)` and `.setCause(ex)`; prefer immutable `record`s and arrow `switch` expressions.
 - [ ] **Test Encapsulation:** Test classes, test methods (`@Test`), lifecycle hooks, and fixture types are package-private (no `public` modifier) to prevent JPMS export leakage.
+- [ ] **Test Logging Quietness:** Test resources include parameterized `logback-test.xml` (defaulting to `${dispersion.log.level:-WARN}`) and JUL `logging.properties` where applicable to eliminate CI debug log pollution.
 
 ## Automated Audit Commands (PowerShell)
 

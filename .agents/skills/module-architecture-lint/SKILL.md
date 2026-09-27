@@ -18,6 +18,7 @@ Use this skill to audit module structures, Maven dependency scopes, and package 
 - [ ] **Package Isolation:** Zero `import ...core.` statements inside `api` or `test` source code, and no cross-subsystem `*.core.*` imports in production code.
 - [ ] **Encapsulation:** Internal engine classes are package-private (`default`).
 - [ ] **Modular Test Encapsulation:** Test suites and fixtures residing in packages exported by `module-info.java` are package-private (`default`) to avoid leaking into the JPMS exported API surface.
+- [ ] **Test Logging Configuration:** Every module declaring `logback-classic` during test execution must provide `src/test/resources/logback-test.xml` with `${dispersion.log.level:-WARN}` to prevent unconfigured Logback fallback to `BasicConfigurator` (which dumps tens of thousands of DEBUG lines in CI).
 
 ## Automated Audit Commands (PowerShell)
 
@@ -63,6 +64,19 @@ Get-ChildItem -Path "*\pom.xml" -Recurse | Where-Object { $_.FullName -notmatch 
 Get-ChildItem -Path "*\src\test\java" -Recurse -Include "*Test.java","*Tests.java" -ErrorAction SilentlyContinue |
     Select-String "public\s+class\s+\w+Test" |
     ForEach-Object { "VIOLATION: Public test class in $($_.Path):$($_.LineNumber) (must be package-private)" }
+
+# 6. Check for modules using logback-classic without logback-test.xml
+$rootPom = (Resolve-Path "pom.xml").Path
+Get-ChildItem -Path "*\pom.xml" -Recurse | Where-Object { $_.FullName -notmatch "\\(target|bom)\\" -and $_.FullName -ne $rootPom } | ForEach-Object {
+    $pomPath = $_.FullName
+    $moduleDir = $_.DirectoryName
+    if ([IO.File]::ReadAllText($pomPath) -match "logback-classic") {
+        $logbackTest = Join-Path $moduleDir "src\test\resources\logback-test.xml"
+        if (-not (Test-Path $logbackTest)) {
+            "VIOLATION: Missing logback-test.xml in $moduleDir (uses logback-classic)"
+        }
+    }
+}
 ```
 
 ## Scaffolding Guide
