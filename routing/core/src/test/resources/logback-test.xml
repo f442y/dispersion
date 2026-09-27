@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Dispersion framework: defaults to WARN in tests; override locally via -Ddispersion.log.level=DEBUG -->
+    <logger name="com.github.f442y.dispersion" level="${dispersion.log.level:-WARN}" />
+
+    <!-- 3rd-party loggers: quiet during testing -->
+    <logger name="io.helidon" level="WARN" />
+    <logger name="org.apache.fory" level="WARN" />
+
+    <root level="${root.log.level:-WARN}">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>

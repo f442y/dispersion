@@ -128,7 +128,8 @@
         <flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
         <flatten.skip>false</flatten.skip>
         <test.excludedGroups>LongRunningTests, Playground</test.excludedGroups>
-        <argLine>-XX:+EnableDynamicAgentLoading -Dfile.encoding=UTF-8</argLine>
+        <dispersion.log.level>WARN</dispersion.log.level>
+        <argLine>-XX:+EnableDynamicAgentLoading -Dfile.encoding=UTF-8 -Ddispersion.log.level=${dispersion.log.level}</argLine>
     </properties>
 
     <dependencyManagement>

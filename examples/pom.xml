@@ -15,11 +15,14 @@
     <packaging>jar</packaging>
 
     <name>Dispersion :: Examples</name>
-    <description>Showcase and runnable examples illustrating Dispersion patterns and best practices</description>
+    <description>End-to-end runnable architectural examples, benchmarks, sagas, and reference implementations</description>
     <url>https://github.com/f442y/dispersion</url>
 
     <dependencies>
-        <!-- Internal Dispersion Modules -->
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-control-plane-core</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-event-core</artifactId>
@@ -38,7 +41,11 @@
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-control-plane-core</artifactId>
+            <artifactId>dispersion-orchestration-messaging</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-routing-core</artifactId>
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
@@ -80,4 +87,18 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.config.file>${project.basedir}/src/test/resources/logging.properties</java.util.logging.config.file>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>
