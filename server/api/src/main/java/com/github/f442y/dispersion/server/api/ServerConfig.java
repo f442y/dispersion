@@ -15,6 +15,8 @@ import java.util.Objects;
  * @param backlog The socket listen backlog (0 or negative for system default)
  * @param shutdownGracePeriod The grace period to wait for in-flight requests during server shutdown
  * @param allowedOrigins List of allowed CORS origin strings, or {@code "*"}
+ * @param environment The operational deployment environment (e.g., {@code "local"}, {@code "staging"}, {@code "prod"})
+ * @param clusterId The logical cluster identifier grouping related nodes
  */
 public record ServerConfig(
         @NonNull String host,
@@ -22,7 +24,9 @@ public record ServerConfig(
         @NonNull String basePath,
         int backlog,
         @NonNull Duration shutdownGracePeriod,
-        @NonNull List<String> allowedOrigins
+        @NonNull List<String> allowedOrigins,
+        @NonNull String environment,
+        @NonNull String clusterId
 ) {
 
     public static final String DEFAULT_HOST = "0.0.0.0";
@@ -31,12 +35,16 @@ public record ServerConfig(
     public static final int DEFAULT_BACKLOG = 0;
     public static final Duration DEFAULT_GRACE_PERIOD = Duration.ofSeconds(5);
     public static final List<String> DEFAULT_ALLOWED_ORIGINS = List.of("*");
+    public static final String DEFAULT_ENVIRONMENT = "local";
+    public static final String DEFAULT_CLUSTER_ID = "dispersion-cluster";
 
     public ServerConfig {
         Objects.requireNonNull(host, "host must not be null");
         Objects.requireNonNull(basePath, "basePath must not be null");
         Objects.requireNonNull(shutdownGracePeriod, "shutdownGracePeriod must not be null");
         Objects.requireNonNull(allowedOrigins, "allowedOrigins must not be null");
+        Objects.requireNonNull(environment, "environment must not be null");
+        Objects.requireNonNull(clusterId, "clusterId must not be null");
         if (port < 0 || port > 65535) {
             throw new IllegalArgumentException("port must be between 0 and 65535, got: " + port);
         }
@@ -44,6 +52,20 @@ public record ServerConfig(
             throw new IllegalArgumentException("basePath must start with '/', got: " + basePath);
         }
         allowedOrigins = List.copyOf(allowedOrigins);
+    }
+
+    /**
+     * Backward-compatible 6-parameter constructor defaulting environment to {@code "local"} and clusterId to {@code "dispersion-cluster"}.
+     */
+    public ServerConfig(
+            @NonNull String host,
+            int port,
+            @NonNull String basePath,
+            int backlog,
+            @NonNull Duration shutdownGracePeriod,
+            @NonNull List<String> allowedOrigins
+    ) {
+        this(host, port, basePath, backlog, shutdownGracePeriod, allowedOrigins, DEFAULT_ENVIRONMENT, DEFAULT_CLUSTER_ID);
     }
 
     @NonNull
@@ -54,7 +76,9 @@ public record ServerConfig(
                 DEFAULT_BASE_PATH,
                 DEFAULT_BACKLOG,
                 DEFAULT_GRACE_PERIOD,
-                DEFAULT_ALLOWED_ORIGINS
+                DEFAULT_ALLOWED_ORIGINS,
+                DEFAULT_ENVIRONMENT,
+                DEFAULT_CLUSTER_ID
         );
     }
 
@@ -70,6 +94,8 @@ public record ServerConfig(
         private int backlog = DEFAULT_BACKLOG;
         private Duration shutdownGracePeriod = DEFAULT_GRACE_PERIOD;
         private List<String> allowedOrigins = DEFAULT_ALLOWED_ORIGINS;
+        private String environment = DEFAULT_ENVIRONMENT;
+        private String clusterId = DEFAULT_CLUSTER_ID;
 
         private Builder() {}
 
@@ -110,8 +136,20 @@ public record ServerConfig(
         }
 
         @NonNull
+        public Builder environment(@NonNull String environment) {
+            this.environment = Objects.requireNonNull(environment, "environment must not be null");
+            return this;
+        }
+
+        @NonNull
+        public Builder clusterId(@NonNull String clusterId) {
+            this.clusterId = Objects.requireNonNull(clusterId, "clusterId must not be null");
+            return this;
+        }
+
+        @NonNull
         public ServerConfig build() {
-            return new ServerConfig(host, port, basePath, backlog, shutdownGracePeriod, allowedOrigins);
+            return new ServerConfig(host, port, basePath, backlog, shutdownGracePeriod, allowedOrigins, environment, clusterId);
         }
     }
 }

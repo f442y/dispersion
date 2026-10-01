@@ -1,5 +1,8 @@
 export interface NodeInfo {
   nodeId: string;
+  environment?: string;
+  clusterId?: string;
+  role?: string;
   host: string;
   port: number;
   basePath: string;

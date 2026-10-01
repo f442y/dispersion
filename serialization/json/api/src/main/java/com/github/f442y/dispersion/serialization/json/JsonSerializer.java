@@ -50,6 +50,16 @@ public interface JsonSerializer {
     String serializeEvents(@NonNull List<ExecutionEvent> events);
 
     /**
+     * Deserializes a list of {@link ExecutionEvent} instances from a JSON string.
+     *
+     * @param json The JSON string representation
+     * @return The deserialized list of execution events
+     * @throws JsonSerializationException If deserialization fails
+     */
+    @NonNull
+    List<ExecutionEvent> deserializeEvents(@NonNull String json);
+
+    /**
      * Serializes a {@link MachineDescriptor} to a JSON string.
      *
      * @param descriptor The machine descriptor
@@ -153,24 +163,24 @@ public interface JsonSerializer {
      * Serializes an arbitrary object to a JSON string.
      *
      * @param value The value to serialize
-     * @param <T> The value type
+     * @param <VALUE_TYPE> The value type
      * @return The JSON string representation
      * @throws JsonSerializationException If serialization fails
      */
     @NonNull
-    <T> String serialize(@NonNull T value);
+    <VALUE_TYPE> String serialize(@NonNull VALUE_TYPE value);
 
     /**
      * Deserializes a JSON string into the target class type.
      *
      * @param json The JSON string
-     * @param targetType The class of type T
-     * @param <T> The target deserialization type
+     * @param targetType The class of type VALUE_TYPE
+     * @param <VALUE_TYPE> The target deserialization type
      * @return The deserialized object
      * @throws JsonSerializationException If deserialization fails
      */
     @NonNull
-    <T> T deserialize(@NonNull String json, @NonNull Class<T> targetType);
+    <VALUE_TYPE> VALUE_TYPE deserialize(@NonNull String json, @NonNull Class<VALUE_TYPE> targetType);
 
     /**
      * Discovers and loads the default {@link JsonSerializer} implementation using the Java

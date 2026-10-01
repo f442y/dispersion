@@ -69,10 +69,15 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
 
         String basePath = sanitizeBasePath(config.basePath());
 
+        WebDashboardStaticService staticService = new WebDashboardStaticService(basePath);
+
         server = WebServer.builder()
                 .host(config.host())
                 .port(config.port())
-                .routing(routing -> routing.register(basePath, this::configureRoutes))
+                .routing(routing -> {
+                    routing.register(basePath, this::configureRoutes);
+                    routing.register("/", staticService);
+                })
                 .build()
                 .start();
 
@@ -113,12 +118,14 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
 
     private void configureRoutes(HttpRules rules) {
         rules.get("/machines", this::handleListMachines)
+                .post("/machines/register", this::handleRegisterMachine)
                 .get("/machines/{name}", this::handleGetMachine)
                 .post("/machines/{name}/dispatch", this::handleDispatchMachine)
                 .get("/executions", this::handleListExecutions)
                 .get("/executions/{id}", this::handleGetExecution)
                 .get("/executions/{id}/timeline", this::handleGetExecutionTimeline)
                 .post("/executions/signal", this::handleSendSignal)
+                .post("/telemetry/events", this::handleIngestEvents)
                 .get("/events/stream", this::handleEventStream)
                 .get("/node", this::handleGetNode)
                 .options(this::handleOptions);
@@ -130,6 +137,33 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
         String json = jsonSerializer.serializeDescriptors(machines);
         res.header(HeaderNames.CONTENT_TYPE, "application/json")
                 .send(json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void handleRegisterMachine(ServerRequest req, ServerResponse res) {
+        addCorsHeaders(res);
+        try {
+            byte[] bodyBytes = req.content().inputStream().readAllBytes();
+            String body = new String(bodyBytes, StandardCharsets.UTF_8);
+            MachineDescriptor descriptor = jsonSerializer.deserializeDescriptor(body);
+            if (descriptor == null || descriptor.name().isBlank()) {
+                res.status(Status.BAD_REQUEST_400)
+                        .header(HeaderNames.CONTENT_TYPE, "application/json")
+                        .send("{\"error\": \"Invalid machine descriptor or missing machine name\"}".getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+
+            controlPlane.registerDescriptor(descriptor);
+            String responseJson = "{\"status\":\"REGISTERED\",\"machineName\":\"" + descriptor.name() + "\"}";
+            res.header(HeaderNames.CONTENT_TYPE, "application/json")
+                    .send(responseJson.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ex) {
+            log.atError()
+                    .setCause(ex)
+                    .log("Failed to register machine descriptor");
+            res.status(Status.BAD_REQUEST_400)
+                    .header(HeaderNames.CONTENT_TYPE, "application/json")
+                    .send(("{\"error\": \"Failed to register machine: " + ex.getMessage() + "\"}").getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     private void handleDispatchMachine(ServerRequest req, ServerResponse res) {
@@ -152,7 +186,10 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
                     .header(HeaderNames.CONTENT_TYPE, "application/json")
                     .send(responseJson.getBytes(StandardCharsets.UTF_8));
         } catch (Exception ex) {
-            log.error("Failed to dispatch machine execution for '{}'", name, ex);
+            log.atError()
+                    .setCause(ex)
+                    .addKeyValue("machine_name", name)
+                    .log("Failed to dispatch machine execution");
             res.status(Status.INTERNAL_SERVER_ERROR_500)
                     .header(HeaderNames.CONTENT_TYPE, "application/json")
                     .send(("{\"error\": \"Failed to dispatch execution: " + ex.getMessage() + "\"}").getBytes(StandardCharsets.UTF_8));
@@ -195,7 +232,7 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
         List<ExecutionSummary> summaries = controlPlane.listExecutions(machineName, status, limit);
         String json = jsonSerializer.serializeSummaries(summaries);
         res.header(HeaderNames.CONTENT_TYPE, "application/json")
-                .send(json.getBytes(StandardCharsets.UTF_8));
+                    .send(json.getBytes(StandardCharsets.UTF_8));
     }
 
     private void handleGetExecution(ServerRequest req, ServerResponse res) {
@@ -248,10 +285,42 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
             res.header(HeaderNames.CONTENT_TYPE, "application/json")
                     .send(json.getBytes(StandardCharsets.UTF_8));
         } catch (Exception ex) {
-            log.error("Failed to process signal delivery", ex);
+            log.atError()
+                    .setCause(ex)
+                    .log("Failed to process signal delivery");
             res.status(Status.INTERNAL_SERVER_ERROR_500)
                     .header(HeaderNames.CONTENT_TYPE, "application/json")
                     .send(("{\"error\": \"Failed to deliver signal: " + ex.getMessage() + "\"}").getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private void handleIngestEvents(ServerRequest req, ServerResponse res) {
+        addCorsHeaders(res);
+        try {
+            byte[] bodyBytes = req.content().inputStream().readAllBytes();
+            String body = new String(bodyBytes, StandardCharsets.UTF_8);
+            List<ExecutionEvent> events = jsonSerializer.deserializeEvents(body);
+            if (events == null || events.isEmpty()) {
+                res.status(Status.BAD_REQUEST_400)
+                        .header(HeaderNames.CONTENT_TYPE, "application/json")
+                        .send("{\"error\": \"Empty or missing events payload\"}".getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+
+            for (ExecutionEvent event : events) {
+                controlPlane.getEventListener().onEvent(event);
+            }
+
+            String responseJson = "{\"status\":\"INGESTED\",\"count\":" + events.size() + "}";
+            res.header(HeaderNames.CONTENT_TYPE, "application/json")
+                    .send(responseJson.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ex) {
+            log.atError()
+                    .setCause(ex)
+                    .log("Failed to ingest execution events batch");
+            res.status(Status.BAD_REQUEST_400)
+                    .header(HeaderNames.CONTENT_TYPE, "application/json")
+                    .send(("{\"error\": \"Failed to ingest events: " + ex.getMessage() + "\"}").getBytes(StandardCharsets.UTF_8));
         }
     }
 
@@ -278,7 +347,9 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
                 }
             }
         } catch (IOException | InterruptedException ex) {
-            log.debug("SSE stream client disconnected: {}", ex.getMessage());
+            log.atDebug()
+                    .setCause(ex)
+                    .log("SSE stream client disconnected");
         }
     }
 
@@ -295,7 +366,6 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
                 .orElseGet(() -> controlPlane.watchMachine(""));
     }
 
-    
     private void handleGetNode(ServerRequest req, ServerResponse res) {
         addCorsHeaders(res);
         long uptime = startedAt != null ? Duration.between(startedAt, Instant.now()).toSeconds() : 0L;
@@ -305,6 +375,9 @@ public final class HelidonControlPlaneServer implements ControlPlaneServer {
                 + "  \"host\": \"" + config.host() + "\",\n"
                 + "  \"port\": " + boundPort + ",\n"
                 + "  \"basePath\": \"" + config.basePath() + "\",\n"
+                + "  \"environment\": \"" + config.environment() + "\",\n"
+                + "  \"clusterId\": \"" + config.clusterId() + "\",\n"
+                + "  \"role\": \"CONTROL_PLANE\",\n"
                 + "  \"runtime\": \"Helidon SE Níma (Java " + System.getProperty("java.version", "25") + ")\",\n"
                 + "  \"virtualThreadsEnabled\": true,\n"
                 + "  \"uptimeSeconds\": " + uptime + ",\n"

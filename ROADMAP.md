@@ -1,9 +1,9 @@
 # Dispersion — Master Architecture & Engineering Roadmap
 
 > **Document Status:** Authoritative Master Plan & Living Engineering Roadmap
-> **Last Updated:** September 27, 2026
+> **Last Updated:** October 1, 2026
 > **Repository Baseline:** `main` branch, 28 Maven reactor modules, 100% test pass rate, Java 25 virtual-thread native, Helidon SE Níma standalone HTTP/SSE server, Avaje compile-time JSON serialization, interactive runnable local demo app ([`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java)), and Web UI ([`ui/`](file:///C:/Users/faiza/development/dispersion/ui)).
-> **Active Focus:** Phase 4 — Dedicated Control Plane Service & Embedded UI Hosting Architecture (Immediate Design Target), followed by Clustered Stores & Messaging Integration.
+> **Active Focus:** Phase 4 — Tiered Telemetry & On-Demand Granular Drill-Down Architecture (Immediate Target), followed by Host Adapters, Clustered Stores & Messaging Integration.
 
 ---
 
@@ -43,7 +43,8 @@ flowchart TD
     end
 
     subgraph P4["🌐 Phase 4: Control Plane Service & Clustered Integration (Active Focus)"]
-        CP_SRV["Dedicated Control Plane Service<br/>• Standalone service per environment<br/>• Helidon SE embedded UI hosting<br/>• SPA fallback routing & zero-CORS"]
+        CP_SRV["Dedicated Control Plane Service<br/>• Standalone service per environment<br/>• Helidon SE embedded UI hosting<br/>• In-memory monolith + remote HTTP ingress"]
+        TIERED_TEL["Tiered Telemetry & On-Demand Drill-Down<br/>• High-level lifecycle ingress<br/>• Granular spill buffers & dynamic tap<br/>• Targeted SSE stream subscription"]
         JAKARTA["Host Framework Adapters<br/>• Jakarta REST / Servlet resource bindings<br/>• Spring Boot / Quarkus runtime starters"]
         STORES["Durable Stores<br/>• PostgreSQL snapshot persistence<br/>• Redis checkpoint cache"]
         MESSAGING["Distributed Messaging<br/>• Kafka partitioned topics<br/>• RabbitMQ exchange adapters"]
@@ -75,25 +76,27 @@ All modules are decomposed into topic-nested directories with strict hexagonal b
 | **FSM (Tier 1)** | `dispersion-fsm-api`<br/>`dispersion-fsm-core`<br/>`dispersion-fsm-test` | Ultra-fast atomic state transitions (`transitionsTo`), state visit limits (`maxVisits`), circuit breaker trip detection, and direct virtual thread execution pathway (`executeDirect`) with zero heap thread allocations. |
 | **Routing** | `dispersion-routing-api`<br/>`dispersion-routing-core`<br/>`dispersion-routing-test` | Location-agnostic workload routing, Canary traffic splitting, metadata-driven dispatch, and developer isolation sandboxes. |
 | **Orchestration (Tiers 2 & 3)** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based execution lifecycle, safe suspension (`waitForSignal`), automated LIFO compensation rollbacks on fault/cancellation, parallel fork-join concurrency, batch barriers (`ALL_ITEMS_ARRIVED`, `SIGNAL_TRIGGERED`), and idempotent message envelope deduplication. |
-| **Control Plane** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Unified operator control SPI ([`ControlPlane`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ControlPlane.java)) with reference implementation ([`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java)), machine topology registry, live query interfaces, and dynamic Mermaid graph generation. |
+| **Control Plane** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Unified operator control SPI ([`ControlPlane`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ControlPlane.java)) with reference implementation ([`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java)), machine topology registry, live query interfaces, dynamic Mermaid graph generation, and dynamic SPI provider discovery ([`ControlPlaneProvider`](file:///C:/Users/faiza/development/dispersion/control/api/src/main/java/com/github/f442y/dispersion/control/ControlPlaneProvider.java)). |
 | **Serialization** | `dispersion-serialization-binary-api`<br/>`dispersion-serialization-fory`<br/>`dispersion-serialization-json-api`<br/>`dispersion-serialization-avaje` | Zero-copy binary serialization SPI (Fury) and compile-time reflection-free JSON serialization (Avaje-Jsonb) supporting polymorphic discrimination across all 28 execution events without runtime reflection. |
-| **Server** | `dispersion-server-api`<br/>`dispersion-server-jakarta`<br/>`dispersion-server-standalone` | Lightweight server SPI decoupled from web frameworks. Standalone Helidon SE 4.x Níma HTTP server running natively on Java 25 virtual threads with SSE streaming and REST endpoints, plus Jakarta REST adapter module. |
+| **Server** | `dispersion-server-api`<br/>`dispersion-server-jakarta`<br/>`dispersion-server-standalone` | Lightweight server SPI decoupled from web frameworks. Standalone Helidon SE 4.x Níma HTTP server running natively on Java 25 virtual threads with SSE streaming, REST endpoints, and static embedded UI hosting. |
 | **Testing & BOM** | `dispersion-testkit`<br/>`dispersion-bom`<br/>`dispersion-examples` | Static test facade [`DispersionTestKit`](file:///C:/Users/faiza/development/dispersion/testkit/src/main/java/com/github/f442y/dispersion/testkit/DispersionTestKit.java), centralized BOM, and runnable demo application [`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java). |
 
 ### 2. Standalone Server REST & SSE Contract
-The standalone server (port `8080`) provides the communication layer for the Web UI:
+The standalone server (port `8080`) provides the communication layer for the Web UI and remote worker nodes:
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/v1/node` | Returns node health, CPU count, uptime, JVM memory, and engine descriptor counts. |
+| `GET` | `/api/v1/node` | Returns node health, environment, clusterId, CPU count, uptime, JVM memory, and engine descriptor counts. |
 | `GET` | `/api/v1/machines` | Returns all registered state machine topologies, types, and state counts. |
+| `POST` | `/api/v1/machines/register` | Registers remote state machine topology descriptors from distributed microservices. |
 | `GET` | `/api/v1/machines/{machineName}` | Returns full metadata, state transition matrix, and dynamic Mermaid topology. |
 | `POST` | `/api/v1/machines/{machineName}/dispatch` | Triggers a fresh execution of the specified workflow with optional JSON payload. |
 | `GET` | `/api/v1/executions` | Returns all active, suspended, completed, or compensated executions (supports `status` and `machineName` filtering). |
 | `GET` | `/api/v1/executions/{executionId}` | Returns single execution summary, turn count, and state context. |
-| `GET` | `/api/v1/executions/{executionId}/timeline` | Returns ordered chronological turn event history for the execution. |
+| `GET` | `/api/v1/executions/{executionId}/timeline` | Returns ordered chronological turn event history for the execution (tiered on-demand). |
 | `POST` | `/api/v1/executions/signal` | Delivers an external signal to a suspended execution (`{ "executionId", "signalName", "payload" }`). |
-| `GET` | `/api/v1/events/stream` | Continuous Server-Sent Events (SSE) feed streaming polymorphic JSON events in real time. |
+| `POST` | `/api/v1/telemetry/events` | Ingests batches of polymorphic execution telemetry events from remote worker microservices. |
+| `GET` | `/api/v1/events/stream` | Continuous Server-Sent Events (SSE) feed streaming lifecycle events globally, or granular traces when filtered by `?executionId=...`. |
 
 ---
 
@@ -108,24 +111,136 @@ The web UI in `ui/` is built with React 19, TypeScript, Vite, TanStack Router, T
 
 ## 🌐 Phase 4: Control Plane Service & Clustered Enterprise Integrations [Active Focus]
 
-### 🎯 Immediate Next Design Target: Dedicated Control Plane Service & Embedded UI Hosting
+### 🎯 Dedicated Control Plane Service & Embedded UI Hosting (Delivered)
 
-Formulate and plan the production deployment topology for a dedicated Control Plane service per environment with built-in Single-Page Application (SPA) dashboard hosting:
-
-- [ ] **Dedicated Control Plane Service per Environment Topology**:
+- [x] **Dedicated Control Plane Service per Environment Topology**:
   - **Single Operational Ingress**: Deploy `dispersion-server-standalone` as a dedicated control plane microservice per environment (`control-plane-staging`, `control-plane-prod`), isolating operators from volatile worker pod IPs.
-  - **Global Telemetry Aggregator**: Worker and saga nodes stream `ExecutionEvent` records over ring buffers or broker topics into the control plane service, which fans out unified Server-Sent Events (SSE) to browser clients.
-  - **Cluster-Wide Checkpoint Discovery**: Query the shared `CheckpointStore` to discover and list suspended sagas across the cluster even when zero worker nodes are actively running turns.
-  - **Decoupled External Signal Ingress**: `POST /api/v1/executions/signal` hits the Control Plane service, which resolves routing to the target worker or places resume commands onto the messaging fabric.
+  - **Dual-Mode Operation**: Direct zero-overhead in-memory binding (`controlPlane.attachTo(eventBus)`, `controlPlane.register(machine)`) for monolith deployments, alongside HTTP REST ingress for distributed microservices.
+  - **Remote Machine Registration**: `POST /api/v1/machines/register` allows remote worker pods to register their `MachineDescriptor` at startup so topologies appear in the UI.
+  - **Global Telemetry Aggregator**: Worker nodes stream `ExecutionEvent` batches via `POST /api/v1/telemetry/events`, feeding the Control Plane timeline and fanning out unified Server-Sent Events (SSE) to browser clients.
+  - **Decoupled External Signal Ingress**: `POST /api/v1/executions/signal` delivers signals directly in-process or routes them to the target machine.
+  - **Environment & Cluster Metadata**: Standalone server configuration resolves `environment` and `clusterId` via CLI flags, system properties, or environment variables and exposes them in `GET /api/v1/node`.
 
-- [ ] **Embedded UI Hosting in Helidon SE Níma (`dispersion-server-standalone`)**:
+- [x] **Embedded UI Hosting in Helidon SE Níma (`dispersion-server-standalone`)**:
   - **Virtual-Thread Static Asset Serving**: Mount compiled `ui/dist` bundle (`index.html`, `assets/*`) natively via Helidon SE `StaticContentSupport` on virtual threads without servlet overhead.
   - **SPA Fallback Routing**: Catch-all routing redirecting client-side TanStack Router paths (`/machines/*`, `/executions/*`) back to `index.html`.
   - **Zero-CORS & Same-Origin Reliability**: Serve the UI and backend `/api/v1/*` from the same origin, eliminating cross-origin preflight requests (`OPTIONS`), cookie barriers, and SSL domain mismatches.
+  - **Local Development Fallback**: When UI dist assets are absent on classpath, points developers to `cd ui && npm run build`.
   - **External CDN Option Preservation**: Maintain total decoupling of backend REST/SSE schemas so enterprise platforms retain the option to host UI assets externally (e.g. Cloudflare Pages or AWS CloudFront/S3) if preferred.
 
-- [ ] **Build & Packaging Automation**:
-  - Integrate Node 24 UI build (`npm run build`) into the Maven build lifecycle or multi-stage Docker container so `ui/dist` is packaged directly into the deployable standalone server artifact.
+- [x] **Embedded UI Static Asset Ingestion**:
+  - **Direct Dist Mapping**: Embedded UI distribution bundle (`ui/dist`) mapped into `target/classes/web/` so all static assets (HTML, CSS, JS, SVG) are packaged directly into `dispersion-server-standalone.jar`.
+
+---
+
+### 🚀 Immediate Next Target: Tiered Telemetry & On-Demand Granular Drill-Down
+
+> **Core Philosophy:** *"Demarcation to the Center, Granularity at the Edge, Streaming on Demand."*
+> The Control Plane maintains a lean $O(\text{Executions})$ summary index and global lifecycle stream. High-frequency micro-events remain confined to worker edge ring buffers and are only retrieved or streamed when an operator explicitly drills down or toggles "Watch Live".
+
+#### 1. Architectural Topology
+
+```mermaid
+flowchart TD
+    subgraph WORKER["Worker Node Fleet (Sub-Millisecond Engine)"]
+        EB["Virtual-Thread EventBus<br/>(RingBufferDispatcher)"]
+        ROUTER{"Event Tier Router"}
+        TRACE_BUF[("LocalExecutionTraceBuffer<br/>Bounded LRU Ring Buffer per executionId<br/>(Last 100 events / 5 min TTL)")]
+        PUB["WorkerTelemetryPublisher<br/>(Virtual-Thread Batcher)"]
+        TAP_MGR["DynamicTapManager<br/>(Active Live-Watch Leases)"]
+
+        EB --> ROUTER
+        ROUTER -->|"Tier 1 (LIFECYCLE)"| PUB
+        ROUTER -->|"Tier 2 (GRANULAR)"| TRACE_BUF
+        ROUTER -.->|"If Active Tap Registered"| PUB
+        TAP_MGR -.->|"Activate / Expire Tap"| ROUTER
+    end
+
+    subgraph CP["Control Plane Service (Helidon SE)"]
+        INGRESS["POST /api/v1/telemetry/events<br/>(Batch Ingestion)"]
+        GLOBAL_IDX[("ExecutionSummary Index<br/>Active & Terminal Pools<br/>O(executions) memory footprint")]
+        TIMELINE_EP["GET /api/v1/executions/{id}/timeline<br/>(On-Demand Proxy)"]
+        SSE_GLOBAL["GET /api/v1/events/stream<br/>(Tier 1 Global Lifecycle)"]
+        SSE_TARGET["GET /api/v1/events/stream?executionId={id}&tier=all<br/>(Tier 1 + Tier 2 Live Tap)"]
+
+        INGRESS --> GLOBAL_IDX
+        INGRESS --> SSE_GLOBAL
+        INGRESS -.-> SSE_TARGET
+    end
+
+    subgraph UI["Web Dashboard (React 19 / TanStack)"]
+        DASH["Mission Control & Executions Table<br/>(Subscribed to Global SSE)"]
+        DRAWER["Execution Detail Drawer<br/>(On-Demand Timeline Query)"]
+        WATCH_BTN["'Watch Live' Toggle<br/>(Subscribes to Targeted SSE)"]
+    end
+
+    PUB -->|"Tier 1 Events (Always)<br/>or Tapped Tier 2 (When active)"| INGRESS
+    GLOBAL_IDX --> SSE_GLOBAL
+    SSE_GLOBAL --> DASH
+    DRAWER -->|"On-Demand Fetch"| TIMELINE_EP
+    TIMELINE_EP <-->|"Query Trace"| TRACE_BUF
+    WATCH_BTN -->|"Open SSE"| SSE_TARGET
+    SSE_TARGET -->|"Register Tap for {id}"| TAP_MGR
+```
+
+#### 2. Event Tier Classification Matrix (`dispersion-event-api`)
+
+| Event Category Interface | Concrete Event Records | Assigned Tier | Routing & Ingestion Behavior |
+| :--- | :--- | :---: | :--- |
+| **`TurnLifecycleEvent`** | `TurnStartedEvent`<br/>`TurnSuspendedEvent`<br/>`TurnCompletedEvent`<br/>`TurnCompensatedEvent`<br/>`TurnFailedEvent` | **`LIFECYCLE`** | **Always Ingested**: Shipped immediately from worker to Control Plane. Updates `ExecutionSummary` (status, state, turn count, duration) and broadcasts on global `/events/stream`. |
+| **`ControlPlaneEvent`** | `ExecutionCancelledEvent`<br/>`ExecutionPausedEvent`<br/>`ExecutionResumedEvent` | **`LIFECYCLE`** | **Always Ingested**: Represents direct operator actions modifying execution lifecycle. |
+| **`StateLifecycleEvent`** | `StateEnteredEvent`<br/>`StateExitedEvent`<br/>`TransitionEvaluatedEvent`<br/>`ActionExecutedEvent` | **`GRANULAR`** | **Edge-Buffered**: Stored in worker `LocalExecutionTraceBuffer`. Only streamed if an active live-watch tap is registered for that `executionId`. |
+| **`SignalEvent`** | `SignalAwaitedEvent`<br/>`SignalReceivedEvent`<br/>`SignalDeliveredEvent`<br/>`SignalDiscardedEvent` | **`GRANULAR`** | **Edge-Buffered**: Low-level signal matching and queueing telemetry. |
+| **`RetryLifecycleEvent`** | `RetryScheduledEvent`<br/>`RetryAttemptedEvent`<br/>`RetryExhaustedEvent` | **`GRANULAR`** | **Edge-Buffered**: Intermediate backoff ticks within a single turn. |
+| **`ExecutionGuardEvent`** | `CircuitBreakerTrippedEvent`<br/>`MaxVisitsExceededEvent` | **`GRANULAR`** | **Edge-Buffered**: Granular diagnostics on trip limits and guard evaluations. |
+| **`CompensationEvent`** | `CompensationStepStartedEvent`<br/>`CompensationStepCompletedEvent` | **`GRANULAR`** | **Edge-Buffered**: Step-by-step compensation audit trail within a compensated turn. |
+| **`ParallelExecutionEvent`** | `ParallelForkedEvent`<br/>`BranchCompletedEvent`<br/>`ParallelJoinedEvent` | **`GRANULAR`** | **Edge-Buffered**: Barrier join/fork steps within a turn. |
+
+---
+
+#### 3. Detailed Milestone Tasks
+
+- [ ] **Phase 4.1: Event Taxonomy & Tier SPI (`dispersion-event-api`)**:
+  - Create [`EventTier`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/EventTier.java) enum (`LIFECYCLE`, `GRANULAR`).
+  - Add `default EventTier tier()` to [`ExecutionEvent`](file:///C:/Users/faiza/development/dispersion/event/api/src/main/java/com/github/f442y/dispersion/event/ExecutionEvent.java):
+    - Sub-interfaces (`TurnLifecycleEvent`, `ControlPlaneEvent`) override with `EventTier.LIFECYCLE`.
+    - All other sub-interfaces override with `EventTier.GRANULAR`.
+  - Add `boolean isLifecycle()` and `boolean isGranular()` convenience predicates.
+
+- [ ] **Phase 4.2: Worker Local Flight Recorder (`dispersion-event-core`)**:
+  - Implement `LocalExecutionTraceBuffer` SPI and thread-safe implementation `ConcurrentRingBufferTraceBuffer`:
+    - Stores bounded deque/ring-buffer of last $N$ (default 100) events per `UUID machineId`.
+    - Segmented eviction: active executions retain trace; terminal executions auto-evict after configurable TTL (default 5 minutes).
+    - Memory footprint: $< 15\text{ MB}$ per 5,000 concurrent workflows.
+  - Implement `DynamicTapManager`:
+    - Tracks active live-watch lease handles (`Map<UUID, Instant> activeTaps`).
+    - When an execution ID has an active tap lease, the event router routes **both** `LIFECYCLE` and `GRANULAR` events to the outbound telemetry publisher.
+    - Leases automatically expire after 30 seconds unless renewed by client heartbeat.
+
+- [ ] **Phase 4.3: Control Plane Summary Index & Timeline Provider SPI (`dispersion-control-plane-api` & `core`)**:
+  - Introduce `TraceTimelineProvider` SPI:
+    - Contract: `CompletableFuture<List<ExecutionEvent>> fetchTimeline(@NonNull UUID machineId, int limit)`.
+    - In-Memory Provider (Monolith): Direct zero-copy lookup against local `LocalExecutionTraceBuffer`.
+    - Remote Provider (Distributed): Queries the owning worker node or shared durable checkpoint store.
+  - Refactor [`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control-plane/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java):
+    - Decouple execution summaries from massive raw event lists. `ExecutionSummary` retains lean lifecycle statistics.
+    - Delegate `getExecutionTimeline(id)` to the registered `TraceTimelineProvider`.
+
+- [ ] **Phase 4.4: Dual-Feed SSE & On-Demand Timeline Endpoint (`dispersion-server-standalone`)**:
+  - Update `GET /api/v1/events/stream`:
+    - Without query parameters: Streams **strictly `EventTier.LIFECYCLE` events**. Minimal CPU and bandwidth for overview dashboards.
+    - With `?executionId={id}&tier=all`: Registers a dynamic live tap with the tap manager for `{id}`. Streams both lifecycle and granular events for that execution.
+    - On SSE connection close: Unregisters the dynamic tap immediately.
+  - Update `GET /api/v1/executions/{id}/timeline`:
+    - Supports `?limit=100` parameter.
+    - Asynchronously queries the `TraceTimelineProvider` and returns the ordered JSON event timeline.
+
+- [ ] **Phase 4.5: Web UI Drill-Down & "Watch Live" Integration (`ui/`)**:
+  - Update `ui/src/routes/executions.tsx` & `ui/src/components/dashboard/`: Subscribed to global lifecycle SSE feed.
+  - Update `ui/src/components/execution/ExecutionDrawer.tsx`:
+    - Queries `GET /api/v1/executions/{id}/timeline` on open to render turn DAG and steps.
+    - Adds a **"Watch Live"** toggle button for running/suspended executions: opens a dedicated `useEventStream` on `/events/stream?executionId={id}&tier=all`.
+    - Closing the drawer or toggling off disconnects the targeted stream.
 
 ---
 

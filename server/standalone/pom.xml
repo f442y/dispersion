@@ -28,6 +28,10 @@
             <artifactId>helidon-webserver</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.helidon.webserver</groupId>
+            <artifactId>helidon-webserver-static-content</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
@@ -36,16 +40,16 @@
             <artifactId>jspecify</artifactId>
         </dependency>
 
-        <!-- Test Dependencies -->
+        <!-- Standalone Runtime Provider Implementations -->
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-control-plane-core</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-serialization-avaje</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -60,11 +64,21 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.basedir}/../../ui/dist</directory>
+                <targetPath>web</targetPath>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -82,7 +96,7 @@
                                 <arg>--add-modules</arg>
                                 <arg>java.net.http</arg>
                                 <arg>--add-reads</arg>
-                                <arg>com.github.f442y.dispersion.server.standalone=java.net.http,com.github.f442y.dispersion.serialization.avaje</arg>
+                                <arg>com.github.f442y.dispersion.server.standalone=java.net.http,com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core</arg>
                             </compilerArgs>
                         </configuration>
                     </execution>
@@ -98,7 +112,7 @@
                     <argLine>
                         @{argLine}
                         --add-modules java.net.http
-                        --add-reads com.github.f442y.dispersion.server.standalone=java.net.http,com.github.f442y.dispersion.serialization.avaje
+                        --add-reads com.github.f442y.dispersion.server.standalone=java.net.http,com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core
                     </argLine>
                 </configuration>
             </plugin>

@@ -28,6 +28,43 @@ public interface ControlPlane extends AutoCloseable {
     ControlPlane register(@NonNull InspectableMachine machine);
 
     /**
+     * Registers a remote or static state machine topology descriptor with the Control Plane.
+     * Signals targeting this machine will fail gracefully unless an external broker or dispatcher is registered.
+     *
+     * @param descriptor The machine topology descriptor
+     * @return this ControlPlane for fluent chaining
+     */
+    @NonNull
+    default ControlPlane registerDescriptor(@NonNull MachineDescriptor descriptor) {
+        Objects.requireNonNull(descriptor, "descriptor must not be null");
+        return register(new InspectableMachine() {
+            @Override
+            @NonNull
+            public MachineDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            @NonNull
+            public CompletableFuture<SignalDeliveryResult> sendSignal(
+                    @NonNull String correlationKey,
+                    @NonNull String signalName,
+                    @Nullable Object payload
+            ) {
+                return CompletableFuture.completedFuture(
+                        SignalDeliveryResult.failure(descriptor.name(), correlationKey, signalName, "No local signal handler registered for remote machine")
+                );
+            }
+
+            @Override
+            @NonNull
+            public Optional<Object> inspectCheckpoint(@NonNull String correlationKey) {
+                return Optional.empty();
+            }
+        });
+    }
+
+    /**
      * Unregisters a state machine from the Control Plane by name.
      *
      * @param machineName The state machine name

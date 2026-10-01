@@ -330,4 +330,22 @@ final class AvajeJsonSerializerTest {
         assertThat(rCancelled.operatorId()).isEqualTo("admin-1");
         assertThat(rCancelled.reason()).isEqualTo("User requested cancel");
     }
+
+    @Test
+    @DisplayName("Round-trip serialization of ExecutionEvent batch lists")
+    void shouldRoundTripEventBatchList() {
+        StateEnteredEvent entered = new StateEnteredEvent(machineId, "BatchMachine", "STEP_1", now);
+        StateExitedEvent exited = new StateExitedEvent(machineId, "BatchMachine", "STEP_1", Duration.ofMillis(25), now);
+        TurnCompletedEvent completed = new TurnCompletedEvent(machineId, "BatchMachine", "STEP_2", "corr-batch", Duration.ofMillis(50), now);
+
+        List<ExecutionEvent> originalBatch = List.of(entered, exited, completed);
+        String json = serializer.serializeEvents(originalBatch);
+        List<ExecutionEvent> deserializedBatch = serializer.deserializeEvents(json);
+
+        assertThat(deserializedBatch).hasSize(3);
+        assertThat(deserializedBatch.get(0)).isInstanceOf(StateEnteredEvent.class);
+        assertThat(((StateEnteredEvent) deserializedBatch.get(0)).stateName()).isEqualTo("STEP_1");
+        assertThat(deserializedBatch.get(1)).isInstanceOf(StateExitedEvent.class);
+        assertThat(deserializedBatch.get(2)).isInstanceOf(TurnCompletedEvent.class);
+    }
 }

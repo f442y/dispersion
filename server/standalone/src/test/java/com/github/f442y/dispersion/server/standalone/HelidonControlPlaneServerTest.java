@@ -7,6 +7,7 @@ import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.MachineType;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.control.core.DefaultControlPlane;
+import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.state.StateEnteredEvent;
 import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
@@ -52,6 +53,8 @@ final class HelidonControlPlaneServerTest {
                 .host("127.0.0.1")
                 .port(0)
                 .basePath("/api/v1")
+                .environment("staging")
+                .clusterId("prod-cluster-1")
                 .allowedOrigins(List.of("*"))
                 .build();
 
@@ -83,6 +86,22 @@ final class HelidonControlPlaneServerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/node returns node telemetry, environment, and clusterId")
+    void shouldGetNodeTelemetry() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUri + "/node"))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"environment\": \"staging\"");
+        assertThat(response.body()).contains("\"clusterId\": \"prod-cluster-1\"");
+        assertThat(response.body()).contains("\"role\": \"CONTROL_PLANE\"");
+        assertThat(response.body()).contains("\"status\": \"HEALTHY\"");
+    }
+
+    @Test
     @DisplayName("GET /api/v1/machines returns registered machine descriptors")
     void shouldListMachines() throws Exception {
         MachineDescriptor descriptor = new MachineDescriptor(
@@ -104,6 +123,70 @@ final class HelidonControlPlaneServerTest {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("OrderWorkflow");
         assertThat(response.body()).contains("ORCHESTRATION");
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/machines/register allows remote microservices to register topologies")
+    void shouldRegisterMachineRemotely() throws Exception {
+        MachineDescriptor descriptor = new MachineDescriptor(
+                "RemotePaymentMachine",
+                MachineType.ATOMIC,
+                "INIT",
+                Set.of("SUCCESS", "FAILED"),
+                List.of("INIT", "AUTHORIZED", "SUCCESS", "FAILED"),
+                "graph TD;\nINIT-->AUTHORIZED;"
+        );
+        String descriptorJson = serializer.serializeDescriptor(descriptor);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUri + "/machines/register"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(descriptorJson))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"status\":\"REGISTERED\"");
+        assertThat(response.body()).contains("RemotePaymentMachine");
+
+        assertThat(controlPlane.getMachine("RemotePaymentMachine")).isPresent();
+        assertThat(controlPlane.getMachine("RemotePaymentMachine").get().initialState()).isEqualTo("INIT");
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/telemetry/events ingests remote event batches into Control Plane")
+    void shouldIngestTelemetryBatchRemotely() throws Exception {
+        UUID remoteMachineId = UUID.randomUUID();
+        Instant now = Instant.now();
+
+        List<ExecutionEvent> batch = List.of(
+                new TurnStartedEvent(remoteMachineId, "RemoteWorkerWorkflow", "order-remote-999", now),
+                new StateEnteredEvent(remoteMachineId, "RemoteWorkerWorkflow", "DISPATCHED", now.plusMillis(10)),
+                new TurnSuspendedEvent(remoteMachineId, "RemoteWorkerWorkflow", "AWAITING_CONFIRMATION", "ConfirmSignal", "order-remote-999", Duration.ofMillis(30), now.plusMillis(50))
+        );
+        String batchJson = serializer.serializeEvents(batch);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUri + "/telemetry/events"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(batchJson))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"status\":\"INGESTED\"");
+        assertThat(response.body()).contains("\"count\":3");
+
+        List<ExecutionSummary> executions = controlPlane.listExecutions("RemoteWorkerWorkflow", null, 10);
+        assertThat(executions).hasSize(1);
+        ExecutionSummary summary = executions.get(0);
+        assertThat(summary.executionId()).isEqualTo(remoteMachineId.toString());
+        assertThat(summary.currentState()).isEqualTo("AWAITING_CONFIRMATION");
+        assertThat(summary.status()).isEqualTo(ExecutionStatus.SUSPENDED);
+        assertThat(summary.suspendedSignal()).isEqualTo("ConfirmSignal");
+
+        List<ExecutionEvent> timeline = controlPlane.getExecutionTimeline(remoteMachineId.toString());
+        assertThat(timeline).hasSize(3);
     }
 
     @Test

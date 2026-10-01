@@ -86,6 +86,18 @@ public final class AvajeJsonSerializer implements JsonSerializer {
 
     @Override
     @NonNull
+    public List<ExecutionEvent> deserializeEvents(@NonNull String json) {
+        Objects.requireNonNull(json, "json must not be null");
+        try {
+            List<ExecutionEvent> list = eventsListType.fromJson(json);
+            return list != null ? list : List.of();
+        } catch (RuntimeException ex) {
+            throw new JsonSerializationException("Failed to deserialize events list", ex);
+        }
+    }
+
+    @Override
+    @NonNull
     public String serializeDescriptor(@NonNull MachineDescriptor descriptor) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
         try {
@@ -196,7 +208,7 @@ public final class AvajeJsonSerializer implements JsonSerializer {
 
     @Override
     @NonNull
-    public <T> String serialize(@NonNull T value) {
+    public <VALUE_TYPE> String serialize(@NonNull VALUE_TYPE value) {
         Objects.requireNonNull(value, "value must not be null");
         try {
             return jsonb.toJson(value);
@@ -207,7 +219,7 @@ public final class AvajeJsonSerializer implements JsonSerializer {
 
     @Override
     @NonNull
-    public <T> T deserialize(@NonNull String json, @NonNull Class<T> targetType) {
+    public <VALUE_TYPE> VALUE_TYPE deserialize(@NonNull String json, @NonNull Class<VALUE_TYPE> targetType) {
         Objects.requireNonNull(json, "json must not be null");
         Objects.requireNonNull(targetType, "targetType must not be null");
         try {
