@@ -37,6 +37,21 @@
 
         <!-- Test Dependencies -->
         <dependency>
+            <groupId>org.glassfish.jersey.core</groupId>
+            <artifactId>jersey-common</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jersey.core</groupId>
+            <artifactId>jersey-server</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.activation</groupId>
+            <artifactId>jakarta.activation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-control-plane-core</artifactId>
             <scope>test</scope>
@@ -57,4 +72,39 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs>
+                                <arg>-proc:full</arg>
+                                <arg>-Xlint:all</arg>
+                                <arg>-Xlint:-processing</arg>
+                                <arg>-Xlint:-exports</arg>
+                                <arg>-Xdiags:verbose</arg>
+                                <arg>--add-reads</arg>
+                                <arg>com.github.f442y.dispersion.server.jakarta=com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        @{argLine}
+                        --add-reads com.github.f442y.dispersion.server.jakarta=com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core
+                    </argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

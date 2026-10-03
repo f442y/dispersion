@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dispersion Control Plane - Spring Boot 4 Example</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --border-color: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent-cyan: #38bdf8;
+            --accent-emerald: #34d399;
+            --accent-purple: #c084fc;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem 1.5rem;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        header { margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1.5rem; }
+        h1 { font-size: 2rem; font-weight: 700; color: var(--accent-cyan); display: flex; align-items: center; gap: 0.75rem; }
+        .badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            background-color: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid var(--accent-cyan);
+        }
+        p.subtitle { color: var(--text-secondary); margin-top: 0.5rem; font-size: 1.05rem; }
+        .card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; color: var(--accent-emerald); }
+        ul { list-style-type: none; }
+        li { margin-bottom: 0.75rem; }
+        a { color: var(--accent-cyan); text-decoration: none; font-weight: 500; }
+        a:hover { text-decoration: underline; }
+        code {
+            background-color: rgba(110, 118, 129, 0.2);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #030712;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            overflow-x: auto;
+            font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+            font-size: 0.85rem;
+            color: #f1f5f9;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <span>&#9889; Dispersion Control Plane</span>
+                <span class="badge">Spring Boot 4.1</span>
+            </h1>
+            <p class="subtitle">Embedded control plane operational host running on Java 25 virtual threads with localized Spring Boot dependencies.</p>
+        </header>
+
+        <div class="card">
+            <h2>&#128065; Live REST Endpoints</h2>
+            <ul>
+                <li>&#8226; <a href="/api/v1/machines" target="_blank"><code>GET /api/v1/machines</code></a> &mdash; List registered state machine topologies</li>
+                <li>&#8226; <a href="/api/v1/machines/OrderWorkflow" target="_blank"><code>GET /api/v1/machines/OrderWorkflow</code></a> &mdash; Inspect Order Saga workflow topology</li>
+                <li>&#8226; <a href="/api/v1/executions?status=SUSPENDED" target="_blank"><code>GET /api/v1/executions?status=SUSPENDED</code></a> &mdash; Query suspended saga executions</li>
+                <li>&#8226; <a href="/api/v1/events/stream" target="_blank"><code>GET /api/v1/events/stream</code></a> &mdash; Real-time Server-Sent Events (SSE) telemetry stream</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>&#128225; Signal Resumption Example (curl)</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">Resume pre-seeded suspended order <code>ORDER-DEMO-99</code> via signal delivery:</p>
+            <pre>curl -X POST "http://localhost:8080/api/v1/executions/signal" \
+  -H "Content-Type: application/json" \
+  -d '{"machineName":"OrderWorkflow","correlationKey":"ORDER-DEMO-99","signalName":"PaymentSignal","payload":{"correlationKey":"ORDER-DEMO-99","paymentMethod":"APPLE_PAY","amountCents":9995}}'</pre>
+        </div>
+    </div>
+</body>
+</html>

@@ -14,11 +14,15 @@ import com.github.f442y.dispersion.orchestration.core.OrchestrationBuilder;
 import com.github.f442y.dispersion.orchestration.core.OrchestrationExecutor;
 import com.github.f442y.dispersion.serialization.avaje.AvajeJsonSerializer;
 import com.github.f442y.dispersion.serialization.json.JsonSerializer;
-import com.github.f442y.dispersion.server.api.ControlPlaneServer;
-import com.github.f442y.dispersion.server.api.ServerConfig;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.event.EventListener;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,20 +33,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Interactive developer demo application running the Dispersion Control Plane
- * and Helidon SE Níma HTTP/SSE server locally on Java 25 virtual threads.
+ * embedded in a modern Spring Boot 4.1 application on Java 25 virtual threads.
  * <p>
- * Can be run directly from IntelliJ IDEA (right-click -> 'Run DispersionDemoApp.main()')
+ * Can be run directly from IntelliJ IDEA (right-click -&gt; 'Run DispersionDemoApp.main()')
  * or via Maven:
  * {@code .\mvnw compile exec:java -pl examples -Dexec.mainClass="com.github.f442y.dispersion.examples.DispersionDemoApp"}
  */
-public final class DispersionDemoApp {
+@SpringBootApplication
+public class DispersionDemoApp {
 
     private static final Logger log = LoggerFactory.getLogger(DispersionDemoApp.class);
-    private static final String SERVER_HOST = "127.0.0.1";
-    private static final int SERVER_PORT = 8080;
     private static final String BASE_PATH = "/api/v1";
 
-    private DispersionDemoApp() {}
+    public DispersionDemoApp() {}
 
     // =========================================================================
     // 1. Order Checkout Workflow (Orchestration Saga + Signal Suspension)
@@ -141,21 +144,27 @@ public final class DispersionDemoApp {
     }
 
     // =========================================================================
-    // Main Entry Point
+    // Spring Beans Configuration
     // =========================================================================
 
-    public static void main(String[] args) throws Exception {
-        log.info("Starting Dispersion Control Plane Demo Application...");
+    @Bean(destroyMethod = "close")
+    public DefaultControlPlane controlPlane() {
+        return new DefaultControlPlane();
+    }
 
-        // 1. Initialize Control Plane Engine & Serializer
-        DefaultControlPlane controlPlane = new DefaultControlPlane();
-        JsonSerializer jsonSerializer = new AvajeJsonSerializer();
+    @Bean
+    public JsonSerializer jsonSerializer() {
+        return new AvajeJsonSerializer();
+    }
 
-        // 2. Build and register Order Orchestration Saga Engine
+    @Bean(destroyMethod = "close")
+    public OrchestrationExecutor<OrderContext, OrderState, Object, String> orderWorkflowExecutor(
+            DefaultControlPlane controlPlane
+    ) {
         InMemoryCheckpointStore<OrderContext, OrderState> orderStore = new InMemoryCheckpointStore<>();
 
-        OrchestrationExecutor<OrderContext, OrderState, OrderContext, String> orderExecutor =
-                OrchestrationBuilder.<OrderContext, OrderState, OrderContext, String>create("OrderWorkflow", OrderState.class)
+        OrchestrationExecutor<OrderContext, OrderState, Object, String> executor =
+                OrchestrationBuilder.<OrderContext, OrderState, Object, String>create("OrderWorkflow", OrderState.class)
                         .checkpointStore(orderStore)
                         .eventListener(controlPlane.getEventListener())
                         .context(OrderContext::new)
@@ -163,10 +172,10 @@ public final class DispersionDemoApp {
                         .initialState(OrderState.VALIDATE_ORDER)
                         .endStates(OrderState.COMPLETED, OrderState.CANCELLED)
                         .input((ctx, in) -> {
-                            if (in != null) {
-                                ctx.orderId = in.orderId;
-                                ctx.customerId = in.customerId;
-                                ctx.amountCents = in.amountCents;
+                            if (in instanceof OrderContext orderIn) {
+                                ctx.orderId = orderIn.orderId;
+                                ctx.customerId = orderIn.customerId;
+                                ctx.amountCents = orderIn.amountCents;
                             }
                             if (ctx.orderId == null || ctx.orderId.isBlank()) {
                                 long id = System.currentTimeMillis();
@@ -211,18 +220,35 @@ public final class DispersionDemoApp {
                         .output(ctx -> "ORDER_PROCESSED:" + ctx.orderId)
                         .buildExecutor();
 
-        controlPlane.register(orderExecutor.asInspectableMachine());
+        controlPlane.register(executor.asInspectableMachine());
+        return executor;
+    }
 
-        // 3. Build and register High-Throughput Atomic Metrics Pipeline
-        AtomicStateMachineExecutor<PipelineContext, PipelineState, Double, Double> pipelineExecutor =
-                AtomicStateMachineBuilder.<PipelineContext, PipelineState, Double, Double>create("MetricsPipeline", PipelineState.class)
+    @Bean
+    public AtomicStateMachineExecutor<PipelineContext, PipelineState, Object, Double> metricsPipelineExecutor(
+            DefaultControlPlane controlPlane
+    ) {
+        AtomicStateMachineExecutor<PipelineContext, PipelineState, Object, Double> executor =
+                AtomicStateMachineBuilder.<PipelineContext, PipelineState, Object, Double>create("MetricsPipeline", PipelineState.class)
                         .context(PipelineContext::new)
                         .initialState(PipelineState.INGEST)
                         .endStates(PipelineState.FINISHED)
                         .eventListener(controlPlane.getEventListener())
                         .input((ctx, val) -> {
                             ctx.sensorId = "sensor-" + (System.currentTimeMillis() % 10);
-                            ctx.metricValue = val != null ? val : (Math.round((Math.random() * 85.0 + 15.0) * 10.0) / 10.0);
+                            double d;
+                            if (val instanceof Number num) {
+                                d = num.doubleValue();
+                            } else if (val instanceof String s && !s.isBlank()) {
+                                try {
+                                    d = Double.parseDouble(s.trim());
+                                } catch (NumberFormatException _) {
+                                    d = Math.round((Math.random() * 85.0 + 15.0) * 10.0) / 10.0;
+                                }
+                            } else {
+                                d = Math.round((Math.random() * 85.0 + 15.0) * 10.0) / 10.0;
+                            }
+                            ctx.metricValue = d;
                             return ctx;
                         })
                         .state(PipelineState.INGEST)
@@ -240,10 +266,15 @@ public final class DispersionDemoApp {
                         .output(ctx -> ctx.metricValue)
                         .buildExecutor();
 
-        controlPlane.register(pipelineExecutor.asInspectableMachine());
+        controlPlane.register(executor.asInspectableMachine());
+        return executor;
+    }
 
-        // 4. Build and register Turn-Based Batch Processor
-        BatchOrchestrationExecutor<BatchCtx, ItemCtx, BatchStage, String> batchExecutor =
+    @Bean(destroyMethod = "close")
+    public BatchOrchestrationExecutor<BatchCtx, ItemCtx, BatchStage, String> batchProcessorExecutor(
+            DefaultControlPlane controlPlane
+    ) {
+        BatchOrchestrationExecutor<BatchCtx, ItemCtx, BatchStage, String> executor =
                 BatchOrchestrationBuilder.<BatchCtx, ItemCtx, BatchStage, String>create("BatchProcessor", BatchStage.class)
                         .batchContext(BatchCtx::new)
                         .batchKey(ctx -> ctx.batchId)
@@ -262,9 +293,31 @@ public final class DispersionDemoApp {
                             .transition(BatchStage.COMPLETE)
                         .buildExecutor();
 
-        controlPlane.register(batchExecutor.asInspectableMachine());
+        controlPlane.register(executor.asInspectableMachine());
+        return executor;
+    }
 
-        // 5. Pre-seed a suspended order workflow for immediate manual signal injection testing
+    // =========================================================================
+    // Startup Seeding & Background Activity Simulator
+    // =========================================================================
+
+    @EventListener(ApplicationReadyEvent.class)
+    @SuppressWarnings("unchecked")
+    public void onApplicationReady(ApplicationReadyEvent event) throws Exception {
+        ApplicationContext context = event.getApplicationContext();
+        Integer port = context.getEnvironment().getProperty("local.server.port", Integer.class);
+        if (port == null) {
+            port = context.getEnvironment().getProperty("server.port", Integer.class, 8080);
+        }
+
+        var orderExecutor = (OrchestrationExecutor<OrderContext, OrderState, Object, String>)
+                context.getBean("orderWorkflowExecutor");
+        var pipelineExecutor = (AtomicStateMachineExecutor<PipelineContext, PipelineState, Object, Double>)
+                context.getBean("metricsPipelineExecutor");
+        var batchExecutor = (BatchOrchestrationExecutor<BatchCtx, ItemCtx, BatchStage, String>)
+                context.getBean("batchProcessorExecutor");
+
+        // 1. Pre-seed a suspended order workflow for immediate manual signal injection testing
         OrderContext preSeededOrder = new OrderContext();
         preSeededOrder.orderId = "ORDER-DEMO-99";
         preSeededOrder.customerId = "CUST-42";
@@ -274,19 +327,9 @@ public final class DispersionDemoApp {
         // Pre-seed batch items
         batchExecutor.dispatchBatchSync(List.of(new ItemCtx("ITEM-A"), new ItemCtx("ITEM-B")));
 
-        // 6. Start Helidon SE Níma HTTP Server
-        ServerConfig config = ServerConfig.builder()
-                .port(SERVER_PORT)
-                .basePath(BASE_PATH)
-                .allowedOrigins(List.of("*"))
-                .build();
+        printBanner("localhost", port);
 
-        ControlPlaneServer server = ControlPlaneServer.create(config, controlPlane, jsonSerializer);
-        server.start();
-
-        printBanner(SERVER_HOST, server.port());
-
-        // 7. Start background virtual thread activity generator
+        // 2. Start background virtual thread activity generator
         AtomicBoolean running = new AtomicBoolean(true);
         AtomicInteger orderCounter = new AtomicInteger(100);
         Random random = new Random();
@@ -316,26 +359,17 @@ public final class DispersionDemoApp {
                 }
             }
         });
-
-        // 8. Add JVM shutdown hook for graceful termination
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            log.info("Shutdown signal received. Stopping demo gracefully...");
-            running.set(false);
-            server.stop();
-            log.info("Dispersion Control Plane demo stopped.");
-        }, "dispersion-shutdown-hook"));
-
-        // Wait indefinitely
-        Thread.currentThread().join();
     }
 
     private static void printBanner(String host, int port) {
         String base = "http://" + host + ":" + port + BASE_PATH;
+        String webUrl = "http://" + host + ":" + port;
         System.out.println("""
             ========================================================================================
-            🚀 DISPERSION CONTROL PLANE & HELIDON SE DEMO IS RUNNING
+            🚀 DISPERSION CONTROL PLANE & SPRING BOOT 4.1 DEMO IS RUNNING
             ========================================================================================
             Base HTTP URL: %s
+            Web Landing:   %s
 
             ✨ Pre-registered Machines:
                • OrderWorkflow    (Orchestration Saga: Suspended order 'ORDER-DEMO-99' awaiting signal)
@@ -366,7 +400,15 @@ public final class DispersionDemoApp {
                   PowerShell native (Invoke-RestMethod):
                   Invoke-RestMethod -Method Post -Uri "%s/executions/signal" -ContentType "application/json" -Body '{"machineName":"OrderWorkflow","correlationKey":"ORDER-DEMO-99","signalName":"PaymentSignal","payload":{"correlationKey":"ORDER-DEMO-99","paymentMethod":"APPLE_PAY","amountCents":9995}}'
             ========================================================================================
-            Press Ctrl+C or Stop in IntelliJ to terminate.
-            """.formatted(base, base, base, base, base, base, base, base, base, base, base));
+            """.formatted(base, webUrl, base, base, base, base, base, base, base, base, base, base));
+    }
+
+    // =========================================================================
+    // Main Entry Point
+    // =========================================================================
+
+    public static void main(String[] args) {
+        log.info("Starting Dispersion Control Plane Demo Application on Spring Boot 4.1...");
+        SpringApplication.run(DispersionDemoApp.class, args);
     }
 }

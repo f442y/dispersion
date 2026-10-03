@@ -67,7 +67,6 @@
         <module>serialization/json/avaje</module>
         <module>server/api</module>
         <module>server/jakarta</module>
-        <module>server/standalone</module>
         <module>testkit</module>
         <module>examples</module>
     </modules>
@@ -99,7 +98,8 @@
 
         <!-- Dependency Versions: Server & Web Frameworks -->
         <jakarta-ws-rs.version>4.0.0</jakarta-ws-rs.version>
-        <helidon.version>4.5.5</helidon.version>
+        <jakarta-activation.version>2.1.3</jakarta-activation.version>
+        <jersey.version>4.0.2</jersey.version>
 
         <!-- Dependency Versions: Testing Frameworks & Assertions -->
         <junit-jupiter.version>6.1.3</junit-jupiter.version>
@@ -187,47 +187,12 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-event-test</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-fsm-test</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-orchestration-test</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-control-plane-test</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-routing-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-routing-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-routing-test</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-testkit</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-examples</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -262,25 +227,38 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-server-standalone</artifactId>
+                <artifactId>dispersion-event-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
-
-            <!-- Helidon WebServer (Standalone Runner) -->
             <dependency>
-                <groupId>io.helidon.webserver</groupId>
-                <artifactId>helidon-webserver</artifactId>
-                <version>${helidon.version}</version>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-fsm-test</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.helidon.webserver</groupId>
-                <artifactId>helidon-webserver-static-content</artifactId>
-                <version>${helidon.version}</version>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-orchestration-test</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.helidon.webserver.observe</groupId>
-                <artifactId>helidon-webserver-observe</artifactId>
-                <version>${helidon.version}</version>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-control-plane-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-routing-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-testkit</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f442y.dispersion</groupId>
+                <artifactId>dispersion-examples</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- Static Analysis & Specifications -->
@@ -314,11 +292,31 @@
                 <version>${apache-fory.version}</version>
             </dependency>
 
-            <!-- Jakarta REST (Compile-time / Optional) -->
+            <!-- Jakarta REST & Activation (Compile-time / Optional) -->
             <dependency>
                 <groupId>jakarta.ws.rs</groupId>
                 <artifactId>jakarta.ws.rs-api</artifactId>
                 <version>${jakarta-ws-rs.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>jakarta.activation</groupId>
+                <artifactId>jakarta.activation-api</artifactId>
+                <version>${jakarta-activation.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.jersey.core</groupId>
+                <artifactId>jersey-common</artifactId>
+                <version>${jersey.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.jersey.core</groupId>
+                <artifactId>jersey-server</artifactId>
+                <version>${jersey.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.jersey.media</groupId>
+                <artifactId>jersey-media-sse</artifactId>
+                <version>${jersey.version}</version>
             </dependency>
 
             <!-- Testing Libraries (Granular Management) -->
@@ -394,7 +392,6 @@
                                     <arg>-proc:full</arg>
                                     <arg>-Xlint:all</arg>
                                     <arg>-Xlint:-processing</arg>
-                                    <arg>-Xlint:-exports</arg>
                                     <arg>-Xdiags:verbose</arg>
                                 </compilerArgs>
                             </configuration>

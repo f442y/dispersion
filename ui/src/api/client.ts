@@ -34,10 +34,27 @@ export async function request<T>(
   return res.json() as Promise<T>;
 }
 
-export function getEventStreamUrl(machineName?: string, customBase?: string): string {
+export interface EventStreamUrlOptions {
+  machineName?: string;
+  executionId?: string;
+  tier?: 'lifecycle' | 'all';
+}
+
+export function getEventStreamUrl(
+  optionsOrMachineName?: string | EventStreamUrlOptions,
+  customBase?: string
+): string {
   const base = customBase ?? activeBaseUrl;
   const query = new URLSearchParams();
-  if (machineName) query.set('machine', machineName);
+
+  if (typeof optionsOrMachineName === 'string') {
+    if (optionsOrMachineName) query.set('machine', optionsOrMachineName);
+  } else if (optionsOrMachineName) {
+    if (optionsOrMachineName.machineName) query.set('machine', optionsOrMachineName.machineName);
+    if (optionsOrMachineName.executionId) query.set('executionId', optionsOrMachineName.executionId);
+    if (optionsOrMachineName.tier) query.set('tier', optionsOrMachineName.tier);
+  }
+
   const qs = query.toString();
   return `${base}/events/stream${qs ? `?${qs}` : ''}`;
 }

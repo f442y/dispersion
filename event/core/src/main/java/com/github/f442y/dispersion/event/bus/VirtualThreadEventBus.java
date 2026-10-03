@@ -1,10 +1,12 @@
 package com.github.f442y.dispersion.event.bus;
 
+import com.github.f442y.dispersion.event.DynamicTapManager;
 import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventBusMetrics;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
 import com.github.f442y.dispersion.event.ExecutionEventListener;
+import com.github.f442y.dispersion.event.LocalExecutionTraceBuffer;
 import com.github.f442y.dispersion.event.OverflowPolicy;
 import com.github.f442y.dispersion.event.Subscription;
 import org.jspecify.annotations.NonNull;
@@ -45,6 +47,8 @@ import java.util.function.Predicate;
  *   <li><b>Pull-Based Virtual Thread Streaming:</b> SSE and WebSocket endpoints pull sequentially from
  *       {@link EventStream} using standard, lightweight blocking calls ({@link EventStream#take()}).</li>
  *   <li><b>Integrated Circular Replay Buffer:</b> In-memory recent event history for instant UI/timeline queries.</li>
+ *   <li><b>Tiered Telemetry & Dynamic Tap:</b> Local flight recorder ({@link LocalExecutionTraceBuffer}) and
+ *       ephemeral live-watch leases ({@link DynamicTapManager}) for granular edge buffering.</li>
  * </ul>
  */
 public class VirtualThreadEventBus implements EventBus {
@@ -67,6 +71,9 @@ public class VirtualThreadEventBus implements EventBus {
     private final List<RegisteredListener> listeners = new CopyOnWriteArrayList<>();
     private final List<VirtualThreadEventStream> activeStreams = new CopyOnWriteArrayList<>();
 
+    private final LocalExecutionTraceBuffer traceBuffer;
+    private final DynamicTapManager tapManager;
+
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final AtomicLong publishedCount = new AtomicLong();
     private final AtomicLong deliveredCount = new AtomicLong();
@@ -82,6 +89,13 @@ public class VirtualThreadEventBus implements EventBus {
         this.historyCapacity = builder.historyCapacity;
         this.streamDefaultCapacity = builder.streamDefaultCapacity;
         this.direct = builder.direct;
+
+        this.traceBuffer = (builder.traceBuffer != null)
+                ? builder.traceBuffer
+                : new ConcurrentRingBufferTraceBuffer();
+        this.tapManager = (builder.tapManager != null)
+                ? builder.tapManager
+                : new DefaultDynamicTapManager();
 
         this.historyBuffer = (builder.historyCapacity > 0)
                 ? new ArrayDeque<>(Math.min(builder.historyCapacity, 1_024))
@@ -215,6 +229,14 @@ public class VirtualThreadEventBus implements EventBus {
         }
     }
 
+    public @NonNull LocalExecutionTraceBuffer traceBuffer() {
+        return traceBuffer;
+    }
+
+    public @NonNull DynamicTapManager tapManager() {
+        return tapManager;
+    }
+
     @Override
     @NonNull
     public EventBusMetrics metrics() {
@@ -311,7 +333,12 @@ public class VirtualThreadEventBus implements EventBus {
     }
 
     private void deliverSingleEvent(@NonNull ExecutionEvent event) {
-        // 1. Record in circular replay history without carrier thread pinning
+        // 1. Record in execution flight recorder trace buffer
+        if (traceBuffer != null) {
+            traceBuffer.record(event);
+        }
+
+        // 2. Record in circular replay history without carrier thread pinning
         if (historyBuffer != null) {
             historyLock.lock();
             try {
@@ -324,7 +351,7 @@ public class VirtualThreadEventBus implements EventBus {
             }
         }
 
-        // 2. Deliver to active listeners
+        // 3. Deliver to active listeners
         for (RegisteredListener reg : listeners) {
             try {
                 if (reg.filter.test(event)) {
@@ -339,7 +366,7 @@ public class VirtualThreadEventBus implements EventBus {
             }
         }
 
-        // 3. Deliver to active pull streams
+        // 4. Deliver to active pull streams
         for (VirtualThreadEventStream stream : activeStreams) {
             try {
                 if (stream.offer(event)) {
@@ -372,6 +399,12 @@ public class VirtualThreadEventBus implements EventBus {
                 stream.close();
             }
             activeStreams.clear();
+            if (traceBuffer != null) {
+                traceBuffer.close();
+            }
+            if (tapManager != null) {
+                tapManager.close();
+            }
         }
     }
 
@@ -404,29 +437,14 @@ public class VirtualThreadEventBus implements EventBus {
             if (closed.get()) {
                 return false;
             }
-            if (!filter.test(event)) {
-                return true; // Not matched, considered handled without drop
-            }
-            // If the stream's buffer is full, drop oldest unread item to allow fresh events
-            while (!queue.offer(event)) {
-                queue.poll();
+            if (filter.test(event)) {
+                return queue.offer(event);
             }
             return true;
         }
 
         @Override
-        @Nullable
-        public ExecutionEvent poll(@NonNull Duration timeout) throws InterruptedException {
-            Objects.requireNonNull(timeout, "timeout must not be null");
-            if (closed.get() && queue.isEmpty()) {
-                return null;
-            }
-            return queue.poll(timeout.toNanos(), TimeUnit.NANOSECONDS);
-        }
-
-        @Override
-        @NonNull
-        public ExecutionEvent take() throws InterruptedException {
+        public @NonNull ExecutionEvent take() throws InterruptedException {
             while (!closed.get() || !queue.isEmpty()) {
                 ExecutionEvent item = queue.poll(100, TimeUnit.MILLISECONDS);
                 if (item != null) {
@@ -434,6 +452,15 @@ public class VirtualThreadEventBus implements EventBus {
                 }
             }
             throw new IllegalStateException("EventStream is closed");
+        }
+
+        @Override
+        public @Nullable ExecutionEvent poll(@NonNull Duration timeout) throws InterruptedException {
+            Objects.requireNonNull(timeout, "timeout must not be null");
+            if (closed.get() && queue.isEmpty()) {
+                return null;
+            }
+            return queue.poll(timeout.toNanos(), TimeUnit.NANOSECONDS);
         }
 
         @Override
@@ -449,7 +476,6 @@ public class VirtualThreadEventBus implements EventBus {
         }
 
         @Override
-        @NonNull
         public Iterator<ExecutionEvent> iterator() {
             return new Iterator<>() {
                 private ExecutionEvent nextItem = null;
@@ -463,7 +489,7 @@ public class VirtualThreadEventBus implements EventBus {
                         return false;
                     }
                     try {
-                        nextItem = poll(Duration.ofMillis(200));
+                        nextItem = poll(Duration.ofMillis(100));
                         return nextItem != null || (!closed.get() || !queue.isEmpty());
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -497,6 +523,11 @@ public class VirtualThreadEventBus implements EventBus {
         private int streamDefaultCapacity = DEFAULT_STREAM_CAPACITY;
         private OverflowPolicy overflowPolicy = OverflowPolicy.DROP_OLDEST;
         private boolean direct = false;
+        private LocalExecutionTraceBuffer traceBuffer = null;
+        private DynamicTapManager tapManager = null;
+
+        public Builder() {
+        }
 
         public Builder bufferCapacity(int bufferCapacity) {
             if (bufferCapacity <= 0) {
@@ -529,6 +560,16 @@ public class VirtualThreadEventBus implements EventBus {
 
         public Builder direct(boolean direct) {
             this.direct = direct;
+            return this;
+        }
+
+        public Builder traceBuffer(@Nullable LocalExecutionTraceBuffer traceBuffer) {
+            this.traceBuffer = traceBuffer;
+            return this;
+        }
+
+        public Builder tapManager(@Nullable DynamicTapManager tapManager) {
+            this.tapManager = tapManager;
             return this;
         }
 

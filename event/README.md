@@ -15,12 +15,19 @@ graph TD
         EB["EventBus (SPI)"]
         EEL["ExecutionEventListener (SPI)"]
         ES["EventStream (Reactive Pull)"]
+        ET["EventTier (LIFECYCLE / GRANULAR)"]
+        DTM["DynamicTapManager (SPI)"]
+        TB["LocalExecutionTraceBuffer (SPI)"]
     end
 
     subgraph Core["dispersion-event-core (Engine)"]
         VTEB["VirtualThreadEventBus (Lock-Free Ring Buffer)"]
+        DDTM["DefaultDynamicTapManager (Ref-Counted Leases)"]
+        CRB["ConcurrentRingBufferTraceBuffer"]
         VTEB --> EB
         VTEB -.-> EEL
+        DDTM --> DTM
+        CRB --> TB
     end
 
     subgraph Test["dispersion-event-test (Test Doubles)"]
@@ -38,8 +45,8 @@ graph TD
 
 | Module | JPMS Module Name | Description |
 | :--- | :--- | :--- |
-| **`dispersion-event-api`** | `com.github.f442y.dispersion.event.api` | Core telemetry event records, SPI listener interfaces, overflow policies, and event stream contracts. Zero runtime dependencies. |
-| **`dispersion-event-core`** | `com.github.f442y.dispersion.event.core` | High-performance virtual thread event bus with lock-free ring buffering, bounded history replay, and configurable overflow policies. |
+| **`dispersion-event-api`** | `com.github.f442y.dispersion.event.api` | Core telemetry event records, SPI listener interfaces, overflow policies, event stream contracts, `EventTier`, `DynamicTapManager`, and `LocalExecutionTraceBuffer`. Zero runtime dependencies. |
+| **`dispersion-event-core`** | `com.github.f442y.dispersion.event.core` | High-performance virtual thread event bus with lock-free ring buffering, bounded history replay, configurable overflow policies, concurrent trace ring buffers, and dynamic tap management. |
 | **`dispersion-event-test`** | `com.github.f442y.dispersion.event.test` | Reusable in-memory test doubles (`RecordingEventBus`, `CapturingEventListener`) for zero-dependency unit and integration testing. |
 
 ---
@@ -158,91 +165,6 @@ public final class TelemetryLogger {
                    .setCause(failed.cause())
                    .log("Turn execution failed");
 
-            case CompensationStepStartedEvent compStarted ->
-                log.atInfo()
-                   .addKeyValue("machine_id", compStarted.machineId())
-                   .addKeyValue("state", compStarted.stateName())
-                   .addKeyValue("routed", compStarted.isRouted())
-                   .log("Executing single state Saga compensation rollback");
-
-            case CompensationStepCompletedEvent compCompleted ->
-                log.atInfo()
-                   .addKeyValue("machine_id", compCompleted.machineId())
-                   .addKeyValue("state", compCompleted.stateName())
-                   .addKeyValue("duration_ms", compCompleted.duration().toMillis())
-                   .log("State compensation completed");
-
-            case CompensationStepFailedEvent compFailed ->
-                log.atError()
-                   .addKeyValue("machine_id", compFailed.machineId())
-                   .addKeyValue("state", compFailed.stateName())
-                   .setCause(compFailed.cause())
-                   .log("State compensation failed");
-
-            case RetryAttemptedEvent retry ->
-                log.atWarn()
-                   .addKeyValue("machine_id", retry.machineId())
-                   .addKeyValue("state", retry.stateName())
-                   .addKeyValue("attempt", retry.attempt())
-                   .addKeyValue("delay_ms", retry.delay().toMillis())
-                   .log("Workload action failed; scheduling retry");
-
-            case RetryExhaustedEvent retryExhausted ->
-                log.atError()
-                   .addKeyValue("machine_id", retryExhausted.machineId())
-                   .addKeyValue("state", retryExhausted.stateName())
-                   .addKeyValue("attempts", retryExhausted.attempts())
-                   .setCause(retryExhausted.finalCause())
-                   .log("Workload retries exhausted");
-
-            case ChildMachineSpawnedEvent childSpawned ->
-                log.atInfo()
-                   .addKeyValue("parent_machine_id", childSpawned.machineId())
-                   .addKeyValue("child_machine_id", childSpawned.childMachineId())
-                   .addKeyValue("child_machine_name", childSpawned.childMachineName())
-                   .log("Spawned sub-workflow execution");
-
-            case ChildMachineCompletedEvent childCompleted ->
-                log.atInfo()
-                   .addKeyValue("parent_machine_id", childCompleted.machineId())
-                   .addKeyValue("child_machine_id", childCompleted.childMachineId())
-                   .log("Sub-workflow completed");
-
-            case ParallelForkStartedEvent fork ->
-                log.atInfo()
-                   .addKeyValue("machine_id", fork.machineId())
-                   .addKeyValue("state", fork.stateName())
-                   .addKeyValue("branch_count", fork.branchNames().size())
-                   .log("Forked concurrent parallel branches on virtual threads");
-
-            case ParallelBranchCompletedEvent branch ->
-                log.atDebug()
-                   .addKeyValue("machine_id", branch.machineId())
-                   .addKeyValue("branch", branch.branchName())
-                   .addKeyValue("duration_ms", branch.duration().toMillis())
-                   .log("Parallel branch finished");
-
-            case ParallelJoinCompletedEvent join ->
-                log.atInfo()
-                   .addKeyValue("machine_id", join.machineId())
-                   .addKeyValue("state", join.stateName())
-                   .addKeyValue("total_branches", join.totalBranches())
-                   .addKeyValue("duration_ms", join.duration().toMillis())
-                   .log("Parallel branches joined and reduced successfully");
-
-            case CircuitBreakerTrippedEvent cb ->
-                log.atError()
-                   .addKeyValue("machine_id", cb.machineId())
-                   .addKeyValue("max_transitions", cb.maxTransitions())
-                   .log("Safety circuit breaker tripped");
-
-            case StateVisitLimitExceededEvent loop ->
-                log.atWarn()
-                   .addKeyValue("machine_id", loop.machineId())
-                   .addKeyValue("state", loop.stateName())
-                   .addKeyValue("fallback", loop.fallbackState())
-                   .log("State visit limit exceeded; loop threshold triggered");
-
             case ExecutionCancelledEvent cancelled ->
                 log.atWarn()
                    .addKeyValue("machine_id", cancelled.machineId())
@@ -264,7 +186,7 @@ public final class TelemetryLogger {
 
 ## 3. High-Performance Virtual Thread Event Bus
 
-The `VirtualThreadEventBus` delivers events asynchronously to registered subscribers without allocating OS threads or blocking the state machine runner.
+The `VirtualThreadEventBus` delivers events asynchronously to registered subscribers without allocating OS threads or blocking the state machine runner. It implements `AutoCloseable` for clean resource lifecycle management.
 
 ### Key Features
 * **Virtual Thread Worker Pool:** Event delivery runs on lightweight Loom virtual threads.
@@ -274,6 +196,7 @@ The `VirtualThreadEventBus` delivers events asynchronously to registered subscri
   * `BLOCK`: Temporarily halts publishing until buffer space becomes available.
 * **Bounded Historical Replay:** Retains a sliding window of recent events, allowing late-joining telemetry collectors, debuggers, or the Control Plane to reconstruct past timelines via `.history(limit)`.
 * **Push & Pull APIs:** Supports push listeners via `.subscribe(listener)` and reactive pull streams via `.openStream()`.
+* **Graceful Lifecycle Management:** Closing the bus cleanly shuts down virtual thread dispatchers, trace buffers, and tap managers.
 
 ### Configuration Example
 
@@ -290,7 +213,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.List;
 
 public final class EventBusExample {
 
@@ -310,11 +232,11 @@ public final class EventBusExample {
 
             // 3. Open a pull stream for dedicated processing
             try (EventStream stream = bus.openStream()) {
-                // ... state machine dispatches occur ...
-
-                // Drain events with virtual-thread non-blocking poll
-                List<ExecutionEvent> drained = stream.poll(Duration.ofMillis(100), 100);
-                log.atInfo().addKeyValue("drained_count", drained.size()).log("Polled telemetry events");
+                // Poll single event with virtual-thread non-blocking poll
+                ExecutionEvent event = stream.poll(Duration.ofMillis(100));
+                if (event != null) {
+                    log.atInfo().addKeyValue("event", event.getClass().getSimpleName()).log("Polled event");
+                }
             }
 
             // 4. Query runtime bus metrics
@@ -331,7 +253,28 @@ public final class EventBusExample {
 
 ---
 
-## 4. Testing Events (`dispersion-event-test`)
+## 4. Two-Tier Telemetry, Trace Buffers & Dynamic Taps
+
+To achieve zero hot-path allocation while allowing on-demand deep workflow debugging, Dispersion provides a two-tier telemetry architecture:
+
+### 1. `EventTier` Classification
+Every event implements `tier()`:
+* **`EventTier.LIFECYCLE`:** Coarse lifecycle boundaries (`TurnStartedEvent`, `StateEnteredEvent`, `TurnSuspendedEvent`, `TurnCompletedEvent`, `ExecutionCancelledEvent`). Always broadcast to the global event bus and default SSE streams.
+* **`EventTier.GRANULAR`:** Fine-grained internal events (`ActionExecutedEvent`, `TransitionEvaluatedEvent`). Retained within execution trace buffers.
+
+### 2. `LocalExecutionTraceBuffer`
+* Retains a bounded circular buffer (default 100 events) per active execution ID using `ConcurrentRingBufferTraceBuffer`.
+* Enables historical step-by-step audit timelines without flooding the global event bus.
+* A virtual-thread background sweeper periodically cleans up trace buffers for completed executions.
+
+### 3. `DynamicTapManager`
+* Provides ephemeral subscriptions for specific execution IDs.
+* Multiple connected clients share reference-counted leases on the same tap via `DefaultDynamicTapManager`.
+* Leases are automatically renewed via SSE heartbeat pings and disarmed when clients disconnect, ensuring zero memory leaks.
+
+---
+
+## 5. Testing Events (`dispersion-event-test`)
 
 Use `dispersion-event-test` for deterministic unit testing:
 * **`RecordingEventBus`**: Captures published events synchronously in an append-only list for immediate test assertions.
@@ -364,6 +307,7 @@ public class EventTestingExampleTests {
         ExecutionEvent event = new TurnStartedEvent(
             UUID.randomUUID(),
             "SampleMachine",
+            "CORR-1",
             Instant.now()
         );
         bus.publish(event);
@@ -376,7 +320,7 @@ public class EventTestingExampleTests {
 
 ---
 
-## 5. Maven Dependency Setup
+## 6. Maven Dependency Setup
 
 ```xml
 <dependencyManagement>
@@ -398,13 +342,13 @@ public class EventTestingExampleTests {
         <artifactId>dispersion-event-api</artifactId>
     </dependency>
 
-    <!-- Runtime Virtual Thread Bus -->
+    <!-- Virtual-Thread Core Implementation -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-event-core</artifactId>
     </dependency>
 
-    <!-- Testing Doubles (Scope: Test) -->
+    <!-- Test Doubles (Test Scope) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-event-test</artifactId>
@@ -412,14 +356,3 @@ public class EventTestingExampleTests {
     </dependency>
 </dependencies>
 ```
-
----
-
-## 🔗 Related Subsystems & Guides
-
-* 🏠 [**Project Showcase (`README.md`)**](../README.md) — High-level landing page, quickstarts, and architecture map.
-* ⚡ [**Tier 1 FSM Subsystem (`fsm/`)**](../fsm/README.md) — Microsecond atomic machines emitting telemetry events.
-* 🔄 [**Tier 2 Orchestration Subsystem (`orchestration/`)**](../orchestration/README.md) — Long-lived sagas, checkpoints, and automated rollbacks.
-* 🔭 [**Control Subsystem (`control/`)**](../control-plane/README.md) — Observability control plane consuming `ExecutionEvent` streams.
-* 🧪 [**Testing Framework (`testing/`)**](../testkit/README.md) — Unified test doubles with `DispersionTestKit`.
-* 🔭 [**Observability Deep Dive**](../docs/observability-and-control-plane.md) — High-throughput event delivery and React UI integration patterns.

@@ -74,7 +74,7 @@ public interface ControlPlaneServer extends AutoCloseable {
         return ServiceLoader.load(ControlPlaneServerFactory.class)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
-                        "No ControlPlaneServerFactory found on the classpath. Ensure dispersion-server-standalone or an adapter is added."
+                        "No ControlPlaneServerFactory found on the classpath. Ensure a server adapter is added."
                 ))
                 .create(config, controlPlane, jsonSerializer);
     }

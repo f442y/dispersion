@@ -1,5 +1,6 @@
 package com.github.f442y.dispersion.event.turn;
 
+import com.github.f442y.dispersion.event.EventTier;
 import com.github.f442y.dispersion.event.compensation.CompensationEvent;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -31,5 +32,11 @@ public record TurnCompensatedEvent(
         Objects.requireNonNull(duration, "duration must not be null");
         Objects.requireNonNull(timestamp, "timestamp must not be null");
         compensatedStates = List.copyOf(compensatedStates);
+    }
+
+    @Override
+    @NonNull
+    public EventTier tier() {
+        return EventTier.LIFECYCLE;
     }
 }

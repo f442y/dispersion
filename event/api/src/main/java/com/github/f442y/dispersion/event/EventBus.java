@@ -1,6 +1,7 @@
 package com.github.f442y.dispersion.event;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -8,8 +9,7 @@ import java.util.function.Predicate;
 
 /**
  * High-throughput, non-reactive Virtual Thread-native Event Bus for state machine
- * lifecycle telemetry, monitoring, and live streaming.
- *
+ * lifecycle telemetry, monitoring, and live streaming.\n *
  * <p>The {@link EventBus} serves as the central observability hub for Dispersion workflows.
  * It decouples state machine execution threads from telemetry consumers via virtual-thread buffers,
  * provides strongly-typed subscriptions for sealed {@link ExecutionEvent} records, and supports
@@ -107,6 +107,26 @@ public interface EventBus extends ExecutionEventListener, AutoCloseable {
      */
     @NonNull
     EventBusMetrics metrics();
+
+    /**
+     * Returns the local execution trace buffer associated with this event bus, if configured.
+     *
+     * @return The local flight recorder trace buffer, or null if not available
+     */
+    @Nullable
+    default LocalExecutionTraceBuffer traceBuffer() {
+        return null;
+    }
+
+    /**
+     * Returns the dynamic tap manager associated with this event bus, if configured.
+     *
+     * @return The dynamic tap manager, or null if not available
+     */
+    @Nullable
+    default DynamicTapManager tapManager() {
+        return null;
+    }
 
     /**
      * Dispatches an execution event onto the bus.

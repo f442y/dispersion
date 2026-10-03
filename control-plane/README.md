@@ -6,13 +6,14 @@ The **Dispersion Control Subsystem** provides a centralized, hexagonal **Observa
 
 ## 1. Module Structure & Hexagonal SPI Inversion
 
-The control plane subsystem is strictly decoupled from the execution runtimes. `dispersion-control-plane-core` **has zero dependencies on `fsm-core` or `orchestration-core`**, interacting purely through the `InspectableMachine` SPI and `ExecutionEventListener` telemetry stream:
+The control plane subsystem is strictly decoupled from the execution runtimes. `dispersion-control-plane-core` **has zero dependencies on `fsm-core` or `orchestration-core`**, interacting purely through the `InspectableMachine` SPI, `TraceTimelineProvider` SPI, and `ExecutionEventListener` telemetry stream:
 
 ```mermaid
 graph TD
     subgraph API["dispersion-control-plane-api (Contract)"]
         CP["ControlPlane (Interface)"]
         IM["InspectableMachine (SPI)"]
+        TTP["TraceTimelineProvider (SPI)"]
         MD["MachineDescriptor"]
         ES["ExecutionSummary / ExecutionStatus"]
         SDR["SignalDeliveryResult"]
@@ -22,6 +23,7 @@ graph TD
         DCP["DefaultControlPlane"]
         DCP --> CP
         DCP ..> IM
+        DCP ..> TTP
     end
 
     subgraph Engines["Execution Engines (Adapters)"]
@@ -46,8 +48,8 @@ graph TD
 
 | Module | JPMS Module Name | Description |
 | :--- | :--- | :--- |
-| **`dispersion-control-plane-api`** | `com.github.f442y.dispersion.control.api` | Contracts for the Control Plane, `InspectableMachine` SPI, descriptors, execution summaries, timelines, and signal delivery results. |
-| **`dispersion-control-plane-core`** | `com.github.f442y.dispersion.control.core` | `DefaultControlPlane` in-memory engine featuring an $O(1)$ dual-pool memory topology, telemetry event aggregation, dynamic Mermaid diagram generation, and signal routing. |
+| **`dispersion-control-plane-api`** | `com.github.f442y.dispersion.control.api` | Contracts for the Control Plane, `InspectableMachine` SPI, `TraceTimelineProvider` SPI, descriptors, execution summaries, timelines, and signal delivery results. |
+| **`dispersion-control-plane-core`** | `com.github.f442y.dispersion.control.core` | `DefaultControlPlane` in-memory engine featuring an $O(1)$ dual-pool memory topology, telemetry event aggregation, dynamic Mermaid diagram generation, execution cancellation, and signal routing. |
 | **`dispersion-control-plane-test`** | `com.github.f442y.dispersion.control.test` | `FakeInspectableMachine` test double for testing control plane endpoints, UI dashboards, and administrative workflows in isolation. |
 
 ---
@@ -62,11 +64,22 @@ Any workflow engine can become inspectable by implementing the `InspectableMachi
 * **Checkpoint Inspection:** Exposes strongly-typed checkpoints for suspended workflows.
 
 ### 2. Dual-Pool $O(1)$ Memory Architecture
-To prevent unbounded memory growth and eliminate expensive full-table scans, `DefaultControlPlane` uses a dual-pool memory architecture:
-* **Active Execution Pool:** A concurrent hash map indexed by execution ID and correlation key for fast $O(1)$ lookups of active or suspended workflows.
-* **Bounded Terminal Ring Buffer:** A thread-safe, bounded circular pool retaining completed and failed workflows. As new executions terminate, older executions are evicted with zero lock contention and zero GC pauses.
+To prevent unbounded memory growth and eliminate expensive full-collection linear scans, `DefaultControlPlane` partitions executions into two segregated pools:
+* **Active Execution Pool:** A concurrent hash map indexed by execution ID and correlation key tracking in-flight workflows (`RUNNING`, `SUSPENDED`, `PAUSED`). Active executions are critical operational entities awaiting internal turns or external signals and are **never** evicted.
+* **Bounded Terminal Ring Buffer:** A thread-safe, bounded circular FIFO pool retaining terminal workflows (`COMPLETED`, `FAILED`, `CANCELLED`, `COMPENSATED`). When terminal executions exceed the configured capacity (e.g. 10,000), the oldest terminal execution is pruned in strictly **$O(1)$** time with zero lock contention and zero GC pauses.
 
-### 3. Workload Router & Worker Node Topology Inspection
+### 3. Decoupled `TraceTimelineProvider` SPI
+To keep the control plane's index lean and $O(\text{executions})$ in memory:
+* Granular telemetry logs (step transitions, guard evaluations, payload metadata) are kept separate from the summary index.
+* When operators or UI drawers request an execution's chronological event timeline, `DefaultControlPlane` queries a registered `TraceTimelineProvider`.
+* Backed out-of-the-box by `TraceTimelineProvider.from(eventBus.traceBuffer())` (zero-copy query into the worker's ring buffer), or custom durable storage providers.
+
+### 4. Lifecycle & Cancellation Tracking
+Workflows can be cancelled by operators or external commands via `ExecutionCancelledEvent`:
+* When an execution is cancelled, the control plane immediately updates its status to `ExecutionStatus.CANCELLED`, records the cancellation timestamp and operator reason, and moves the summary into the bounded terminal ring buffer.
+* Cancelling an execution marks the workflow as terminal, ensuring deterministic resource reclamation and immediate UI state reflection.
+
+### 5. Workload Router & Worker Node Topology Inspection
 The Control Plane integrates with `dispersion-routing` via `InspectableRouter`:
 * **Router Registration:** `controlPlane.registerRouter(inspectableRouter)` connects the active routing subsystem.
 * **Live Worker Topology:** Discover all registered monolith and distributed endpoints, grouped by service name.
@@ -76,7 +89,7 @@ The Control Plane integrates with `dispersion-routing` via `InspectableRouter`:
 
 ## 3. End-to-End Control Plane Example
 
-The following example shows how to initialize `DefaultControlPlane`, register an execution engine, query live summaries, and deliver signals:
+The following example shows how to initialize `DefaultControlPlane`, wire the event bus and trace buffer, register an execution engine, query live summaries, and inspect execution timelines:
 
 ```java
 package com.example.control;
@@ -86,7 +99,11 @@ import com.github.f442y.dispersion.control.ExecutionStatus;
 import com.github.f442y.dispersion.control.ExecutionSummary;
 import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
+import com.github.f442y.dispersion.control.TraceTimelineProvider;
 import com.github.f442y.dispersion.control.core.DefaultControlPlane;
+import com.github.f442y.dispersion.event.EventBus;
+import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.bus.VirtualThreadEventBus;
 import com.github.f442y.dispersion.fsm.context.StateMachineContext;
 import com.github.f442y.dispersion.fsm.state.StateKey;
 import com.github.f442y.dispersion.orchestration.command.SignalCommand;
@@ -99,6 +116,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public final class ControlPlaneExample {
@@ -123,8 +141,12 @@ public final class ControlPlaneExample {
     }
 
     public static void main(String[] args) throws Exception {
-        // 1. Initialize Control Plane (Ring Buffer Capacity: 1,000 executions)
-        try (DefaultControlPlane controlPlane = new DefaultControlPlane(1_000)) {
+        // 1. Initialize Event Bus and Control Plane
+        try (EventBus eventBus = new VirtualThreadEventBus();
+             DefaultControlPlane controlPlane = new DefaultControlPlane(1_000)) {
+
+            // Automatically wires listener and trace timeline provider
+            controlPlane.attachToBus(eventBus);
 
             InMemoryCheckpointStore<ReviewContext, ReviewState> store = new InMemoryCheckpointStore<>();
 
@@ -174,7 +196,13 @@ public final class ControlPlaneExample {
                 List<ExecutionSummary> suspended = controlPlane.listExecutions("ArticleReviewMachine", ExecutionStatus.SUSPENDED, 10);
                 log.atInfo().addKeyValue("suspended_count", suspended.size()).log("Queried suspended workflows");
 
-                // 7. Route Signal Through Control Plane
+                UUID executionId = suspended.getFirst().executionId();
+
+                // 7. Query Chronological Event Timeline
+                List<ExecutionEvent> timeline = controlPlane.getExecutionTimeline(executionId);
+                log.atInfo().addKeyValue("event_count", timeline.size()).log("Fetched execution timeline");
+
+                // 8. Route Signal Through Control Plane
                 CompletableFuture<SignalDeliveryResult> deliveryFuture = controlPlane.sendSignal(
                     "ArticleReviewMachine",
                     "ART-501",
@@ -196,7 +224,9 @@ public final class ControlPlaneExample {
 
 ---
 
-## 4. Testing Control Plane Integrations (`dispersion-control-plane-test`)\n\nUse `FakeInspectableMachine` to test dashboards, REST controllers, or CLI admin tools without running heavy execution engines:
+## 4. Testing Control Plane Integrations (`dispersion-control-plane-test`)
+
+Use `FakeInspectableMachine` to test dashboards, REST controllers, or CLI admin tools without running heavy execution engines:
 
 ```java
 package com.example.control;

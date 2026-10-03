@@ -1,7 +1,10 @@
 export type SseConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
+export type EventTier = 'LIFECYCLE' | 'GRANULAR';
+
 export interface StreamExecutionEvent {
   eventType: string;
+  tier?: EventTier;
   machineName?: string;
   machineId?: string;
   timestamp: string;

@@ -68,7 +68,7 @@
     </td>
     <td width="50%" valign="top">
       <h3>🔭 Hexagonal Control Plane</h3>
-      <p>Centralized <code>InspectableMachine</code> SPI featuring an <b>$O(1)$ dual-pool memory topology</b>, live telemetry streaming, and dynamic Mermaid diagram generation.</p>
+      <p>Centralized <code>InspectableMachine</code> and <code>TraceTimelineProvider</code> SPIs featuring an <b>$O(1)$ dual-pool memory topology</b>, two-tier telemetry streaming, and dynamic Mermaid diagrams.</p>
       <p>👉 <i>Explore the <a href="control-plane/README.md"><b>Control Subsystem</b></a> & <a href="event/README.md"><b>Telemetry Pipeline</b></a></i></p>
     </td>
   </tr>
@@ -79,8 +79,8 @@
       <p>👉 <i>Explore the <a href="routing/README.md"><b>Routing Subsystem</b></a></i></p>
     </td>
     <td width="50%" valign="top">
-      <h3>🌐 Standalone Virtual-Thread Server</h3>
-      <p>Built-in Helidon SE 4.x Níma HTTP and SSE control plane host with reflection-free compile-time JSON (<a href="serialization/README.md">Avaje</a>) and binary (<a href="serialization/README.md">Fury</a>) serialization.</p>
+      <h3>🌐 Universal Jakarta REST 3.1 & UI Host</h3>
+      <p>Built-in Jakarta REST 3.1 HTTP, SSE, and React 19 Web UI dashboard host with reflection-free compile-time JSON (<a href="serialization/README.md">Avaje</a>) and binary (<a href="serialization/README.md">Fury</a>) serialization.</p>
       <p>👉 <i>Explore the <a href="server/README.md"><b>Server Subsystem</b></a> & <a href="serialization/README.md"><b>Serialization Subsystem</b></a></i></p>
     </td>
   </tr>
@@ -134,7 +134,7 @@ graph TD
         DCP["DefaultControlPlane"]:::control
         TOP["Dynamic Mermaid Topologies"]:::control
         ROUT["Bi-directional Signal Router"]:::control
-        SRV["Helidon SE Níma HTTP / SSE Server"]:::control
+        SRV["Jakarta REST 3.1 & React UI Server"]:::control
         DCP --> TOP & ROUT
         DCP --> SRV
     end
@@ -347,15 +347,15 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane()) {
 
 ---
 
-### 5. Standalone Control Plane Server & Demo App
-Dispersion includes a ready-to-run interactive demo application and embedded virtual-thread HTTP/SSE server powered by **Helidon SE 4.x Níma**:
+### 5. Control Plane Server & Spring Boot 4.1 Demo App
+Dispersion includes a ready-to-run interactive demo application and embedded control plane server powered by **Spring Boot 4.1** and **Jakarta REST 3.1**:
 
 ```bash
-# Run the interactive demo application
-./mvnw compile exec:java -pl examples -Dexec.mainClass="com.github.f442y.dispersion.examples.DispersionDemoApp"
+# Run the interactive Spring Boot demo application with embedded UI dashboard
+./mvnw spring-boot:run -pl examples
 ```
 
-Once running on port `8080` (base path `/api/v1`), interact with the control plane from any terminal:
+Once running on port `8080` (base path `/api/v1`), interact with the control plane from any browser (UI dashboard at `http://localhost:8080`) or terminal:
 
 ```bash
 # 1. Discover all registered state machines
@@ -367,23 +367,26 @@ curl -s http://localhost:8080/api/v1/machines/OrderWorkflow
 # 3. Inspect suspended executions awaiting external signals
 curl -s "http://localhost:8080/api/v1/executions?status=SUSPENDED"
 
-# 4. Stream real-time telemetry events over Server-Sent Events (SSE)
+# 4. Inspect durable checkpoint snapshot for a suspended execution
+curl -s http://localhost:8080/api/v1/executions/OrderWorkflow/ORDER-DEMO-99/checkpoint
+
+# 5. Stream real-time telemetry events over Server-Sent Events (SSE)
 curl -N http://localhost:8080/api/v1/events/stream
 
-# 5. Deliver external signal to resume suspended execution
+# 6. Deliver external signal to resume suspended execution
 curl -X POST http://localhost:8080/api/v1/executions/signal \
   -H "Content-Type: application/json" \
   -d '{"machineName":"OrderWorkflow","correlationKey":"ORDER-DEMO-99","signalName":"PaymentSignal","payload":{"correlationKey":"ORDER-DEMO-99","paymentMethod":"APPLE_PAY","amountCents":9995}}'
 ```
 
 > [!NOTE]
-> An interactive web dashboard (Vite, React 19, Tailwind CSS) is documented in [`ui/README.md`](ui/README.md) for visualizing real-time topologies and event streams. As the UI design is actively iterating, backend server APIs and JSON schemas remain the stable contract.
+> The React 19 UI dashboard (Vite, TypeScript, TanStack Query, Tailwind CSS) is automatically bundled and served directly at root (`/`) by the Spring Boot demo application.
 
 ---
 
 ## 📦 Encompassing Modules
 
-Dispersion is engineered as **28 modular projects** (Parent BOM/POM + 27 reactor submodules) partitioned into **8 functional subsystems**. Click each subsystem below for its dedicated guide:
+Dispersion is engineered as **27 modular projects** (Parent BOM/POM + 26 reactor submodules) partitioned into **8 functional subsystems**. Click each subsystem below for its dedicated guide:
 
 ```mermaid
 graph LR
@@ -394,7 +397,7 @@ graph LR
         O["<b>orchestration/</b><br/>Tier 2 Saga, Batch & Messaging"]
         C["<b>control-plane/</b><br/>Control Plane & SPI"]
         S["<b>serialization/</b><br/>Avaje JSON & Fury Binary"]
-        SRV["<b>server/</b><br/>Helidon SE & Jakarta Host"]
+        SRV["<b>server/</b><br/>Jakarta REST 3.1 & UI Host"]
         T["<b>testkit/</b><br/>DispersionTestKit"]
     end
 
@@ -409,15 +412,15 @@ graph LR
 
 | Subsystem | Included Modules | Focus & Capabilities | Documentation |
 | :--- | :--- | :--- | :--- |
-| **`event/`** | `dispersion-event-api`<br/>`dispersion-event-core`<br/>`dispersion-event-test` | Core `ExecutionEvent` hierarchy, lock-free ring-buffer bus, push/pull streams, and historical replay. | [**`event/README.md`**](event/README.md) |
+| **`event/`** | `dispersion-event-api`<br/>`dispersion-event-core`<br/>`dispersion-event-test` | Core `ExecutionEvent` hierarchy, two-tier telemetry (`LIFECYCLE` vs `GRANULAR`), local flight recorder (`LocalExecutionTraceBuffer`), dynamic tap lease manager (`DynamicTapManager`), lock-free ring-buffer bus, and push/pull streams. | [**`event/README.md`**](event/README.md) |
 | **`fsm/`** | `dispersion-fsm-api`<br/>`dispersion-fsm-core`<br/>`dispersion-fsm-test` | Sub-microsecond atomic FSM engine, pre-compiled `StateMap` ordinal arrays, and adaptive admission control. | [**`fsm/README.md`**](fsm/README.md) |
 | **`routing/`** | `dispersion-routing-api`<br/>`dispersion-routing-core`<br/>`dispersion-routing-test` | Location-agnostic workload router, Canary traffic splits, Developer Sandboxes, backpressure admission, and worker hosting. | [**`routing/README.md`**](routing/README.md) |
 | **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, routed compensations, signal rehydration, parallel branches, batch barriers, and broker-agnostic messaging. | [**`orchestration/README.md`**](orchestration/README.md) |
-| **`control-plane/`** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Decoupled `InspectableMachine` and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, and signal routing. | [**`control-plane/README.md`**](control-plane/README.md) |
+| **`control-plane/`** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Decoupled `InspectableMachine`, `TraceTimelineProvider`, and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, execution cancellation, and signal routing. | [**`control-plane/README.md`**](control-plane/README.md) |
 | **`serialization/`** | `dispersion-serialization-binary-api`<br/>`dispersion-serialization-fory`<br/>`dispersion-serialization-json-api`<br/>`dispersion-serialization-avaje` | Fast, reflection-free JSON (Avaje-Jsonb compile-time code generation) and binary (Apache Fury) serialization for control plane and telemetry events. | [**`serialization/README.md`**](serialization/README.md) |
-| **`server/`** | `dispersion-server-api`<br/>`dispersion-server-jakarta`<br/>`dispersion-server-standalone` | Lightweight control plane HTTP & SSE servers. `dispersion-server-standalone` runs on Helidon SE 4.x Níma virtual threads. | [**`server/README.md`**](server/README.md) |
+| **`server/`** | `dispersion-server-api`<br/>`dispersion-server-jakarta` | Lightweight control plane HTTP, SSE, and Web UI servers compatible with Jakarta REST 3.1 (Spring Boot, Quarkus, WildFly, Jersey) with traversal defense. | [**`server/README.md`**](server/README.md) |
 | **`testkit/`** | `dispersion-testkit` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testkit/README.md`**](testkit/README.md) |
-| **`examples/`** | `dispersion-examples` | Interactive demo application (`DispersionDemoApp`), end-to-end integration workflows, and traffic simulation. | [**`examples/README.md`**](examples/README.md) |
+| **`examples/`** | `dispersion-examples` | Interactive Spring Boot 4.1 demo application (`DispersionDemoApp`), end-to-end integration workflows, and traffic simulation. | [**`examples/README.md`**](examples/README.md) |
 
 ---
 
@@ -426,13 +429,12 @@ graph LR
 For comprehensive technical deep dives into engine internals, visit the [**Documentation Hub (`docs/README.md`)**](docs/README.md) or explore individual guides:
 
 * 🧭 [**Documentation Hub**](docs/README.md) — Master navigation index, curated role-based reading paths, and subsystem matrix.
-
 * 📐 [**Architecture & Hexagonal Design**](docs/architecture-and-design.md) — Hexagonal ports and adapters, symmetrical triplet patterns, and thread confinement guarantees.
 * ⚡ [**Virtual Threads & Performance Guide**](docs/virtual-threads-and-performance.md) — Loom mechanics, carrier thread unmounting, zero-pinning guarantees, and JVM escape analysis.
 * 🔄 [**Saga Orchestration & Batch Processing**](docs/saga-orchestration-and-batching.md) — Distributed saga theory, checkpoint storage, durable signal rehydration, and batch barrier policies.
 * 🌐 [**Workload Routing & Traffic Splitting**](docs/workload-routing-and-traffic-splitting.md) — Location-agnostic execution, Canary traffic steering, developer sandboxes, and backpressure admission.
 * 💾 [**Serialization & Wire Formats Guide**](docs/serialization-and-wire-formats.md) — Compile-time reflection-free JSON (Avaje), Apache Fury binary snapshots, and event wire schema.
-* 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — Telemetry events, $O(1)$ dual-pool memory topology, standalone Helidon server, and event streaming.
+* 🔭 [**Observability & Control Plane**](docs/observability-and-control-plane.md) — Telemetry events, $O(1)$ dual-pool memory topology, Jakarta REST server, and event streaming.
 * 🗺️ [**Master Engineering Roadmap & Execution Plan**](ROADMAP.md) — Phased milestones, system capabilities, and active focus areas.
 
 ---
@@ -501,10 +503,10 @@ Add the modules required by your application:
         <artifactId>dispersion-serialization-avaje</artifactId>
     </dependency>
 
-    <!-- Standalone Helidon SE Níma HTTP/SSE Server Host (Optional) -->
+    <!-- Jakarta REST Server Adapter & UI Host (Optional) -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
-        <artifactId>dispersion-server-standalone</artifactId>
+        <artifactId>dispersion-server-jakarta</artifactId>
     </dependency>
 
     <!-- Testing Facade (Test Scope) -->
@@ -525,7 +527,7 @@ Add the modules required by your application:
 * Apache Maven 3.9+ (or use the included wrapper `./mvnw`)
 
 ```bash
-# Fast parallel compilation and unit test execution across all 28 reactor projects
+# Fast parallel compilation and unit test execution across all 27 reactor projects
 ./mvnw test -B -ntp -T 1C
 
 # Execute end-to-end integration tests (500-thread pipeline bursts, distributed sagas, demo app)
@@ -542,7 +544,7 @@ From architectural formulation to the sub-microsecond virtual-thread engine and 
 * **Hexagonal Systems Architecture:** Enforcing compile-time modular boundaries, symmetrical triplet patterns (`api`/`core`/`test`), and zero-coupling between execution tiers.
 * **Low-Latency & Virtual Thread Concurrency:** Designing lock-free thread confinement, non-pinning virtual thread coordination, pre-compiled ordinal array state lookup (`StateMap`), and primitive bitmask guards with zero hot-path heap allocations.
 * **Distributed Sagas & Resilient Routing:** Architecting automated reverse-chronological (LIFO) compensation unwinding, durable signal rehydration with pluggable checkpoints, and location-agnostic routing topologies.
-* **Control Plane & Reactive Server Host:** Building the Helidon SE reactive HTTP/SSE backend, polymorphic telemetry event streams, and reflection-free compile-time serialization.
+* **Control Plane & Reactive Server Host:** Building the Jakarta REST HTTP/SSE backend, polymorphic telemetry event streams, embedded React 19 UI dashboard, and reflection-free compile-time serialization.
 
 ---
 

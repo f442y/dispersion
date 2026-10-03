@@ -25,7 +25,7 @@ The **Dispersion Web Dashboard** is a lightweight, responsive developer console 
 2. A running Dispersion backend server on port `8080` (e.g., [`DispersionDemoApp`](../examples/README.md)):
    ```bash
    # From repository root
-   ./mvnw compile exec:java -pl examples -Dexec.mainClass="com.github.f442y.dispersion.examples.DispersionDemoApp"
+   ./mvnw spring-boot:run -pl examples
    ```
 
 ### Development
@@ -52,7 +52,7 @@ npm run preview
 
 ## 📡 Backend Integration Contract
 
-The UI consumes standard REST and SSE endpoints exposed by `dispersion-server-standalone` or `dispersion-server-jakarta`:
+The UI consumes standard REST and SSE endpoints exposed by `dispersion-server-jakarta` (or any compatible Jakarta REST 3.1 host like Spring Boot):
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
@@ -70,5 +70,5 @@ The UI consumes standard REST and SSE endpoints exposed by `dispersion-server-st
 
 * 🏠 [**Project Showcase (`README.md`)**](../README.md) — Main repository landing page.
 * 🔭 [**Observability & Control Plane Guide**](../docs/observability-and-control-plane.md) — Complete REST/SSE specification and backend architecture.
-* 🌐 [**Server Subsystem Guide**](../server/README.md) — Standalone Helidon SE Níma virtual-thread server.
+* 🌐 [**Server Subsystem Guide**](../server/README.md) — Jakarta REST 3.1 resource adapter & UI hosting.
 * 💡 [**Interactive Demo Application**](../examples/README.md) — Running the backend demo server.

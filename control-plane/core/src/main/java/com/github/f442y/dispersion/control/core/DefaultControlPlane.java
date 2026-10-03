@@ -6,6 +6,8 @@ import com.github.f442y.dispersion.control.ExecutionSummary;
 import com.github.f442y.dispersion.control.InspectableMachine;
 import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
+import com.github.f442y.dispersion.control.TraceTimelineProvider;
+import com.github.f442y.dispersion.event.DynamicTapManager;
 import com.github.f442y.dispersion.event.EventBus;
 import com.github.f442y.dispersion.event.EventStream;
 import com.github.f442y.dispersion.event.ExecutionEvent;
@@ -33,7 +35,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
@@ -43,6 +44,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,26 +60,26 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
- * Thread-safe default implementation of {@link ControlPlane} engineered with segmented O(1) eviction
- * and Virtual Thread live streaming.
+ * Thread-safe default implementation of {@link ControlPlane} engineered with segmented O(1) eviction,
+ * decoupled {@link TraceTimelineProvider} event retrieval, and Virtual Thread live streaming.
  *
  * <h2>Segmented O(1) Eviction Architecture</h2>
  * <p>To eliminate full-collection linear scans (which burn CPU on high-frequency telemetry events),
  * execution summaries are strictly partitioned into two pools:</p>
  * <ul>
- *   <li><b>Active Pool ({@code activeExecutions}):</b> Tracks in-flight workflows ({@link ExecutionStatus#RUNNING}
- *       or {@link ExecutionStatus#SUSPENDED}). Active workflows are critical operational entities waiting for
- *       internal steps or external signals; they are never subject to eviction.</li>
+ *   <li><b>Active Pool ({@code activeExecutions}):</b> Tracks in-flight workflows ({@link ExecutionStatus#RUNNING},
+ *       {@link ExecutionStatus#SUSPENDED}, or {@link ExecutionStatus#PAUSED}). Active workflows are critical operational
+ *       entities waiting for internal steps or external signals; they are never subject to eviction.</li>
  *   <li><b>Terminal Pool ({@code terminalExecutions}):</b> Tracks finished workflows ({@link ExecutionStatus#COMPLETED},
- *       {@link ExecutionStatus#FAILED}, or {@link ExecutionStatus#COMPENSATED}). When the terminal count exceeds
- *       {@code maxTrackedExecutions}, the oldest terminal execution is pruned in strictly <b>O(1)</b> time
- *       via a concurrent FIFO queue.</li>
+ *       {@link ExecutionStatus#FAILED}, {@link ExecutionStatus#COMPENSATED}, or {@link ExecutionStatus#CANCELLED}).
+ *       When the terminal count exceeds {@code maxTrackedExecutions}, the oldest terminal execution is pruned in
+ *       strictly <b>O(1)</b> time via a concurrent FIFO queue.</li>
  * </ul>
  *
- * <h2>Live Streaming Hub</h2>
- * <p>Backed by an internal {@link EventBus}, the control plane serves real-time, non-blocking
- * {@link EventStream} subscriptions for individual execution instances ({@link #watchExecution(String)})
- * or entire machine topologies ({@link #watchMachine(String)}).</p>
+ * <h2>Decoupled Trace Timeline Provider</h2>
+ * <p>Execution event timelines are decoupled from the Control Plane's lean summary index. Event traces
+ * are retrieved on-demand via a registered {@link TraceTimelineProvider} (defaulting to zero-copy
+ * worker-local buffers), preserving bounded memory regardless of workflow execution volume.</p>
  */
 public class DefaultControlPlane implements ControlPlane, ExecutionEventListener, AutoCloseable {
 
@@ -94,8 +96,10 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     // Striped locks for thread-safe summary updates without global contention
     private final Object[] executionLocks = new Object[256];
 
-    // Timeline events per execution
-    private final Map<String, Deque<ExecutionEvent>> executionTimelines = new ConcurrentHashMap<>();
+    // Decoupled timeline provider
+    private volatile TraceTimelineProvider timelineProvider;
+    private volatile @Nullable DynamicTapManager tapManager;
+    private volatile boolean attachedToBus;
 
     // Global recent events with O(1) atomic sizing
     private final Deque<ExecutionEvent> recentEvents = new ConcurrentLinkedDeque<>();
@@ -113,7 +117,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
      * Creates a Control Plane with standard capacity defaults (10,000 terminal executions, 100 timeline events, 2,000 recent events).
      */
     public DefaultControlPlane() {
-        this(10_000, 100, 2_000);
+        this(10_000, 100, 2_000, null);
     }
 
     /**
@@ -124,12 +128,27 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             int maxTimelineEventsPerExecution,
             int maxRecentEvents
     ) {
+        this(maxTrackedExecutions, maxTimelineEventsPerExecution, maxRecentEvents, null);
+    }
+
+    /**
+     * Creates a Control Plane with custom buffer capacities and an explicit {@link TraceTimelineProvider}.
+     */
+    public DefaultControlPlane(
+            int maxTrackedExecutions,
+            int maxTimelineEventsPerExecution,
+            int maxRecentEvents,
+            @Nullable TraceTimelineProvider timelineProvider
+    ) {
         if (maxTrackedExecutions <= 0 || maxTimelineEventsPerExecution <= 0 || maxRecentEvents <= 0) {
             throw new IllegalArgumentException("Capacities must be strictly positive");
         }
         this.maxTrackedExecutions = maxTrackedExecutions;
         this.maxTimelineEventsPerExecution = maxTimelineEventsPerExecution;
         this.maxRecentEvents = maxRecentEvents;
+        this.timelineProvider = (timelineProvider != null)
+                ? timelineProvider
+                : new InMemoryTraceTimelineProvider(maxTimelineEventsPerExecution);
 
         for (int i = 0; i < executionLocks.length; i++) {
             executionLocks[i] = new Object();
@@ -173,6 +192,7 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         Objects.requireNonNull(machineName, "machineName must not be null");
         return machines.remove(machineName) != null;
     }
+
     /**
      * Registers a generic state machine topology descriptor with a custom signal router.
      */
@@ -214,11 +234,49 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     }
 
     /**
+     * Registers a custom {@link TraceTimelineProvider} for querying execution event traces.
+     */
+    @NonNull
+    public DefaultControlPlane registerTimelineProvider(@NonNull TraceTimelineProvider timelineProvider) {
+        this.timelineProvider = Objects.requireNonNull(timelineProvider, "timelineProvider must not be null");
+        return this;
+    }
+
+    @Override
+    @NonNull
+    public Optional<TraceTimelineProvider> getTimelineProvider() {
+        return Optional.ofNullable(timelineProvider);
+    }
+
+    /**
+     * Registers a {@link DynamicTapManager} for managing live execution tap leases.
+     */
+    @NonNull
+    public DefaultControlPlane registerTapManager(@NonNull DynamicTapManager tapManager) {
+        this.tapManager = Objects.requireNonNull(tapManager, "tapManager must not be null");
+        return this;
+    }
+
+    @Override
+    @NonNull
+    public Optional<DynamicTapManager> getTapManager() {
+        return Optional.ofNullable(tapManager);
+    }
+
+    /**
      * Wires this Control Plane directly as a listener to the given event bus.
+     * If the event bus provides a local trace buffer, it is automatically bound as the timeline provider.
      */
     public DefaultControlPlane attachTo(@NonNull EventBus eventBus) {
         Objects.requireNonNull(eventBus, "eventBus must not be null");
+        this.attachedToBus = true;
         eventBus.subscribe(this);
+        if (eventBus.traceBuffer() != null) {
+            this.timelineProvider = TraceTimelineProvider.from(eventBus.traceBuffer());
+        }
+        if (eventBus.tapManager() != null) {
+            this.tapManager = eventBus.tapManager();
+        }
         return this;
     }
 
@@ -284,14 +342,49 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     @Override
     @NonNull
     public List<ExecutionEvent> getExecutionTimeline(@NonNull String executionId) {
+        return getExecutionTimeline(executionId, maxTimelineEventsPerExecution);
+    }
+
+    @Override
+    @NonNull
+    public List<ExecutionEvent> getExecutionTimeline(@NonNull String executionId, int limit) {
         Objects.requireNonNull(executionId, "executionId must not be null");
-        Deque<ExecutionEvent> deque = executionTimelines.get(executionId);
-        if (deque == null) {
+        if (limit <= 0) {
             return Collections.emptyList();
         }
-        synchronized (deque) {
-            return new ArrayList<>(deque);
+        if (timelineProvider != null) {
+            try {
+                UUID machineId = UUID.fromString(executionId);
+                return timelineProvider.getTimeline(machineId, limit);
+            } catch (IllegalArgumentException _) {
+                log.atWarn()
+                        .addKeyValue("execution_id", executionId)
+                        .log("Invalid executionId UUID format for timeline lookup");
+                return Collections.emptyList();
+            }
         }
+        return Collections.emptyList();
+    }
+
+    @Override
+    @NonNull
+    public CompletableFuture<List<ExecutionEvent>> fetchExecutionTimeline(@NonNull String executionId, int limit) {
+        Objects.requireNonNull(executionId, "executionId must not be null");
+        if (limit <= 0) {
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        if (timelineProvider != null) {
+            try {
+                UUID machineId = UUID.fromString(executionId);
+                return timelineProvider.fetchTimeline(machineId, limit);
+            } catch (IllegalArgumentException _) {
+                log.atWarn()
+                        .addKeyValue("execution_id", executionId)
+                        .log("Invalid executionId UUID format for timeline lookup");
+                return CompletableFuture.completedFuture(Collections.emptyList());
+            }
+        }
+        return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
     @Override
@@ -339,6 +432,18 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         return machine.inspectCheckpoint(correlationKey);
     }
 
+    @Override
+    @NonNull
+    public <CHECKPOINT_TYPE> Optional<CHECKPOINT_TYPE> inspectCheckpoint(
+            @NonNull String machineName,
+            @NonNull String correlationKey,
+            @NonNull Class<CHECKPOINT_TYPE> checkpointClass
+    ) {
+        return inspectCheckpoint(machineName, correlationKey)
+                .filter(checkpointClass::isInstance)
+                .map(checkpointClass::cast);
+    }
+
     // =========================================================================
     // Live Streaming Observability
     // =========================================================================
@@ -357,15 +462,36 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         return openStream(event -> machineName.equals(event.machineName()));
     }
 
-    private EventStream openStream(Predicate<ExecutionEvent> filter) {
+    @Override
+    @NonNull
+    public EventStream watchAll() {
+        return openStream(_ -> true);
+    }
+
+    @Override
+    @NonNull
+    public EventStream openStream(@NonNull Predicate<ExecutionEvent> filter) {
+        Objects.requireNonNull(filter, "filter must not be null");
         ControlPlaneStream stream = new ControlPlaneStream(filter, activeStreams::remove);
         activeStreams.add(stream);
         return stream;
     }
 
     // =========================================================================
-    // Signal Dispatching
+    // Signal Dispatching & Execution Triggers
     // =========================================================================
+
+    @Override
+    @NonNull
+    public CompletableFuture<Object> dispatchExecution(@NonNull String machineName, @Nullable Object input) {
+        Objects.requireNonNull(machineName, "machineName must not be null");
+        InspectableMachine machine = machines.get(machineName);
+        if (machine == null) {
+            return CompletableFuture.failedFuture(
+                    new IllegalArgumentException("Machine [" + machineName + "] is not registered in Control Plane"));
+        }
+        return machine.dispatchExecution(input);
+    }
 
     @Override
     @NonNull
@@ -382,28 +508,15 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         InspectableMachine machine = machines.get(machineName);
         if (machine == null) {
             return CompletableFuture.completedFuture(
-                    SignalDeliveryResult.failure(machineName, correlationKey, signalName,
-                            "Machine [" + machineName + "] is not registered in the Control Plane")
+                    SignalDeliveryResult.failure(machineName, correlationKey, signalName, "Machine [" + machineName + "] is not registered in Control Plane")
             );
         }
 
         return machine.sendSignal(correlationKey, signalName, payload);
     }
 
-    @Override
-    @NonNull
-    public CompletableFuture<Object> dispatchExecution(@NonNull String machineName, @Nullable Object input) {
-        Objects.requireNonNull(machineName, "machineName must not be null");
-        InspectableMachine machine = machines.get(machineName);
-        if (machine == null) {
-            return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("Machine [" + machineName + "] is not registered in the Control Plane"));
-        }
-        return machine.dispatchExecution(input);
-    }
-
     // =========================================================================
-    // ExecutionEventListener Implementation & Segmented O(1) Eviction
+    // Event Ingestion & Summary Aggregation
     // =========================================================================
 
     @Override
@@ -418,15 +531,23 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             }
         }
 
-        // 2. Append to individual execution timeline
-        appendTimelineEvent(event);
+        // 2. Delegate to local timeline provider only if standalone and not attached to an EventBus
+        if (!attachedToBus && timelineProvider instanceof InMemoryTraceTimelineProvider inMem) {
+            inMem.record(event);
+        }
 
         // 3. Update execution summary snapshot with partitioned O(1) eviction
         updateExecutionSummary(event);
 
         // 4. Publish to active live streams
         for (ControlPlaneStream stream : activeStreams) {
-            stream.offer(event);
+            try {
+                stream.offer(event);
+            } catch (Exception ex) {
+                log.atError()
+                        .setCause(ex)
+                        .log("Error offering event to ControlPlaneStream");
+            }
         }
     }
 
@@ -464,7 +585,8 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     private static boolean isTerminal(ExecutionStatus status) {
         return status == ExecutionStatus.COMPLETED
                 || status == ExecutionStatus.FAILED
-                || status == ExecutionStatus.COMPENSATED;
+                || status == ExecutionStatus.COMPENSATED
+                || status == ExecutionStatus.CANCELLED;
     }
 
     private void evictTerminalExecution() {
@@ -474,7 +596,6 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
                 break;
             }
             if (terminalExecutions.remove(oldestId) != null) {
-                executionTimelines.remove(oldestId);
                 terminalCount.decrementAndGet();
             }
         }
@@ -917,17 +1038,6 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         };
     }
 
-    private void appendTimelineEvent(@NonNull ExecutionEvent event) {
-        String execId = event.machineId().toString();
-        Deque<ExecutionEvent> deque = executionTimelines.computeIfAbsent(execId, _ -> new ArrayDeque<>());
-        synchronized (deque) {
-            deque.addLast(event);
-            if (deque.size() > maxTimelineEventsPerExecution) {
-                deque.pollFirst();
-            }
-        }
-    }
-
     @Override
     public void close() {
         machines.clear();
@@ -935,12 +1045,12 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         terminalExecutions.clear();
         terminalEvictionOrder.clear();
         terminalCount.set(0);
-        executionTimelines.clear();
         recentEvents.clear();
         for (ControlPlaneStream stream : activeStreams) {
             stream.close();
         }
         activeStreams.clear();
+        attachedToBus = false;
     }
 
     // =========================================================================
@@ -950,20 +1060,19 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
     @FunctionalInterface
     public interface SignalRouter {
         CompletableFuture<SignalDeliveryResult> routeSignal(
-                String correlationKey,
-                String signalName,
-                Object payload
+                @NonNull String correlationKey,
+                @NonNull String signalName,
+                @NonNull Object payload
         );
     }
 
-    // =========================================================================
-    // Internal EventStream Implementation
-    // =========================================================================
-
-    private static class ControlPlaneStream implements EventStream {
+    /**
+     * Pull-based live stream consumer for the Control Plane.\
+     */
+    private static final class ControlPlaneStream implements EventStream {
+        private final BlockingQueue<ExecutionEvent> queue = new LinkedBlockingQueue<>(1024);
         private final Predicate<ExecutionEvent> filter;
         private final Consumer<ControlPlaneStream> onClose;
-        private final BlockingQueue<ExecutionEvent> queue = new LinkedBlockingQueue<>(1_024);
         private final AtomicBoolean closed = new AtomicBoolean(false);
 
         ControlPlaneStream(Predicate<ExecutionEvent> filter, Consumer<ControlPlaneStream> onClose) {
@@ -971,10 +1080,10 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             this.onClose = onClose;
         }
 
-        void offer(ExecutionEvent event) {
+        void offer(@NonNull ExecutionEvent event) {
             if (!closed.get() && filter.test(event)) {
                 while (!queue.offer(event)) {
-                    queue.poll(); // drop oldest on backpressure to protect memory
+                    queue.poll();
                 }
             }
         }
@@ -985,16 +1094,19 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
             if (closed.get() && queue.isEmpty()) {
                 return null;
             }
-            return queue.poll(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            return queue.poll(timeout.toNanos(), TimeUnit.NANOSECONDS);
         }
 
         @Override
         @NonNull
         public ExecutionEvent take() throws InterruptedException {
-            if (closed.get() && queue.isEmpty()) {
-                throw new IllegalStateException("EventStream is closed");
+            while (!closed.get() || !queue.isEmpty()) {
+                ExecutionEvent item = queue.poll(100, TimeUnit.MILLISECONDS);
+                if (item != null) {
+                    return item;
+                }
             }
-            return queue.take();
+            throw new IllegalStateException("ControlPlaneStream is closed");
         }
 
         @Override
@@ -1013,18 +1125,39 @@ public class DefaultControlPlane implements ControlPlane, ExecutionEventListener
         @NonNull
         public Iterator<ExecutionEvent> iterator() {
             return new Iterator<>() {
+                private ExecutionEvent nextItem = null;
+
                 @Override
                 public boolean hasNext() {
-                    return !isClosed() || !queue.isEmpty();
+                    if (nextItem != null) {
+                        return true;
+                    }
+                    if (closed.get() && queue.isEmpty()) {
+                        return false;
+                    }
+                    try {
+                        nextItem = poll(Duration.ofMillis(200));
+                        return nextItem != null || (!closed.get() || !queue.isEmpty());
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
                 }
 
                 @Override
                 public ExecutionEvent next() {
+                    if (nextItem != null) {
+                        ExecutionEvent item = nextItem;
+                        nextItem = null;
+                        return item;
+                    }
                     try {
                         return take();
+                    } catch (IllegalStateException e) {
+                        throw new NoSuchElementException("Stream is closed", e);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        throw new NoSuchElementException("Stream interrupted");
+                        throw new NoSuchElementException("Interrupted waiting for next event", e);
                     }
                 }
             };

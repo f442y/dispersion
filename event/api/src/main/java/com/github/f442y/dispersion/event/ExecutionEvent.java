@@ -10,15 +10,15 @@ import java.util.UUID;
  *
  * <p>Standard lifecycle events are categorized into specialized sealed sub-interfaces:
  * <ul>
- *     <li>{@link TurnLifecycleEvent}: turn start, completion, failure, compensation, suspension</li>
- *     <li>{@link StateLifecycleEvent}: state entry, exit, transitions, action executions</li>
- *     <li>{@link SignalEvent}: external signal awaiting, delivery, timeouts, discards</li>
- *     <li>{@link CompensationEvent}: individual saga rollback steps and turn compensation</li>
- *     <li>{@link RetryLifecycleEvent}: retries and exhaustion</li>
- *     <li>{@link ChildMachineEvent}: sub-workflow lifecycle and lineage</li>
- *     <li>{@link ParallelExecutionEvent}: parallel forks, branch completions, joins</li>
- *     <li>{@link ExecutionGuardEvent}: visit limits and circuit breaker trip events</li>
- *     <li>{@link ControlPlaneEvent}: execution pause, resume, and cancellation</li>
+ *     <li>{@link com.github.f442y.dispersion.event.turn.TurnLifecycleEvent}: turn start, completion, failure, compensation, suspension</li>
+ *     <li>{@link com.github.f442y.dispersion.event.state.StateLifecycleEvent}: state entry, exit, transitions, action executions</li>
+ *     <li>{@link com.github.f442y.dispersion.event.signal.SignalEvent}: external signal awaiting, delivery, timeouts, discards</li>
+ *     <li>{@link com.github.f442y.dispersion.event.compensation.CompensationEvent}: individual saga rollback steps and turn compensation</li>
+ *     <li>{@link com.github.f442y.dispersion.event.retry.RetryLifecycleEvent}: retries and exhaustion</li>
+ *     <li>{@link com.github.f442y.dispersion.event.child.ChildMachineEvent}: sub-workflow lifecycle and lineage</li>
+ *     <li>{@link com.github.f442y.dispersion.event.parallel.ParallelExecutionEvent}: parallel forks, branch completions, joins</li>
+ *     <li>{@link com.github.f442y.dispersion.event.guard.ExecutionGuardEvent}: visit limits and circuit breaker trip events</li>
+ *     <li>{@link com.github.f442y.dispersion.event.control.ControlPlaneEvent}: execution pause, resume, and cancellation</li>
  * </ul>
  * </p>
  *
@@ -56,4 +56,36 @@ public interface ExecutionEvent {
      */
     @NonNull
     Instant timestamp();
+
+    /**
+     * Assigned telemetry tier for this execution event.
+     *
+     * <p>Defaults to {@link EventTier#GRANULAR}. Specialized category interfaces override this method
+     * to classify high-level turn or control operations as {@link EventTier#LIFECYCLE}.</p>
+     *
+     * @return the assigned event tier
+     */
+    @NonNull
+    default EventTier tier() {
+        return EventTier.GRANULAR;
+    }
+
+    /**
+     * Indicates whether this event is a high-level lifecycle event that is always ingested into the
+     * central control plane.
+     *
+     * @return {@code true} if {@link #tier()} is {@link EventTier#LIFECYCLE}
+     */
+    default boolean isLifecycle() {
+        return tier() == EventTier.LIFECYCLE;
+    }
+
+    /**
+     * Indicates whether this event is a granular micro-event buffered locally at the worker edge.
+     *
+     * @return {@code true} if {@link #tier()} is {@link EventTier#GRANULAR}
+     */
+    default boolean isGranular() {
+        return tier() == EventTier.GRANULAR;
+    }
 }

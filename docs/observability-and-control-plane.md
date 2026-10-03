@@ -1,6 +1,6 @@
 # Observability & Control Plane Guide
 
-Dispersion features a centralized, hexagonal **Observability and Control Plane** designed for zero hot-path overhead, real-time workflow inspection, dynamic Mermaid diagram generation, $O(1)$ dual-pool memory topology, standalone Helidon SE virtual-thread HTTP/SSE hosting, and bidirectional external signal routing.
+Dispersion features a centralized, hexagonal **Observability and Control Plane** designed for zero hot-path overhead, real-time workflow inspection, dynamic Mermaid diagram generation, $O(1)$ dual-pool memory topology, embeddable Jakarta REST 3.1 HTTP/SSE hosting, and bidirectional external signal routing.
 
 ---
 
@@ -16,26 +16,30 @@ graph TD
         SIG_UI["Manual Signal Dispatcher"]
     end
 
-    subgraph ServerHost["dispersion-server-standalone (Helidon SE 4.x Níma)"]
+    subgraph ServerHost["dispersion-server-jakarta (Jakarta REST 3.1 & Web UI)"]
         HTTP["HTTP Routing on Virtual Threads"]
-        SSE["Server-Sent Events Stream"]
-        JAK["dispersion-server-jakarta (JAX-RS)"]
+        SSE["Server-Sent Events Stream (Two-Tier Telemetry)"]
+        DASH["Embedded React UI Host (WebDashboardResource)"]
     end
 
     subgraph ControlPlane["dispersion-control-plane-core (DefaultControlPlane)"]
         DCP["DefaultControlPlane"]
         APOOL["Active Pool (O(1) Hash Map)"]
-        TPOOL["Terminal Pool (Bounded Circular Buffer)"]
+        TPOOL["Terminal Pool (Bounded Circular Eviction Pool)"]
         ROUTER["Signal Delivery Router"]
+        TAP_MGR["DynamicTapManager"]
+        TRACE["TraceTimelineProvider"]
         DCP --- APOOL
         DCP --- TPOOL
         DCP --- ROUTER
+        DCP --- TAP_MGR
+        DCP --- TRACE
     end
 
     subgraph SPI["dispersion-control-plane-api (Contracts)"]
         IM["InspectableMachine (SPI)"]
         MD["MachineDescriptor"]
-        ES["ExecutionSummary"]
+        ES["ExecutionSummary / ExecutionStatus"]
     end
 
     subgraph Engines["Execution Engines"]
@@ -60,7 +64,7 @@ graph TD
 3. **Strict Fault Isolation:**
    Listener invocations are isolated with error boundaries. Telemetry failures or slow monitoring sinks **never** cause workflow state transitions or Saga compensations to abort.
 4. **Decoupled Server Hosting:**
-   `dispersion-server-standalone` hosts the control plane using Helidon SE 4.x Níma on virtual threads without polluting core domain logic. JSON serialization is offloaded to compile-time reflection-free codecs (`dispersion-serialization-avaje`).
+   `dispersion-server-jakarta` hosts the control plane using standard Jakarta RESTful Web Services 3.1 on virtual threads without polluting core domain logic. JSON serialization is offloaded to compile-time reflection-free codecs (`dispersion-serialization-avaje`).
 
 ---
 
@@ -68,22 +72,23 @@ graph TD
 
 Dispersion emits immutable telemetry records at every execution milestone. The foundational `ExecutionEvent` interface defines core lifecycle events nested directly within modular subpackages (`event.turn`, `event.state`, `event.signal`, `event.compensation`, `event.retry`, `event.child`, `event.parallel`, `event.guard`, `event.control`), while domain-specific events implement `ExecutionEvent` directly from their respective modules:
 
-| Event Record | Module | Emitted When | Payload Highlights |
-| :--- | :--- | :--- | :--- |
-| `TurnStartedEvent` | `dispersion-event-api` | Orchestration or atomic turn begins | `machineId`, `machineName`, `turnId`, `stateName` |
-| `StateEnteredEvent` | `dispersion-event-api` | Workflow transitions into a state node | `machineId`, `stateName` |
-| `ActionExecutedEvent` | `dispersion-event-api` | State action logic successfully runs | `machineId`, `stateName`, `duration` |
-| `TransitionEvaluatedEvent` | `dispersion-event-api` | Routing evaluation chooses next target state | `machineId`, `sourceState`, `targetState` |
-| `StateExitedEvent` | `dispersion-event-api` | Workflow leaves a state node | `machineId`, `stateName`, `duration` |
-| `SignalAwaitedEvent` | `dispersion-event-api` | Workflow suspends waiting for an external signal | `machineId`, `stateName`, `expectedSignal`, `correlationKey` |
-| `SignalDeliveredEvent` | `dispersion-event-api` | Inbound signal arrives and resumes workflow | `machineId`, `signalName`, `correlationKey` |
-| `TurnSuspendedEvent` | `dispersion-event-api` | Workflow snapshots checkpoint and releases thread | `machineId`, `stateName`, `correlationKey` |
-| `TurnCompensatedEvent` | `dispersion-event-api` | Downstream error triggers LIFO Saga rollback | `machineId`, `failedStateName`, `cause` |
-| `TurnCompletedEvent` | `dispersion-event-api` | Workflow reaches a terminal end state | `machineId`, `duration`, `output` |
-| `TurnFailedEvent` | `dispersion-event-api` | Unhandled error terminates workflow | `machineId`, `failedStateName`, `cause` |
-| `CommandDeduplicatedEvent` | `dispersion-orchestration-api` | Duplicate command envelope skipped | `machineId`, `commandId`, `correlationKey` |
-| `BatchBarrierReachedEvent` | `dispersion-orchestration-batch` | Batch item arrives at barrier policy | `machineId`, `batchId`, `itemKey`, `stateName` |
-| `BatchBarrierUnlockedEvent` | `dispersion-orchestration-batch` | Batch barrier condition satisfied; stage advances | `machineId`, `batchId`, `stateName`, `itemCount` |
+| Event Record | Module | Event Tier | Emitted When | Payload Highlights |
+| :--- | :--- | :--- | :--- | :--- |
+| `TurnStartedEvent` | `dispersion-event-api` | `LIFECYCLE` | Orchestration or atomic turn begins | `machineId`, `machineName`, `turnId`, `stateName` |
+| `StateEnteredEvent` | `dispersion-event-api` | `LIFECYCLE` | Workflow transitions into a state node | `machineId`, `stateName` |
+| `ActionExecutedEvent` | `dispersion-event-api` | `GRANULAR` | State action logic successfully runs | `machineId`, `stateName`, `duration` |
+| `TransitionEvaluatedEvent` | `dispersion-event-api` | `GRANULAR` | Routing evaluation chooses next target state | `machineId`, `sourceState`, `targetState` |
+| `StateExitedEvent` | `dispersion-event-api` | `LIFECYCLE` | Workflow leaves a state node | `machineId`, `stateName`, `duration` |
+| `SignalAwaitedEvent` | `dispersion-event-api` | `LIFECYCLE` | Workflow suspends waiting for an external signal | `machineId`, `stateName`, `expectedSignal`, `correlationKey` |
+| `SignalDeliveredEvent` | `dispersion-event-api` | `LIFECYCLE` | Inbound signal arrives and resumes workflow | `machineId`, `signalName`, `correlationKey` |
+| `TurnSuspendedEvent` | `dispersion-event-api` | `LIFECYCLE` | Workflow snapshots checkpoint and releases thread | `machineId`, `stateName`, `correlationKey` |
+| `TurnCompensatedEvent` | `dispersion-event-api` | `LIFECYCLE` | Downstream error triggers LIFO Saga rollback | `machineId`, `failedStateName`, `cause` |
+| `TurnCompletedEvent` | `dispersion-event-api` | `LIFECYCLE` | Workflow reaches a terminal end state | `machineId`, `duration`, `output` |
+| `TurnFailedEvent` | `dispersion-event-api` | `LIFECYCLE` | Unhandled error terminates workflow | `machineId`, `failedStateName`, `cause` |
+| `ExecutionCancelledEvent` | `dispersion-event-api` | `LIFECYCLE` | Execution cancelled by operator/admin | `machineId`, `stateName`, `operatorId`, `reason` |
+| `CommandDeduplicatedEvent` | `dispersion-orchestration-api` | `LIFECYCLE` | Duplicate command envelope skipped | `machineId`, `commandId`, `correlationKey` |
+| `BatchBarrierReachedEvent` | `dispersion-orchestration-batch` | `LIFECYCLE` | Batch item arrives at barrier policy | `machineId`, `batchId`, `itemKey`, `stateName` |
+| `BatchBarrierUnlockedEvent` | `dispersion-orchestration-batch` | `LIFECYCLE` | Batch barrier condition satisfied; stage advances | `machineId`, `batchId`, `stateName`, `itemCount` |
 
 ### Pattern Matching in Java 25
 
@@ -91,6 +96,7 @@ Dispersion emits immutable telemetry records at every execution milestone. The f
 package com.example.observability;
 
 import com.github.f442y.dispersion.event.ExecutionEvent;
+import com.github.f442y.dispersion.event.control.ExecutionCancelledEvent;
 import com.github.f442y.dispersion.event.signal.SignalAwaitedEvent;
 import com.github.f442y.dispersion.event.signal.SignalDeliveredEvent;
 import com.github.f442y.dispersion.event.state.ActionExecutedEvent;
@@ -102,9 +108,6 @@ import com.github.f442y.dispersion.event.turn.TurnCompletedEvent;
 import com.github.f442y.dispersion.event.turn.TurnFailedEvent;
 import com.github.f442y.dispersion.event.turn.TurnStartedEvent;
 import com.github.f442y.dispersion.event.turn.TurnSuspendedEvent;
-import com.github.f442y.dispersion.orchestration.batch.BatchBarrierReachedEvent;
-import com.github.f442y.dispersion.orchestration.batch.BatchBarrierUnlockedEvent;
-import com.github.f442y.dispersion.orchestration.command.CommandDeduplicatedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -176,20 +179,11 @@ public final class TelemetryDispatcher {
                    .setCause(failed.cause())
                    .log("Execution failed with unhandled error");
 
-            case BatchBarrierReachedEvent barrier ->
-                log.atDebug()
-                   .addKeyValue("item_key", barrier.itemKey())
-                   .log("Item arrived at batch barrier");
-
-            case BatchBarrierUnlockedEvent unlocked ->
-                log.atInfo()
-                   .addKeyValue("state", unlocked.stateName())
-                   .log("Batch barrier unlocked");
-
-            case CommandDeduplicatedEvent dedup ->
+            case ExecutionCancelledEvent cancelled ->
                 log.atWarn()
-                   .addKeyValue("command_id", dedup.commandId())
-                   .log("Duplicate command discarded");
+                   .addKeyValue("operator", cancelled.operatorId())
+                   .addKeyValue("reason", cancelled.reason())
+                   .log("Execution cancelled by operator");
 
             default ->
                 log.atDebug()
@@ -212,17 +206,18 @@ To prevent out-of-memory errors and eliminate expensive table scans, `DefaultCon
                     │                                                         │
                     │   ┌─────────────────────────────────────────────────┐   │
 In-Flight           │   │           Active Execution Pool (O(1))          │   │
-Executions ────────►│   │   • Running or Suspended workflows              │   │
+Executions ─────────┼──►│   • Running or Suspended workflows              │   │
                     │   │   • Indexed by ExecutionId & CorrelationKey     │   │
                     │   │   • Immune to eviction while active             │   │
                     │   └─────────────────────────────────────────────────┘   │
                     │                            │                            │
-                    │                            ▼ (Upon Completion / Failure)│
+                    │                            ▼ (Upon Terminal Completion) │
                     │   ┌─────────────────────────────────────────────────┐   │
-Completed /         │   │     Bounded Terminal Ring Buffer Pool (O(1))    │   │
-Failed Executions ─►│   │   • Bounded capacity (e.g. 10,000 items)        │   │
-                    │   │   • Lock-free FIFO eviction of oldest entries   │   │
-                    │   │   • Zero GC pause overhead                      │   │
+Completed /         │   │     Bounded Terminal Circular Pool (O(1))       │   │
+Failed / Cancelled  │──►│   • Bounded capacity (e.g. 10,000 items)        │   │
+Executions          │   │   • Lock-free FIFO eviction of oldest entries   │   │
+                    │   │   • Status: COMPLETED, FAILED, COMPENSATED,     │   │
+                    │   │     CANCELLED                                   │   │
                     │   └─────────────────────────────────────────────────┘   │
                     └─────────────────────────────────────────────────────────┘
 ```
@@ -230,7 +225,7 @@ Failed Executions ─►│   │   • Bounded capacity (e.g. 10,000 items)    
 1. **Active Pool (`activeExecutions`):**
    Stores workflows that are currently `RUNNING` or `SUSPENDED` (waiting for webhooks, human approvals, or batch sync). These represent live business processes and are **strictly protected from eviction**.
 2. **Bounded Terminal Pool (`terminalExecutions`):**
-   Stores workflows that reached `COMPLETED` or `FAILED`. When the configured limit (e.g. 10,000 executions) is exceeded, older records are evicted in **strictly $O(1)$ time** without traversing collections.
+   Stores workflows that reached a terminal status (`COMPLETED`, `FAILED`, `COMPENSATED`, or `CANCELLED`). When the configured limit (e.g. 10,000 executions) is exceeded, older records are evicted in **strictly $O(1)$ time** via circular FIFO ordering.
 
 ---
 
@@ -244,7 +239,6 @@ import com.github.f442y.dispersion.control.ExecutionSummary;
 import com.github.f442y.dispersion.control.MachineDescriptor;
 import com.github.f442y.dispersion.control.SignalDeliveryResult;
 import com.github.f442y.dispersion.control.core.DefaultControlPlane;
-import com.github.f442y.dispersion.orchestration.OrchestrationCheckpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -274,12 +268,9 @@ public final class ControlPlaneOperations {
         log.atInfo().addKeyValue("count", suspended.size()).log("Queried suspended workflows");
 
         // 3. Inspect Checkpoint for Suspended Saga
-        Optional<OrchestrationCheckpoint> checkpoint =
-            controlPlane.inspectCheckpoint(machineName, correlationKey, OrchestrationCheckpoint.class);
-
+        Optional<Object> checkpoint = controlPlane.inspectCheckpoint(machineName, correlationKey);
         checkpoint.ifPresent(cp -> log.atInfo()
-            .addKeyValue("correlation_key", cp.correlationKey())
-            .addKeyValue("state", cp.currentStateKey())
+            .addKeyValue("checkpoint", cp.toString())
             .log("Inspected suspended saga checkpoint"));
 
         // 4. Deliver External Signal via Control Plane
@@ -302,58 +293,87 @@ public final class ControlPlaneOperations {
 
 ---
 
-## 5. Standalone Server Host & HTTP/SSE Endpoints (`dispersion-server-standalone`)
+## 5. Two-Tier Telemetry, Trace Buffers & Dynamic Taps
 
-Dispersion provides built-in HTTP and Server-Sent Events (SSE) servers via `dispersion-server-standalone` (powered by Helidon SE 4.x Níma virtual threads) and `dispersion-server-jakarta` (JAX-RS 3.1).
+To balance zero hot-path allocation with granular step-by-step diagnostic observability, Dispersion employs a **two-tier telemetry architecture**:
 
-### Starting the Helidon Standalone Server
+1. **`EventTier.LIFECYCLE`:**
+   Coarse lifecycle events (`TurnStartedEvent`, `StateEnteredEvent`, `SignalAwaitedEvent`, `TurnCompletedEvent`, `ExecutionCancelledEvent`). Dispatched through `EventBus` to all global subscribers and default SSE streams. Negligible network overhead.
+2. **`EventTier.GRANULAR`:**
+   High-frequency internal events (`ActionExecutedEvent`, `TransitionEvaluatedEvent`). Captured in a local ring buffer (`LocalExecutionTraceBuffer` / `ConcurrentRingBufferTraceBuffer`) per execution without flooding the global bus.
+3. **`DynamicTapManager`:**
+   When an operator opens a detailed execution view in the UI or connects with `?tier=all`, the server registers a dynamic tap lease. Granular events are routed to that client's stream. Reference-counted leases ensure that when the connection closes, the tap is immediately disarmed, preventing memory leaks.
+4. **`TraceTimelineProvider`:**
+   SPI bridging the control plane with execution trace buffers. `controlPlane.getExecutionTimeline(executionId, limit)` retrieves the chronological event trace directly from the trace buffer or in-memory timeline provider.
+
+---
+
+## 6. Jakarta REST Server Host & HTTP/SSE Endpoints (`dispersion-server-jakarta`)
+
+Dispersion provides built-in HTTP, Server-Sent Events (SSE), and static UI hosting via `dispersion-server-jakarta` (JAX-RS 3.1 compatible with Spring Boot, Quarkus, WildFly, and Jersey).
+
+### Deploying the Jakarta REST Server in Spring Boot
 
 ```java
-import com.github.f442y.dispersion.control.core.DefaultControlPlane;
-import com.github.f442y.dispersion.server.api.ControlPlaneServer;
-import com.github.f442y.dispersion.server.api.ControlPlaneServerFactory;
+import com.github.f442y.dispersion.control.ControlPlane;
+import com.github.f442y.dispersion.serialization.json.JsonSerializer;
 import com.github.f442y.dispersion.server.api.ServerConfig;
+import com.github.f442y.dispersion.server.jakarta.ControlPlaneCorsFilter;
+import com.github.f442y.dispersion.server.jakarta.ControlPlaneResource;
+import com.github.f442y.dispersion.server.jakarta.WebDashboardResource;
+import org.glassfish.jersey.server.ResourceConfig;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
-DefaultControlPlane controlPlane = new DefaultControlPlane();
-// ... register inspectable machines ...
+@Component
+public class JerseyConfig extends ResourceConfig {
 
-ServerConfig config = ServerConfig.builder()
-    .port(8080)
-    .basePath("/api/v1")
-    .cors(true)
-    .build();
+    public JerseyConfig(
+            ControlPlane controlPlane,
+            JsonSerializer jsonSerializer,
+            @Value("${server.port:8080}") int port
+    ) {
+        ServerConfig config = ServerConfig.builder()
+                .port(port)
+                .basePath("/api/v1")
+                .environment("production")
+                .clusterId("dispersion-cluster")
+                .build();
 
-ControlPlaneServer server = ControlPlaneServerFactory.create(controlPlane, config);
-server.start();
-
-System.out.println("Control Plane Server listening on: " + server.boundAddress());
+        register(new ControlPlaneResource(controlPlane, jsonSerializer, config));
+        register(new ControlPlaneCorsFilter(config));
+        register(new WebDashboardResource());
+    }
+}
 ```
 
 ### Standard HTTP & SSE Endpoints
 
 | Method | Path | Description |
 | :--- | :--- | :--- |
+| `GET` | `/` | Web Dashboard SPA landing page (HTML). |
+| `GET` | `/{path}` | Static dashboard assets (`.js`, `.css`, `.svg`) with SPA client navigation fallback. |
 | `GET` | `/api/v1/node` | Cluster node health, CPU core count, JVM uptime, active machine count. |
 | `GET` | `/api/v1/machines` | List all registered state machine descriptors. |
 | `GET` | `/api/v1/machines/{name}` | Machine topology, initial/end states, and dynamic Mermaid graph string. |
 | `POST` | `/api/v1/machines/{name}/dispatch` | Dispatches an execution input directly into a registered machine. |
-| `GET` | `/api/v1/executions` | Query executions filtered by `machine`, `status`, or limit. |
+| `GET` | `/api/v1/executions` | Query executions filtered by `machine`, `status` (`RUNNING`, `SUSPENDED`, `CANCELLED`, `COMPLETED`, `FAILED`), or limit. |
 | `GET` | `/api/v1/executions/{id}` | Summary status and current state for a specific execution. |
 | `GET` | `/api/v1/executions/{id}/timeline` | Ordered chronological event timeline for an execution. |
+| `GET` | `/api/v1/executions/{machine}/{key}/checkpoint` | Inspect latest checkpoint state snapshot for a suspended execution. |
 | `POST` | `/api/v1/executions/signal` | Deliver external signal (`machineName`, `correlationKey`, `signalName`, `payload`). |
-| `GET` | `/api/v1/events/stream` | Real-time Server-Sent Events (SSE) telemetry event stream (`text/event-stream`). Optional filter query parameters: `machine`, `executionId`. |
+| `POST` | `/api/v1/telemetry/events` | Ingest a batch of execution telemetry events from remote worker microservices. |
+| `GET` | `/api/v1/events/stream` | Real-time Server-Sent Events (SSE) telemetry stream (`text/event-stream`). Query parameters: `machine`, `executionId`, `tier` (`lifecycle` or `all`). |
 
 ---
 
-## 6. Web Control Panel UI Integration
+## 7. Web Control Panel UI Integration
 
-A modern browser interface is provided in [`ui/`](../ui/) (built with Vite, React 19, and Tailwind CSS).
+A modern browser interface is provided in [`ui/`](../ui/) (built with Vite, React 19, TanStack Router, TanStack Query, and Tailwind CSS).
 
-The web client interacts directly with the Helidon SE control plane server:
+The web client interacts directly with the control plane server via REST and SSE:
 * **Topology Diagrams:** Consumes `/api/v1/machines/{name}` and renders the pre-computed Mermaid graph.
 * **Execution Explorer:** Queries `/api/v1/executions` to visualize active, suspended, and terminal turns.
-* **Live SSE Telemetry:** Subscribes to `/api/v1/events/stream` to update node highlights and event logs in real time.
+* **Chronological Timelines:** Queries `/api/v1/executions/{id}/timeline` to display step-by-step state actions.
+* **Live SSE Telemetry:** Subscribes to `/api/v1/events/stream` with automated 15-second heartbeat keep-alives.
 * **Signal Injection:** Submits manual signals via `POST /api/v1/executions/signal`.
-
-> [!NOTE]
-> The UI in `ui/` is subject to ongoing design refinements and frontend UX iteration. The backend server endpoints and Avaje JSON schemas serve as the stable system contract.

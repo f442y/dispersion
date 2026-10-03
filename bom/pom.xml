@@ -137,11 +137,6 @@
             </dependency>
             <dependency>
                 <groupId>com.github.f442y.dispersion</groupId>
-                <artifactId>dispersion-server-standalone</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.f442y.dispersion</groupId>
                 <artifactId>dispersion-testkit</artifactId>
                 <version>${project.version}</version>
             </dependency>

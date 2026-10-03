@@ -2,22 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getEventStreamUrl } from '../api/client';
 import { executionKeys } from './queryKeys';
-import type { StreamExecutionEvent, SseConnectionStatus } from '../types';
+import type { StreamExecutionEvent, SseConnectionStatus, EventTier } from '../types';
 
 export interface UseEventStreamOptions {
   machineName?: string;
+  executionId?: string;
+  tier?: 'lifecycle' | 'all';
   baseUrl?: string;
   maxEvents?: number;
   enabled?: boolean;
+  onEvent?: (event: StreamExecutionEvent) => void;
 }
 
 export function useEventStream(options: UseEventStreamOptions = {}) {
-  const { machineName, baseUrl, maxEvents = 40, enabled = true } = options;
+  const { machineName, executionId, tier, baseUrl, maxEvents = 40, enabled = true, onEvent } = options;
   const queryClient = useQueryClient();
   const [events, setEvents] = useState<StreamExecutionEvent[]>([]);
   const [status, setStatus] = useState<SseConnectionStatus>('connecting');
   const [lastEventTime, setLastEventTime] = useState<Date | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
 
   useEffect(() => {
     if (!enabled) {
@@ -26,7 +31,7 @@ export function useEventStream(options: UseEventStreamOptions = {}) {
     }
 
     setStatus('connecting');
-    const url = getEventStreamUrl(machineName, baseUrl);
+    const url = getEventStreamUrl({ machineName, executionId, tier }, baseUrl);
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -42,44 +47,12 @@ export function useEventStream(options: UseEventStreamOptions = {}) {
       }
     };
 
-    // All 28 polymorphic event types emitted by Dispersion Control Plane
-    const eventTypes = [
-      'message',
-      'StateEnteredEvent',
-      'StateExitedEvent',
-      'TurnStartedEvent',
-      'TurnCompletedEvent',
-      'TurnSuspendedEvent',
-      'TurnCompensatedEvent',
-      'TurnFailedEvent',
-      'TransitionEvaluatedEvent',
-      'ActionExecutedEvent',
-      'SignalAwaitedEvent',
-      'SignalDeliveredEvent',
-      'SignalDiscardedEvent',
-      'SignalTimedOutEvent',
-      'ExecutionPausedEvent',
-      'ExecutionResumedEvent',
-      'ExecutionCancelledEvent',
-      'ChildMachineSpawnedEvent',
-      'ChildMachineCompletedEvent',
-      'CompensationStepStartedEvent',
-      'CompensationStepCompletedEvent',
-      'CompensationStepFailedEvent',
-      'RetryAttemptedEvent',
-      'RetryExhaustedEvent',
-      'CircuitBreakerTrippedEvent',
-      'StateVisitLimitExceededEvent',
-      'ParallelForkStartedEvent',
-      'ParallelBranchCompletedEvent',
-      'ParallelJoinCompletedEvent',
-    ];
-
     const handleEvent = (event: MessageEvent) => {
       try {
         const raw = JSON.parse(event.data);
         const parsed: StreamExecutionEvent = {
-          eventType: event.type === 'message' ? raw.eventType ?? 'Unknown' : event.type,
+          eventType: raw.eventType ?? (event.type === 'message' ? 'Unknown' : event.type),
+          tier: (raw.tier as EventTier) ?? undefined,
           machineName: raw.machineName,
           machineId: raw.machineId ?? raw.executionId,
           timestamp: raw.timestamp ? String(raw.timestamp) : new Date().toISOString(),
@@ -101,22 +74,29 @@ export function useEventStream(options: UseEventStreamOptions = {}) {
         setEvents((prev) => [parsed, ...prev.slice(0, maxEvents - 1)]);
         setLastEventTime(new Date());
 
-        // Instant cache invalidation to trigger live UI update across all active queries
-        queryClient.invalidateQueries({ queryKey: executionKeys.all });
+        if (onEventRef.current) {
+          onEventRef.current(parsed);
+        }
+
+        // Cache invalidation: targeted when executionId is provided, global otherwise
+        if (executionId) {
+          queryClient.invalidateQueries({ queryKey: executionKeys.detail(executionId) });
+          queryClient.invalidateQueries({ queryKey: executionKeys.timeline(executionId) });
+        } else {
+          queryClient.invalidateQueries({ queryKey: executionKeys.all });
+        }
       } catch (err) {
         console.warn('Failed to parse SSE payload:', err);
       }
     };
 
-    for (const t of eventTypes) {
-      es.addEventListener(t, handleEvent);
-    }
+    es.onmessage = handleEvent;
 
     return () => {
       es.close();
       eventSourceRef.current = null;
     };
-  }, [machineName, baseUrl, enabled, maxEvents, queryClient]);
+  }, [machineName, executionId, tier, baseUrl, enabled, maxEvents, queryClient]);
 
   return {
     events,

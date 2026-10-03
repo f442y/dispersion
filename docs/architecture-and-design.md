@@ -14,7 +14,7 @@ Dispersion resolves these challenges through a unified design rooted in **thread
 
 ## 1. Hexagonal Decoupling & Module Symmetrical Topology
 
-Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 28 Maven reactor projects (Parent aggregator POM, BOM, and 26 child modules):
+Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 27 Maven reactor projects (Parent aggregator POM, BOM, and 25 child modules):
 
 ```mermaid
 graph TD
@@ -91,13 +91,11 @@ graph TD
 
     subgraph Server["7. Server Subsystem"]
         SRV_API["dispersion-server-api<br/>(ControlPlaneServer SPI)"]
-        SRV_JAKARTA["dispersion-server-jakarta<br/>(Jakarta REST Resource)"]
-        SRV_STANDALONE["dispersion-server-standalone<br/>(Helidon SE Níma HTTP/SSE)"]
+        SRV_JAKARTA["dispersion-server-jakarta<br/>(Jakarta REST Resource & UI Host)"]
 
         SRV_API --> C_API
         SRV_API --> S_JSON_API
         SRV_JAKARTA --> SRV_API
-        SRV_STANDALONE --> SRV_API
     end
 
     subgraph Testing["8. Testing Facade"]
@@ -120,7 +118,7 @@ graph TD
 5. **Control Plane Inversion via `InspectableMachine`:**
    `dispersion-control-plane-core` has **zero compile-time dependencies** on `fsm-core` or `orchestration-core`. Executors implement the `InspectableMachine` SPI and adapt themselves via `.asInspectableMachine()`, allowing the control plane to observe any engine generically.
 6. **Pluggable Serialization & Transport Inversion:**
-   The `serialization-json-api` and `serialization-binary-api` contracts abstract data formatting so `server-standalone` (Helidon SE virtual-thread HTTP/SSE) and `server-jakarta` remain completely independent of concrete serialization libraries. Avaje compile-time JSON and Apache Fury binary codecs plug in via standard Java `ServiceLoader`.
+   The `serialization-json-api` and `serialization-binary-api` contracts abstract data formatting so `server-jakarta` remains completely independent of concrete serialization libraries. Avaje compile-time JSON and Apache Fury binary codecs plug in via standard Java `ServiceLoader`.
 
 ---
 
@@ -238,7 +236,6 @@ Dispersion is built strictly for the Java Platform Module System (JPMS). Every m
 | `dispersion-serialization-avaje` | `com.github.f442y.dispersion.serialization.avaje` | `com.github.f442y.dispersion.serialization.avaje` |
 | `dispersion-server-api` | `com.github.f442y.dispersion.server.api` | `com.github.f442y.dispersion.server.api` |
 | `dispersion-server-jakarta` | `com.github.f442y.dispersion.server.jakarta` | `com.github.f442y.dispersion.server.jakarta` |
-| `dispersion-server-standalone` | `com.github.f442y.dispersion.server.standalone` | `com.github.f442y.dispersion.server.standalone` |
 | `dispersion-testkit` | `com.github.f442y.dispersion.testkit` | `com.github.f442y.dispersion.testkit` |
 | `dispersion-examples` | `com.github.f442y.dispersion.examples` | `com.github.f442y.dispersion.examples` |
 
@@ -248,4 +245,4 @@ Dispersion is built strictly for the Java Platform Module System (JPMS). Every m
 
 * ⚡ [**Virtual Threads & Performance Guide**](virtual-threads-and-performance.md) — Carrier thread scheduling, unmounting mechanics, zero-pinning guarantees, and JVM escape analysis.
 * 🔄 [**Saga Orchestration & Batch Processing**](saga-orchestration-and-batching.md) — Turn-based lifecycle, LIFO compensation unwind, and batch barrier policies.
-* 🔭 [**Observability & Control Plane**](observability-and-control-plane.md) — Telemetry streaming, $O(1)$ dual-pool memory topology, standalone Helidon server, and event streaming.
+* 🔭 [**Observability & Control Plane**](observability-and-control-plane.md) — Telemetry streaming, $O(1)$ dual-pool memory topology, Jakarta REST server, and event streaming.
