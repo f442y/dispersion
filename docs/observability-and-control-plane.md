@@ -16,7 +16,7 @@ graph TD
         SIG_UI["Manual Signal Dispatcher"]
     end
 
-    subgraph ServerHost["dispersion-server-jakarta (Jakarta REST 3.1 & Web UI)"]
+    subgraph ServerHost["dispersion-server-core / adapters (Spring Boot & Jakarta REST 3.1)"]
         HTTP["HTTP Routing on Virtual Threads"]
         SSE["Server-Sent Events Stream (Two-Tier Telemetry)"]
         DASH["Embedded React UI Host (WebDashboardResource)"]
@@ -64,7 +64,7 @@ graph TD
 3. **Strict Fault Isolation:**
    Listener invocations are isolated with error boundaries. Telemetry failures or slow monitoring sinks **never** cause workflow state transitions or Saga compensations to abort.
 4. **Decoupled Server Hosting:**
-   `dispersion-server-jakarta` hosts the control plane using standard Jakarta RESTful Web Services 3.1 on virtual threads without polluting core domain logic. JSON serialization is offloaded to compile-time reflection-free codecs (`dispersion-serialization-avaje`).
+   `dispersion-server-core` hosts the framework-agnostic control plane presentation layer on virtual threads without polluting core domain logic, with thin presentation adapters for native Spring Boot (`dispersion-server-spring`) and standard Jakarta REST 3.1 (`dispersion-server-jakarta`). JSON serialization is offloaded to compile-time reflection-free codecs (`dispersion-serialization-avaje`).
 
 ---
 
@@ -308,42 +308,59 @@ To balance zero hot-path allocation with granular step-by-step diagnostic observ
 
 ---
 
-## 6. Jakarta REST Server Host & HTTP/SSE Endpoints (`dispersion-server-jakarta`)
+## 6. Server Subsystem & HTTP/SSE Endpoints (`dispersion-server-core`, `dispersion-server-spring`, `dispersion-server-jakarta`)
 
-Dispersion provides built-in HTTP, Server-Sent Events (SSE), and static UI hosting via `dispersion-server-jakarta` (JAX-RS 3.1 compatible with Spring Boot, Quarkus, WildFly, and Jersey).
+Dispersion provides built-in HTTP, Server-Sent Events (SSE), and static UI hosting via `dispersion-server-core` with native presentation adapters for Spring Boot (`dispersion-server-spring`) and Jakarta REST 3.1 (`dispersion-server-jakarta`, compatible with Quarkus, WildFly, Helidon, and Jersey).
 
-### Deploying the Jakarta REST Server in Spring Boot
+### Deploying with Native Spring Boot (`dispersion-server-spring`)
+
+Simply add `dispersion-server-spring` to your Spring Boot application:
+
+```xml
+<dependency>
+    <groupId>com.github.f442y.dispersion</groupId>
+    <artifactId>dispersion-server-spring</artifactId>
+</dependency>
+```
+
+Thanks to Spring Boot auto-configuration (`DispersionSpringWebConfiguration`), `DispersionControlPlaneController` (`@RestController`) and `DispersionWebDashboardController` (`@Controller`) are automatically registered when a `ControlPlane` and `JsonSerializer` bean are present in the application context:
 
 ```java
-import com.github.f442y.dispersion.control.ControlPlane;
-import com.github.f442y.dispersion.serialization.json.JsonSerializer;
-import com.github.f442y.dispersion.server.api.ServerConfig;
-import com.github.f442y.dispersion.server.jakarta.ControlPlaneCorsFilter;
-import com.github.f442y.dispersion.server.jakarta.ControlPlaneResource;
-import com.github.f442y.dispersion.server.jakarta.WebDashboardResource;
-import org.glassfish.jersey.server.ResourceConfig;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+@Configuration
+public class DispersionConfiguration {
 
-@Component
-public class JerseyConfig extends ResourceConfig {
+    @Bean
+    public ControlPlane controlPlane() {
+        return new DefaultControlPlane();
+    }
 
-    public JerseyConfig(
-            ControlPlane controlPlane,
-            JsonSerializer jsonSerializer,
-            @Value("${server.port:8080}") int port
-    ) {
-        ServerConfig config = ServerConfig.builder()
+    @Bean
+    public JsonSerializer jsonSerializer() {
+        return new AvajeJsonSerializer();
+    }
+
+    @Bean
+    public ServerConfig serverConfig(@Value("${server.port:8080}") int port) {
+        return ServerConfig.builder()
                 .port(port)
                 .basePath("/api/v1")
                 .environment("production")
                 .clusterId("dispersion-cluster")
                 .build();
-
-        register(new ControlPlaneResource(controlPlane, jsonSerializer, config));
-        register(new ControlPlaneCorsFilter(config));
-        register(new WebDashboardResource());
     }
+}
+```
+
+No Jersey or HK2 bridges are required—all endpoints execute directly via native Spring MVC and virtual threads (`SseEmitter`).
+
+### Deploying with Jakarta REST 3.1 (`dispersion-server-jakarta`)
+
+For Jakarta EE, Quarkus, or WildFly environments:
+
+```java
+@ApplicationPath("/api/v1")
+public class RestApplication extends Application {
+    // Register ControlPlaneResource, ControlPlaneCorsFilter, and WebDashboardResource
 }
 ```
 

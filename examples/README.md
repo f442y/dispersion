@@ -1,7 +1,7 @@
 # Dispersion Interactive Demo Application (`DispersionDemoApp`)
 
 > **Location:** [`examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java)
-> **Server Runtime:** Spring Boot 4.1 + Jakarta REST 3.1 (Jersey) on Java 25 Virtual Threads
+> **Server Runtime:** Spring Boot 4.1 + Native Spring MVC (`dispersion-server-spring`) on Java 25 Virtual Threads
 > **Default Port:** `8080` (API Base Path: `/api/v1`, Web Console: `/`)
 > **Java Version:** OpenJDK 25+ (Loom Virtual Threads)
 
@@ -218,7 +218,7 @@ curl -X POST "http://localhost:8080/api/v1/executions/signal" \
 ```powershell
 Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/executions/signal" `
   -ContentType "application/json" `
-  -Body '{"machineName":"OrderWorkflow","correlationKey":"ORDER-DEMO-99","signalName":"PaymentSignal","payload":{"correlationKey":"ORDER-DEMO-99","paymentMethod":"APPLE_PAY","amountCents":9995}}'
+  -Body '{\"machineName\":\"OrderWorkflow\",\"correlationKey\":\"ORDER-DEMO-99\",\"signalName\":\"PaymentSignal\",\"payload\":{\"correlationKey\":\"ORDER-DEMO-99\",\"paymentMethod\":\"APPLE_PAY\",\"amountCents\":9995}}'
 ```
 
 ---

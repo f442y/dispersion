@@ -14,7 +14,7 @@ Dispersion resolves these challenges through a unified design rooted in **thread
 
 ## 1. Hexagonal Decoupling & Module Symmetrical Topology
 
-Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 27 Maven reactor projects (Parent aggregator POM, BOM, and 25 child modules):
+Dispersion enforces strict architectural separation using the **Ports-and-Adapters (Hexagonal)** pattern across 29 Maven reactor projects (Parent aggregator POM, BOM, and 27 child modules):
 
 ```mermaid
 graph TD
@@ -91,11 +91,15 @@ graph TD
 
     subgraph Server["7. Server Subsystem"]
         SRV_API["dispersion-server-api<br/>(ControlPlaneServer SPI)"]
+        SRV_CORE["dispersion-server-core<br/>(HTTP Facade, SSE & Asset Resolver)"]
         SRV_JAKARTA["dispersion-server-jakarta<br/>(Jakarta REST Resource & UI Host)"]
+        SRV_SPRING["dispersion-server-spring<br/>(Spring MVC Controllers & Auto-Config)"]
 
         SRV_API --> C_API
         SRV_API --> S_JSON_API
-        SRV_JAKARTA --> SRV_API
+        SRV_CORE --> SRV_API
+        SRV_JAKARTA --> SRV_CORE
+        SRV_SPRING --> SRV_CORE
     end
 
     subgraph Testing["8. Testing Facade"]
@@ -235,7 +239,9 @@ Dispersion is built strictly for the Java Platform Module System (JPMS). Every m
 | `dispersion-serialization-json-api` | `com.github.f442y.dispersion.serialization.json` | `com.github.f442y.dispersion.serialization.json` |
 | `dispersion-serialization-avaje` | `com.github.f442y.dispersion.serialization.avaje` | `com.github.f442y.dispersion.serialization.avaje` |
 | `dispersion-server-api` | `com.github.f442y.dispersion.server.api` | `com.github.f442y.dispersion.server.api` |
+| `dispersion-server-core` | `com.github.f442y.dispersion.server.core` | `com.github.f442y.dispersion.server.core` |
 | `dispersion-server-jakarta` | `com.github.f442y.dispersion.server.jakarta` | `com.github.f442y.dispersion.server.jakarta` |
+| `dispersion-server-spring` | (Automatic module / Spring starter) | `com.github.f442y.dispersion.server.spring` |
 | `dispersion-testkit` | `com.github.f442y.dispersion.testkit` | `com.github.f442y.dispersion.testkit` |
 | `dispersion-examples` | `com.github.f442y.dispersion.examples` | `com.github.f442y.dispersion.examples` |
 

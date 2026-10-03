@@ -1,5 +1,5 @@
 module com.github.f442y.dispersion.server.jakarta {
-    requires transitive com.github.f442y.dispersion.server.api;
+    requires transitive com.github.f442y.dispersion.server.core;
     requires transitive jakarta.ws.rs;
     requires static transitive org.jspecify;
     requires org.slf4j;

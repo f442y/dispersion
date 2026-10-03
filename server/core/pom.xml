@@ -11,10 +11,10 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>dispersion-server-jakarta</artifactId>
+    <artifactId>dispersion-server-core</artifactId>
     <packaging>jar</packaging>
-    <name>Dispersion :: Server Jakarta</name>
-    <description>Portable Jakarta REST resources and Server-Sent Events (SSE) endpoints for Dispersion Control Plane</description>
+    <name>Dispersion :: Server Core</name>
+    <description>Framework-agnostic HTTP/SSE presentation engine and static dashboard resolver for Dispersion Control Plane</description>
 
     <dependencies>
         <dependency>
@@ -23,12 +23,11 @@
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-server-core</artifactId>
+            <artifactId>dispersion-control-plane-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>jakarta.ws.rs</groupId>
-            <artifactId>jakarta.ws.rs-api</artifactId>
-            <scope>provided</scope>
+            <groupId>com.github.f442y.dispersion</groupId>
+            <artifactId>dispersion-serialization-json-api</artifactId>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -40,21 +39,6 @@
         </dependency>
 
         <!-- Test Dependencies -->
-        <dependency>
-            <groupId>org.glassfish.jersey.core</groupId>
-            <artifactId>jersey-common</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.glassfish.jersey.core</groupId>
-            <artifactId>jersey-server</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.activation</groupId>
-            <artifactId>jakarta.activation-api</artifactId>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-control-plane-core</artifactId>
@@ -93,7 +77,7 @@
                                 <arg>-Xlint:-exports</arg>
                                 <arg>-Xdiags:verbose</arg>
                                 <arg>--add-reads</arg>
-                                <arg>com.github.f442y.dispersion.server.jakarta=com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core</arg>
+                                <arg>com.github.f442y.dispersion.server.core=com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core</arg>
                             </compilerArgs>
                         </configuration>
                     </execution>
@@ -105,7 +89,7 @@
                 <configuration>
                     <argLine>
                         @{argLine}
-                        --add-reads com.github.f442y.dispersion.server.jakarta=com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core
+                        --add-reads com.github.f442y.dispersion.server.core=com.github.f442y.dispersion.serialization.avaje,com.github.f442y.dispersion.control.core
                     </argLine>
                 </configuration>
             </plugin>

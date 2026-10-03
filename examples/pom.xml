@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -87,17 +87,17 @@
             <artifactId>dispersion-serialization-avaje</artifactId>
         </dependency>
 
-        <!-- Dispersion Server Modules (Universal API & Jakarta REST / SSE) -->
+        <!-- Dispersion Server Modules (Universal API & Native Spring MVC / SSE) -->
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
             <artifactId>dispersion-server-api</artifactId>
         </dependency>
         <dependency>
             <groupId>com.github.f442y.dispersion</groupId>
-            <artifactId>dispersion-server-jakarta</artifactId>
+            <artifactId>dispersion-server-spring</artifactId>
         </dependency>
 
-        <!-- Spring Boot 4 Starter Web & Starter Jersey -->
+        <!-- Spring Boot 4 Starter Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -107,20 +107,6 @@
                     <artifactId>commons-logging</artifactId>
                 </exclusion>
             </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jersey</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>commons-logging</groupId>
-                    <artifactId>commons-logging</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.glassfish.jersey.media</groupId>
-            <artifactId>jersey-media-sse</artifactId>
         </dependency>
 
         <!-- JCL Bridge to SLF4J (satisfying parent enforcer ban on legacy commons-logging) -->

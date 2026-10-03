@@ -2,7 +2,7 @@
 
 > **Document Status:** Authoritative Master Plan & Living Engineering Roadmap
 > **Last Updated:** October 3, 2026
-> **Repository Baseline:** `main` branch, 27 Maven reactor modules, 100% test pass rate, Java 25 virtual-thread native, Jakarta REST 3.1 HTTP/SSE server adapter (`dispersion-server-jakarta`), Avaje compile-time JSON serialization, interactive Spring Boot 4.1 local demo app ([`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java)), and Web UI ([`ui/`](file:///C:/Users/faiza/development/dispersion/ui)).
+> **Repository Baseline:** `main` branch, 29 Maven reactor modules, 100% test pass rate, Java 25 virtual-thread native, framework-agnostic HTTP/SSE presentation facade (`dispersion-server-core`), native Spring Boot adapter (`dispersion-server-spring`), Jakarta REST 3.1 HTTP/SSE server adapter (`dispersion-server-jakarta`), Avaje compile-time JSON serialization, native Spring Boot 4.1 local demo app ([`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java)), and Web UI ([`ui/`](file:///C:/Users/faiza/development/dispersion/ui)).
 > **Active Focus:** Phase 5 — Clustered Stores, Distributed Messaging & Production Hardening.
 
 ---
@@ -22,7 +22,7 @@ Dispersion is a high-throughput, virtual-thread-native state engine and distribu
 ```mermaid
 flowchart TD
     subgraph P1["✅ Phase 1: Core Subsystems & Multi-Module Architecture (Complete)"]
-        DEC["27 Hexagonal Modules<br/>• Zero split-package collisions<br/>• Symmetrical API/Core/Test triplets"]
+        DEC["29 Hexagonal Modules<br/>• Zero split-package collisions<br/>• Symmetrical API/Core/Test triplets"]
         FSM["Tier 1: Atomic FSM<br/>• Pre-compiled StateMap ordinal arrays<br/>• Circuit breakers & visit limits<br/>• Lock-free virtual thread runner"]
         SAGA["Tier 2: Discrete Sagas<br/>• Turn-based suspension<br/>• Automated LIFO compensation<br/>• Child composition & fork-join"]
         BATCH["Tier 3: Batch Engine<br/>• Item-level virtual thread concurrency<br/>• ALL_ITEMS_ARRIVED & SIGNAL_TRIGGERED barriers"]
@@ -44,7 +44,7 @@ flowchart TD
 
     subgraph P4["✅ Phase 4: Tiered Telemetry, Drill-Down & Jakarta Server Adapter (Delivered)"]
         TIERED_TEL["Tiered Telemetry & On-Demand Drill-Down<br/>• High-level lifecycle ingress<br/>• Granular spill buffers & dynamic tap<br/>• Targeted SSE stream subscription"]
-        JAKARTA["Jakarta EE / Spring Boot 4 Adapters<br/>• Jakarta REST / Servlet resource bindings<br/>• Embedded UI dashboard hosting (web/ & static/)"]
+        JAKARTA["Server Core & Adapters<br/>• dispersion-server-core<br/>• Spring Boot & Jakarta REST<br/>• Embedded UI dashboard"]
         WATCH_LIVE["UI Live Drill-Down<br/>• Dynamic Tap toggle for active instances<br/>• Real-time granular event visualization"]
     end
 
@@ -66,7 +66,7 @@ flowchart TD
 
 ## 🏛️ System State & Verified Achievements (Phases 1, 2, 3 & 4)
 
-### 1. Hexagonal Multi-Module Decomposition (27 Modules)
+### 1. Hexagonal Multi-Module Decomposition (29 Modules)
 All modules are decomposed into topic-nested directories with strict hexagonal boundaries, independent lifecycles, and zero split-package collisions:
 
 | Subsystem | Modules (`groupId: com.github.f442y.dispersion`) | Key Responsibilities & Invariants |
@@ -77,7 +77,7 @@ All modules are decomposed into topic-nested directories with strict hexagonal b
 | **Orchestration (Tiers 2 & 3)** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based execution lifecycle, safe suspension (`waitForSignal`), automated LIFO compensation rollbacks on fault/cancellation, parallel fork-join concurrency, batch barriers (`ALL_ITEMS_ARRIVED`, `SIGNAL_TRIGGERED`), and idempotent message envelope deduplication. |
 | **Control Plane** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Unified operator control SPI ([`ControlPlane`](file:///C:/Users/faiza/development/dispersion/control-plane/api/src/main/java/com/github/f442y/dispersion/control/ControlPlane.java)) with reference implementation ([`DefaultControlPlane`](file:///C:/Users/faiza/development/dispersion/control-plane/core/src/main/java/com/github/f442y/dispersion/control/core/DefaultControlPlane.java)), lean summary index, trace timeline provider SPI ([`TraceTimelineProvider`](file:///C:/Users/faiza/development/dispersion/control-plane/api/src/main/java/com/github/f442y/dispersion/control/TraceTimelineProvider.java)), machine topology registry, live query interfaces, and dynamic Mermaid graph generation. |
 | **Serialization** | `dispersion-serialization-binary-api`<br/>`dispersion-serialization-fory`<br/>`dispersion-serialization-json-api`<br/>`dispersion-serialization-avaje` | Zero-copy binary serialization SPI (Fury) and compile-time reflection-free JSON serialization (Avaje-Jsonb) supporting polymorphic discrimination across all 28 execution events without runtime reflection. |
-| **Server** | `dispersion-server-api`<br/>`dispersion-server-jakarta` | Lightweight server SPI decoupled from web frameworks. Standard Jakarta REST 3.1 (`@Path`, `@GET`, `@POST`) adapter (`ControlPlaneResource`) with SSE streaming, CORS filter, and static embedded UI hosting (`WebDashboardResource`). |
+| **Server** | `dispersion-server-api`<br/>`dispersion-server-core`<br/>`dispersion-server-jakarta`<br/>`dispersion-server-spring` | Framework-agnostic server SPI and core presentation facade (`ControlPlaneHttpFacade`, `ControlPlaneSseSession`, `StaticAssetResolver`). Pluggable presentation adapters for native Spring Boot / Spring MVC (`DispersionControlPlaneController`, `DispersionWebDashboardController`, auto-configuration) and standard Jakarta REST 3.1 (`ControlPlaneResource`, `WebDashboardResource`). Path-traversal defense and zero-copy asset streaming. |
 | **Testing & BOM** | `dispersion-testkit`<br/>`dispersion-bom`<br/>`dispersion-examples` | Static test facade [`DispersionTestKit`](file:///C:/Users/faiza/development/dispersion/testkit/src/main/java/com/github/f442y/dispersion/testkit/DispersionTestKit.java), centralized BOM, and runnable demo application [`DispersionDemoApp`](file:///C:/Users/faiza/development/dispersion/examples/src/main/java/com/github/f442y/dispersion/examples/DispersionDemoApp.java) built on Spring Boot 4.1. |
 
 ### 2. Control Plane REST & SSE Contract
@@ -227,6 +227,11 @@ flowchart TD
   - Updated `ui/src/api/client.ts` to support `EventStreamUrlOptions` (`executionId`, `tier`).
   - Updated `useEventStream` with targeted cache invalidation and event callback hooks.
   - Updated `ExecutionTimeline.tsx` with **"Watch Live"** toggle button, live pulse indicator, tier badges (`LIFECYCLE` vs `GRANULAR`), and real-time SSE streaming.
+- [x] **Phase 4.6: Framework-Agnostic Server Core & Native Spring MVC Adapter (`dispersion-server-core`, `dispersion-server-spring`)**:
+  - Extracted framework-agnostic presentation logic into `dispersion-server-core` (`ControlPlaneHttpFacade`, `ControlPlaneSseSession`, `StaticAssetResolver`) with pure Java 25 and zero framework dependencies.
+  - Implemented virtual-thread SSE event session loop (`ControlPlaneSseSession`) with 15s keep-alive pings and automatic dynamic tap lease lifecycle management.
+  - Created native Spring Boot / Spring MVC adapter `dispersion-server-spring` (`DispersionControlPlaneController`, `DispersionWebDashboardController`, `DispersionSpringWebConfiguration`) with auto-configuration and native `SseEmitter` streaming.
+  - Modernized `examples` demo application: eliminated `spring-boot-starter-jersey`, `jersey-media-sse`, and `JerseyConfig.java`, reducing footprint and eliminating dual-DI container overhead.
 
 ---
 

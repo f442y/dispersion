@@ -79,8 +79,8 @@
       <p>👉 <i>Explore the <a href="routing/README.md"><b>Routing Subsystem</b></a></i></p>
     </td>
     <td width="50%" valign="top">
-      <h3>🌐 Universal Jakarta REST 3.1 & UI Host</h3>
-      <p>Built-in Jakarta REST 3.1 HTTP, SSE, and React 19 Web UI dashboard host with reflection-free compile-time JSON (<a href="serialization/README.md">Avaje</a>) and binary (<a href="serialization/README.md">Fury</a>) serialization.</p>
+      <h3>🌐 Universal Spring Boot, Jakarta REST & UI Host</h3>
+      <p>Built-in framework-agnostic presentation core with native adapters for Spring Boot / Spring MVC and Jakarta REST 3.1 HTTP, SSE, and React 19 Web UI dashboard host with reflection-free compile-time JSON (<a href="serialization/README.md">Avaje</a>) and binary (<a href="serialization/README.md">Fury</a>) serialization.</p>
       <p>👉 <i>Explore the <a href="server/README.md"><b>Server Subsystem</b></a> & <a href="serialization/README.md"><b>Serialization Subsystem</b></a></i></p>
     </td>
   </tr>
@@ -134,7 +134,7 @@ graph TD
         DCP["DefaultControlPlane"]:::control
         TOP["Dynamic Mermaid Topologies"]:::control
         ROUT["Bi-directional Signal Router"]:::control
-        SRV["Jakarta REST 3.1 & React UI Server"]:::control
+        SRV["Spring Boot & Jakarta REST UI Server"]:::control
         DCP --> TOP & ROUT
         DCP --> SRV
     end
@@ -348,7 +348,7 @@ try (DefaultControlPlane controlPlane = new DefaultControlPlane()) {
 ---
 
 ### 5. Control Plane Server & Spring Boot 4.1 Demo App
-Dispersion includes a ready-to-run interactive demo application and embedded control plane server powered by **Spring Boot 4.1** and **Jakarta REST 3.1**:
+Dispersion includes a ready-to-run interactive demo application and embedded control plane server powered natively by **Spring Boot 4.1** (or portable **Jakarta REST 3.1** via `dispersion-server-jakarta`):
 
 ```bash
 # Run the interactive Spring Boot demo application with embedded UI dashboard
@@ -386,7 +386,7 @@ curl -X POST http://localhost:8080/api/v1/executions/signal \
 
 ## 📦 Encompassing Modules
 
-Dispersion is engineered as **27 modular projects** (Parent BOM/POM + 26 reactor submodules) partitioned into **8 functional subsystems**. Click each subsystem below for its dedicated guide:
+Dispersion is engineered as **29 modular projects** (Parent BOM/POM + 27 reactor submodules) partitioned into **8 functional subsystems**. Click each subsystem below for its dedicated guide:
 
 ```mermaid
 graph LR
@@ -397,7 +397,7 @@ graph LR
         O["<b>orchestration/</b><br/>Tier 2 Saga, Batch & Messaging"]
         C["<b>control-plane/</b><br/>Control Plane & SPI"]
         S["<b>serialization/</b><br/>Avaje JSON & Fury Binary"]
-        SRV["<b>server/</b><br/>Jakarta REST 3.1 & UI Host"]
+        SRV["<b>server/</b><br/>Spring Boot & Jakarta REST Host"]
         T["<b>testkit/</b><br/>DispersionTestKit"]
     end
 
@@ -418,7 +418,7 @@ graph LR
 | **`orchestration/`** | `dispersion-orchestration-api`<br/>`dispersion-orchestration-core`<br/>`dispersion-orchestration-batch`<br/>`dispersion-orchestration-messaging`<br/>`dispersion-orchestration-test` | Turn-based distributed sagas, automated LIFO rollbacks, routed compensations, signal rehydration, parallel branches, batch barriers, and broker-agnostic messaging. | [**`orchestration/README.md`**](orchestration/README.md) |
 | **`control-plane/`** | `dispersion-control-plane-api`<br/>`dispersion-control-plane-core`<br/>`dispersion-control-plane-test` | Decoupled `InspectableMachine`, `TraceTimelineProvider`, and `InspectableRouter` SPIs, $O(1)$ dual-pool memory model, dynamic Mermaid generator, execution cancellation, and signal routing. | [**`control-plane/README.md`**](control-plane/README.md) |
 | **`serialization/`** | `dispersion-serialization-binary-api`<br/>`dispersion-serialization-fory`<br/>`dispersion-serialization-json-api`<br/>`dispersion-serialization-avaje` | Fast, reflection-free JSON (Avaje-Jsonb compile-time code generation) and binary (Apache Fury) serialization for control plane and telemetry events. | [**`serialization/README.md`**](serialization/README.md) |
-| **`server/`** | `dispersion-server-api`<br/>`dispersion-server-jakarta` | Lightweight control plane HTTP, SSE, and Web UI servers compatible with Jakarta REST 3.1 (Spring Boot, Quarkus, WildFly, Jersey) with traversal defense. | [**`server/README.md`**](server/README.md) |
+| **`server/`** | `dispersion-server-api`<br/>`dispersion-server-core`<br/>`dispersion-server-jakarta`<br/>`dispersion-server-spring` | Lightweight, framework-agnostic control plane HTTP, SSE, and Web UI presentation core with pluggable adapters for native Spring Boot / Spring MVC and Jakarta REST 3.1 with path-traversal defense. | [**`server/README.md`**](server/README.md) |
 | **`testkit/`** | `dispersion-testkit` | Unified `DispersionTestKit` static facade with thread-safe fakes, capturing listeners, and recording stores. | [**`testkit/README.md`**](testkit/README.md) |
 | **`examples/`** | `dispersion-examples` | Interactive Spring Boot 4.1 demo application (`DispersionDemoApp`), end-to-end integration workflows, and traffic simulation. | [**`examples/README.md`**](examples/README.md) |
 
@@ -503,11 +503,19 @@ Add the modules required by your application:
         <artifactId>dispersion-serialization-avaje</artifactId>
     </dependency>
 
-    <!-- Jakarta REST Server Adapter & UI Host (Optional) -->
+    <!-- Control Plane Server: Spring Boot Native Adapter & UI Host -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-server-spring</artifactId>
+    </dependency>
+
+    <!-- Or Jakarta REST Server Adapter & UI Host (Quarkus / WildFly / Helidon / Jersey) -->
+    <!--
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-server-jakarta</artifactId>
     </dependency>
+    -->
 
     <!-- Testing Facade (Test Scope) -->
     <dependency>
@@ -527,7 +535,7 @@ Add the modules required by your application:
 * Apache Maven 3.9+ (or use the included wrapper `./mvnw`)
 
 ```bash
-# Fast parallel compilation and unit test execution across all 27 reactor projects
+# Fast parallel compilation and unit test execution across all 29 reactor projects
 ./mvnw test -B -ntp -T 1C
 
 # Execute end-to-end integration tests (500-thread pipeline bursts, distributed sagas, demo app)

@@ -8,13 +8,19 @@ It allows monitoring tools, administrative scripts, and web dashboards to query 
 
 ## 1. Module Structure & Architecture
 
+Dispersion separates server responsibilities into a framework-agnostic core facade and ultra-thin presentation adapters for Jakarta REST and Spring Boot / Spring MVC:
+
 ```mermaid
 graph TD
     subgraph ServerSubsystem["Server Subsystem Modules"]
         S_API["dispersion-server-api<br/>(ControlPlaneServer SPI, NodeInfo & ServerConfig)"]
+        S_CORE["dispersion-server-core<br/>(ControlPlaneHttpFacade, SseSink, StaticAssetResolver)"]
         S_JAKARTA["dispersion-server-jakarta<br/>(Jakarta REST 3.1 Resource & Web Dashboard)"]
+        S_SPRING["dispersion-server-spring<br/>(Spring MVC @RestController & SseEmitter)"]
 
-        S_JAKARTA --> S_API
+        S_CORE --> S_API
+        S_JAKARTA --> S_CORE
+        S_SPRING --> S_CORE
     end
 
     subgraph Dependencies["Underlying Subsystems"]
@@ -29,13 +35,43 @@ graph TD
 | Module | JPMS Module Name | Description |
 | :--- | :--- | :--- |
 | **`dispersion-server-api`** | `com.github.f442y.dispersion.server.api` | SPI contracts (`ControlPlaneServer`, `ServerConfig`, `ControlPlaneNodeInfo`) defining server lifecycle and configuration. |
-| **`dispersion-server-jakarta`** | `com.github.f442y.dispersion.server.jakarta` | Standard Jakarta RESTful Web Services 3.1 (`@Path`, `@GET`, `@POST`) adapter (`ControlPlaneResource`), CORS filter (`ControlPlaneCorsFilter`), and static UI dashboard host (`WebDashboardResource`) for Spring Boot, Quarkus, WildFly, or Jersey. |
+| **`dispersion-server-core`** | `com.github.f442y.dispersion.server.core` | Pure Java 25 framework-agnostic presentation facade (`ControlPlaneHttpFacade`), `HttpResponse`, `SseSink` abstraction, virtual-thread event polling loop with keep-alive pings (`ControlPlaneSseSession`), and static asset / SPA route resolution with traversal guards (`StaticAssetResolver`). |
+| **`dispersion-server-jakarta`** | `com.github.f442y.dispersion.server.jakarta` | Standard Jakarta RESTful Web Services 3.1 (`@Path`, `@GET`, `@POST`) adapter (`ControlPlaneResource`), CORS filter (`ControlPlaneCorsFilter`), and static UI dashboard host (`WebDashboardResource`) for Quarkus, Helidon, Micronaut, WildFly, or Jersey. |
+| **`dispersion-server-spring`** | `com.github.f442y.dispersion.server.spring` | Native Spring Boot and Spring MVC presentation adapter (`DispersionControlPlaneController`, `DispersionWebDashboardController`) with native `SseEmitter` virtual-thread streaming and zero-configuration auto-discovery (`DispersionSpringWebConfiguration`). |
 
 ---
 
-## 2. Jakarta REST 3.1 Resource (`dispersion-server-jakarta`)
+## 2. Spring Boot Setup (`dispersion-server-spring`)
 
-`dispersion-server-jakarta` provides full JAX-RS / Jakarta REST 3.1 compatible endpoints and embedded UI hosting without coupling to any specific servlet container or framework runtime:
+When building with Spring Boot (3.x or 4.x), simply add `dispersion-server-spring` to your `pom.xml`. Spring Boot automatically discovers and registers both the REST API and the Web Dashboard controllers without needing Jersey or HK2 bridges:
+
+```xml
+<dependencies>
+    <!-- Native Spring Boot / Spring MVC Control Plane Host -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-server-spring</artifactId>
+    </dependency>
+
+    <!-- Spring Boot Starter Web -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+</dependencies>
+```
+
+You can optionally customize the API base path in `application.properties`:
+
+```properties
+dispersion.control-plane.base-path=/api/v1
+```
+
+---
+
+## 3. Jakarta REST 3.1 Setup (`dispersion-server-jakarta`)
+
+For Quarkus, Helidon, Micronaut, or standalone Jersey runtimes, `dispersion-server-jakarta` provides standard JAX-RS resources delegating directly to `ControlPlaneHttpFacade`:
 
 ```java
 package com.example.web;
@@ -67,7 +103,7 @@ public class MyJerseyConfig extends ResourceConfig {
 
 ---
 
-## 3. Endpoints Specification
+## 4. Endpoints Specification
 
 All API endpoints are hosted relative to the configured base path (default `/api/v1`), while UI static assets and SPA routes are hosted at `/`:
 
@@ -122,7 +158,7 @@ curl -X POST http://localhost:8080/api/v1/executions/signal \
 
 ---
 
-## 4. Maven Dependency Setup
+## 5. Maven Dependency Setup
 
 ```xml
 <dependencyManagement>
@@ -138,7 +174,14 @@ curl -X POST http://localhost:8080/api/v1/executions/signal \
 </dependencyManagement>
 
 <dependencies>
-    <!-- Jakarta REST Server Adapter & UI Host -->
+    <!-- Server presentation adapter (choose Spring or Jakarta) -->
+    <!-- For Spring Boot: -->
+    <dependency>
+        <groupId>com.github.f442y.dispersion</groupId>
+        <artifactId>dispersion-server-spring</artifactId>
+    </dependency>
+
+    <!-- For Jakarta REST (Quarkus, Helidon, Jersey, etc.): -->
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-server-jakarta</artifactId>
@@ -148,12 +191,6 @@ curl -X POST http://localhost:8080/api/v1/executions/signal \
     <dependency>
         <groupId>com.github.f442y.dispersion</groupId>
         <artifactId>dispersion-serialization-avaje</artifactId>
-    </dependency>
-
-    <!-- Jersey SSE Provider (when deploying in Jersey runtimes) -->
-    <dependency>
-        <groupId>org.glassfish.jersey.media</groupId>
-        <artifactId>jersey-media-sse</artifactId>
     </dependency>
 </dependencies>
 ```

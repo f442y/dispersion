@@ -3,8 +3,8 @@
 > **Document Status:** Active Architectural Specification & Implementation Reference
 > **Author:** Dispersion Architecture Working Group
 > **Target Release:** Dispersion 0.1.0+ (Phase 4 Milestone)
-> **Primary Module Impacts:** `dispersion-server-jakarta`, `dispersion-server-api`, `dispersion-control-plane-core`, `dispersion-control-plane-api`, `ui/`, `examples/`
-> **Repository Baseline:** Java 25 Virtual Threads, Jakarta REST 3.1 (Spring Boot 4.1 / Jersey), Node.js 24, Vite 8, React 19, Avaje JSON, Fury Binary.
+> **Primary Module Impacts:** `dispersion-server-api`, `dispersion-server-core`, `dispersion-server-jakarta`, `dispersion-server-spring`, `dispersion-control-plane-core`, `dispersion-control-plane-api`, `ui/`, `examples/`
+> **Repository Baseline:** Java 25 Virtual Threads, Spring Boot 4.1 Native (`dispersion-server-spring`) or Jakarta REST 3.1 (`dispersion-server-jakarta`), Node.js 24, Vite 8, React 19, Avaje JSON, Fury Binary.
 
 ---
 
@@ -45,7 +45,7 @@ Topology C: Dedicated Control Plane Service with Embedded UI Hosting [IMPLEMENTE
 * **SSE Connection Thrashing & CORS Sprawl:** Establishing and maintaining persistent Server-Sent Events (SSE) connections across $N$ dynamically autoscaling worker nodes leads to connection storms, complex pre-flight (`OPTIONS`) handshakes, and CORS security risks.
 
 ### 1.4 The Implemented Solution
-Deploy a **Dedicated Dispersion Control Plane Service** per environment (`control-plane-staging`, `control-plane-prod`) powered by `dispersion-server-jakarta` (portable Jakarta REST 3.1 and `WebDashboardResource` on Java 25 virtual threads). The server **natively embeds and hosts the compiled React 19 / Vite UI bundle**, providing a turnkey, zero-CORS, single-container operational console for each deployment environment.
+Deploy a **Dedicated Dispersion Control Plane Service** per environment (`control-plane-staging`, `control-plane-prod`) powered by `dispersion-server-core` with native Spring Boot / Spring MVC adapter (`dispersion-server-spring`) or portable Jakarta REST 3.1 adapter (`dispersion-server-jakarta` on Java 25 virtual threads). The server **natively embeds and hosts the compiled React 19 / Vite UI bundle**, providing a turnkey, zero-CORS, single-container operational console for each deployment environment.
 
 ---
 
@@ -60,7 +60,7 @@ graph TD
     subgraph EnvPerimeter["Environment Perimeter (e.g. Staging / Production VPC)"]
         INGRESS["TLS Ingress / Load Balancer<br/><code>https://control-plane.prod.internal</code>"]
 
-        subgraph ControlPlaneService["Dedicated Control Plane Service (dispersion-server-jakarta)"]
+        subgraph ControlPlaneService["Dedicated Control Plane Service (dispersion-server-core / adapters)"]
             STATIC_ROUTER["WebDashboardResource<br/>Virtual-Thread Static & SPA Handler"]
             UI_ASSETS["Embedded UI Assets (web/ or static/)<br/>MIME Resolution + SPA Fallback + Traversal Defense"]
             REST_API["ControlPlaneResource<br/>REST Endpoints (/api/v1/*)"]
@@ -112,7 +112,7 @@ graph TD
 ### 3.1 Component 1: Embedded UI Hosting via `WebDashboardResource`
 
 #### 3.1.1 Portable Virtual-Thread Static Routing Architecture
-`dispersion-server-jakarta` provides the framework-agnostic `WebDashboardResource` implementing JAX-RS 3.1 file serving directly on virtual threads. It streams static assets (`.js`, `.css`, `.svg`, `.woff2`) with immutable cache headers and provides seamless SPA client-side routing fallback without requiring external web servers like Nginx.
+`dispersion-server-core` provides the framework-agnostic `StaticAssetResolver` handling file serving, MIME detection, and SPA routing directly on virtual threads, exposed via `WebDashboardResource` (Jakarta REST) or `DispersionWebDashboardController` (Spring MVC). It streams static assets (`.js`, `.css`, `.svg`, `.woff2`) with immutable cache headers and provides seamless SPA client-side routing fallback without requiring external web servers like Nginx.
 
 ```
 Incoming HTTP Request
